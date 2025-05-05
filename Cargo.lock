@@ -117,6 +117,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7943c866cc5cd64cbc25b2e01621d07fa8eb2a1a23160ee81ce38704e97b8ecf"
 
 [[package]]
+name = "leb128"
+version = "0.2.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "884e2677b40cc8c339eaefcb701c32ef1fd2493d71118dc0ca4b6a736c93bd67"
+
+[[package]]
 name = "liblkqllang"
 version = "0.1.0"
 dependencies = [
@@ -128,6 +134,7 @@ name = "lkqlua_jit"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "leb128",
  "liblkqllang",
 ]
 

@@ -7,3 +7,4 @@ edition = "2024"
 # For now the liblkqllang path is absolute since it hasn't been published
 liblkqllang = { path = "/home/guerrier/Documents/AdaCore/langkit-query-language/lkql/build/rust" }
 clap = { version = "4.5.37", features = ["derive"]}
+leb128 = "0.2.5"
