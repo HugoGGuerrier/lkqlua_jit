@@ -1,1 +1,7 @@
+# Rust build artifacts
 /target
+
+# LuaJIT build artifacts
+/luajit/**/*.o
+/luajit/**/*.so
+/luajit/**/*.a
