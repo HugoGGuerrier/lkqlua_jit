@@ -4,3 +4,5 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+# For now the liblkqllang path is absolute since it hasn't been published
+liblkqllang = { path = "/home/guerrier/Documents/AdaCore/langkit-query-language/lkql/build/rust" }
