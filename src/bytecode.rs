@@ -244,3 +244,89 @@ pub const TABLE_CONST_TRUE_KIND: u8 = 2;
 pub const TABLE_CONST_INT_KIND: u8 = 3;
 pub const TABLE_CONST_NUM_KIND: u8 = 4;
 pub const TABLE_CONST_STR_KIND: u8 = 5;
+
+// ----- Bytecode emission helpers -----
+
+/// This structure represents an executable bytecode buffer, structured as
+/// specified in the [`bytecode`](mod@self) module.
+#[derive(Debug)]
+pub struct BytecodeBuffer {
+    // Function prototypes, the last one is considered as the main
+    pub prototypes: Vec<Prototype>,
+}
+
+/// This structure represents a function prototype in the LuaJIT bytecode
+/// encoding.
+#[derive(Debug)]
+pub struct Prototype {
+    // --- Flags
+    pub has_child: bool,
+    pub is_variadic: bool,
+    pub has_ffi: bool,
+
+    // --- Function specification
+    pub arg_count: u8,
+    pub frame_size: u8,
+
+    // --- Instructions
+    pub instructions: Vec<Instruction>,
+
+    // --- Constants
+    pub up_values: Vec<UpValueConstant>,
+    pub complex_consts: Vec<ComplexConstant>,
+    pub numeric_consts: Vec<NumericConstant>,
+}
+
+/// This enumeration represents the two possible encodings of a bytecode
+/// instruction.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Instruction {
+    ABC { a: u8, b: u8, c: u8, op: u8 },
+    AD { a: u8, d: u16, op: u8 },
+}
+
+/// This enumeration represents an up-value constant in a LuaJIT bytecode
+/// buffer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UpValueConstant {
+    /// Case where the up-value references a local slot in the parent
+    /// prototype.
+    ParentLocalSlot(u16),
+
+    /// Case where the up-value references another up-value in the parent
+    /// prototype.
+    ParentUpValue(u16),
+}
+
+/// This enum represents a constant in a bytecode prototype.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ComplexConstant {
+    Child,
+    Table {
+        array_part: Vec<TableConstantElement>,
+        hash_part: Vec<(TableConstantElement, TableConstantElement)>,
+    },
+    Integer(i64),
+    UnsignedInteger(u64),
+    String(String),
+}
+
+/// This enumeration represents an element of a table constant in a prototype
+/// bytecode.
+#[derive(Debug, Clone, PartialEq)]
+pub enum TableConstantElement {
+    Nil,
+    False,
+    True,
+    Integer(i32),
+    Float(f64),
+    String(String),
+}
+
+/// This enumeration represents a numeric constant in a function prototype
+/// bytecode.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum NumericConstant {
+    Integer(i32),
+    Float(f64),
+}
