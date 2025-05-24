@@ -271,11 +271,8 @@ impl BytecodeBuffer {
 
         // Add the flags byte
         output_buffer.push(
-            if cfg!(target_endian = "big") {
-                FLAG_H_IS_BIG_ENDIAN
-            } else {
-                0
-            } | FLAG_H_IS_STRIPPED
+            if cfg!(target_endian = "big") { FLAG_H_IS_BIG_ENDIAN } else { 0 }
+                | FLAG_H_IS_STRIPPED
                 | FLAG_H_HAS_FFI
                 | FLAG_H_FR2,
         );
@@ -321,11 +318,7 @@ impl Prototype {
         // Add the flags byte
         prototype_bytes.push(
             if self.has_child { FLAG_P_HAS_CHILD } else { 0 }
-                | if self.is_variadic {
-                    FLAG_P_IS_VARIADIC
-                } else {
-                    0
-                }
+                | if self.is_variadic { FLAG_P_IS_VARIADIC } else { 0 }
                 | if self.has_ffi { FLAG_P_HAS_FFI } else { 0 },
         );
 
@@ -442,16 +435,9 @@ impl ComplexConstant {
     pub fn encode(&self, output_buffer: &mut Vec<u8>) {
         match self {
             ComplexConstant::Child => output_buffer.push(COMPLEX_CONST_CHILD_KIND),
-            ComplexConstant::Table {
-                array_part,
-                hash_part,
-            } => {
+            ComplexConstant::Table { array_part, hash_part } => {
                 output_buffer.push(COMPLEX_CONST_TAB_KIND);
-                let array_size = if array_part.is_empty() {
-                    0
-                } else {
-                    array_part.len() + 1
-                };
+                let array_size = if array_part.is_empty() { 0 } else { array_part.len() + 1 };
                 write_uleb128(output_buffer, array_size as u64);
                 write_uleb128(output_buffer, hash_part.len() as u64);
                 if !array_part.is_empty() {
@@ -542,10 +528,7 @@ fn write_uleb128(output_buffer: &mut Vec<u8>, val: u64) {
 /// Function to encode a string into the LuaJIT constant format and append the
 /// result to the provided output buffer.
 fn encode_string_constant(s: &String, output_buffer: &mut Vec<u8>) {
-    write_uleb128(
-        output_buffer,
-        (s.len() + COMPLEX_CONST_STR_KIND as usize) as u64,
-    );
+    write_uleb128(output_buffer, (s.len() + COMPLEX_CONST_STR_KIND as usize) as u64);
     for b in s.bytes() {
         output_buffer.push(b);
     }
@@ -607,16 +590,10 @@ mod tests {
         let one_constant = TableConstantElement::Integer(1);
         ComplexConstant::Table {
             array_part: vec![one_constant.clone()],
-            hash_part: vec![(
-                TableConstantElement::String(String::from("a")),
-                one_constant,
-            )],
+            hash_part: vec![(TableConstantElement::String(String::from("a")), one_constant)],
         }
         .encode(&mut bytes);
-        assert_eq!(
-            bytes,
-            vec![0x01, 0x02, 0x01, 0x00, 0x03, 0x01, 0x06, 0x61, 0x03, 0x01]
-        );
+        assert_eq!(bytes, vec![0x01, 0x02, 0x01, 0x00, 0x03, 0x01, 0x06, 0x61, 0x03, 0x01]);
         bytes.clear();
 
         // Try encoding a positive integer constant
@@ -711,10 +688,7 @@ mod tests {
 
         // Test encoding a float constant
         NumericConstant::Float(1.1).encode(&mut bytes);
-        assert_eq!(
-            bytes,
-            vec![0xB5, 0xE6, 0xCC, 0x99, 0x13, 0x99, 0xB3, 0xC6, 0xFF, 0x03]
-        );
+        assert_eq!(bytes, vec![0xB5, 0xE6, 0xCC, 0x99, 0x13, 0x99, 0xB3, 0xC6, 0xFF, 0x03]);
         bytes.clear();
     }
 
