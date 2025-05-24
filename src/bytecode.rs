@@ -206,6 +206,10 @@
 
 mod op_codes;
 
+use std::io::Write;
+
+use leb128;
+
 // ----- Header related constants -----
 
 pub const MAGIC: [u8; 3] = [0x1B, 0x4C, 0x4A];
@@ -255,6 +259,35 @@ pub struct BytecodeBuffer {
     pub prototypes: Vec<Prototype>,
 }
 
+impl BytecodeBuffer {
+    /// Encode the bytecode described by [`self`] in the provided output
+    /// buffer.
+    pub fn encode(&self, output_buffer: &mut Vec<u8>) {
+        // Start by adding the magic bytes
+        MAGIC.iter().for_each(|b| output_buffer.push(*b));
+
+        // Add the bytecode version
+        output_buffer.push(CUR_VERSION);
+
+        // Add the flags byte
+        output_buffer.push(
+            if cfg!(target_endian = "big") {
+                FLAG_H_IS_BIG_ENDIAN
+            } else {
+                0
+            } | FLAG_H_IS_STRIPPED
+                | FLAG_H_HAS_FFI
+                | FLAG_H_FR2,
+        );
+
+        // Add prototypes
+        self.prototypes.iter().for_each(|p| p.encode(output_buffer));
+
+        // Add the final 0x0 byte
+        output_buffer.push(0);
+    }
+}
+
 /// This structure represents a function prototype in the LuaJIT bytecode
 /// encoding.
 #[derive(Debug)]
@@ -277,12 +310,88 @@ pub struct Prototype {
     pub numeric_consts: Vec<NumericConstant>,
 }
 
+impl Prototype {
+    /// Encode the function prototype in the LuaJIT format in the given output
+    /// buffer.
+    pub fn encode(&self, output_buffer: &mut Vec<u8>) {
+        // Create a new byte vector, containing all bytes of the prototype
+        // except its size.
+        let mut prototype_bytes = Vec::<u8>::new();
+
+        // Add the flags byte
+        prototype_bytes.push(
+            if self.has_child { FLAG_P_HAS_CHILD } else { 0 }
+                | if self.is_variadic {
+                    FLAG_P_IS_VARIADIC
+                } else {
+                    0
+                }
+                | if self.has_ffi { FLAG_P_HAS_FFI } else { 0 },
+        );
+
+        // Add the argument count and the frame size
+        prototype_bytes.push(self.arg_count);
+        prototype_bytes.push(self.frame_size);
+
+        // Ensure the number of up-values can be encoded in a byte
+        if self.up_values.len() > u8::MAX as usize {
+            panic!("Cannot encode the prototype {:?}, too much up-values", self);
+        }
+
+        // Add constant counts
+        prototype_bytes.push(self.up_values.len() as u8);
+        write_uleb128(&mut prototype_bytes, self.complex_consts.len() as u64);
+        write_uleb128(&mut prototype_bytes, self.numeric_consts.len() as u64);
+
+        // Add function instructions
+        write_uleb128(&mut prototype_bytes, self.instructions.len() as u64);
+        self.instructions
+            .iter()
+            .for_each(|i| i.encode(&mut prototype_bytes));
+
+        // Add the constant table
+        self.up_values
+            .iter()
+            .for_each(|uv| uv.encode(&mut prototype_bytes));
+        self.complex_consts
+            .iter()
+            .for_each(|c| c.encode(&mut prototype_bytes));
+        self.numeric_consts
+            .iter()
+            .for_each(|n| n.encode(&mut prototype_bytes));
+
+        // Finally copy the prototype bytes into the output buffer with its
+        // size.
+        write_uleb128(output_buffer, prototype_bytes.len() as u64);
+        output_buffer.append(&mut prototype_bytes);
+    }
+}
+
 /// This enumeration represents the two possible encodings of a bytecode
 /// instruction.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Instruction {
     ABC { a: u8, b: u8, c: u8, op: u8 },
     AD { a: u8, d: u16, op: u8 },
+}
+
+impl Instruction {
+    /// Encode the instruction as a byte vector, following the current system
+    /// byte order.
+    pub fn encode(&self, output_buffer: &mut Vec<u8>) {
+        let mut le_inst = match self {
+            Instruction::ABC { a, b, c, op } => vec![*op, *a, *c, *b],
+            Instruction::AD { a, d, op } => {
+                let mut res = vec![*op, *a];
+                res.append(&mut d.to_le_bytes().to_vec());
+                res
+            }
+        };
+        if cfg!(target_endian = "big") {
+            le_inst.reverse();
+        }
+        le_inst.iter().for_each(|b| output_buffer.push(*b));
+    }
 }
 
 /// This enumeration represents an up-value constant in a LuaJIT bytecode
@@ -298,6 +407,22 @@ pub enum UpValueConstant {
     ParentUpValue(u16),
 }
 
+impl UpValueConstant {
+    /// Encode the up-value constant to the LuaJIT bytecode format and add the
+    /// result to the provided output buffer.
+    pub fn encode(&self, output_buffer: &mut Vec<u8>) {
+        match self {
+            UpValueConstant::ParentLocalSlot(s) => {
+                let final_val = s | 0xC000;
+                output_buffer.write_all(&final_val.to_ne_bytes()).unwrap();
+            }
+            UpValueConstant::ParentUpValue(s) => {
+                output_buffer.write_all(&s.to_ne_bytes()).unwrap();
+            }
+        }
+    }
+}
+
 /// This enum represents a constant in a bytecode prototype.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ComplexConstant {
@@ -309,6 +434,46 @@ pub enum ComplexConstant {
     Integer(i64),
     UnsignedInteger(u64),
     String(String),
+}
+
+impl ComplexConstant {
+    /// Encode the complex constant in the LuaJIT bytecode format and add the
+    /// result to the provided output buffer.
+    pub fn encode(&self, output_buffer: &mut Vec<u8>) {
+        match self {
+            ComplexConstant::Child => output_buffer.push(COMPLEX_CONST_CHILD_KIND),
+            ComplexConstant::Table {
+                array_part,
+                hash_part,
+            } => {
+                output_buffer.push(COMPLEX_CONST_TAB_KIND);
+                let array_size = if array_part.is_empty() {
+                    0
+                } else {
+                    array_part.len() + 1
+                };
+                write_uleb128(output_buffer, array_size as u64);
+                write_uleb128(output_buffer, hash_part.len() as u64);
+                if !array_part.is_empty() {
+                    output_buffer.push(TABLE_CONST_NIL_KIND);
+                }
+                array_part.iter().for_each(|c| c.encode(output_buffer));
+                hash_part.iter().for_each(|(k, v)| {
+                    k.encode(output_buffer);
+                    v.encode(output_buffer);
+                });
+            }
+            ComplexConstant::Integer(i) => {
+                output_buffer.push(COMPLEX_CONST_I64_KIND);
+                write_uleb128(output_buffer, *i as u64);
+            }
+            ComplexConstant::UnsignedInteger(u) => {
+                output_buffer.push(COMPLEX_CONST_U64_KIND);
+                write_uleb128(output_buffer, *u);
+            }
+            ComplexConstant::String(s) => encode_string_constant(s, output_buffer),
+        }
+    }
 }
 
 /// This enumeration represents an element of a table constant in a prototype
@@ -323,10 +488,268 @@ pub enum TableConstantElement {
     String(String),
 }
 
+impl TableConstantElement {
+    /// Encode the table constant in the LuaJIT bytecode format and add the
+    /// result to the provided output buffer.
+    pub fn encode(&self, output_buffer: &mut Vec<u8>) {
+        match self {
+            TableConstantElement::Nil => output_buffer.push(TABLE_CONST_NIL_KIND),
+            TableConstantElement::False => output_buffer.push(TABLE_CONST_FALSE_KIND),
+            TableConstantElement::True => output_buffer.push(TABLE_CONST_TRUE_KIND),
+            TableConstantElement::Integer(i) => {
+                output_buffer.push(TABLE_CONST_INT_KIND);
+                write_uleb128(output_buffer, (*i as u32) as u64);
+            }
+            TableConstantElement::Float(f) => {
+                let float_bits = f.to_bits();
+                output_buffer.push(TABLE_CONST_NUM_KIND);
+                write_uleb128(output_buffer, float_bits & 0xFFFFFFFF);
+                write_uleb128(output_buffer, float_bits >> 32);
+            }
+            TableConstantElement::String(s) => encode_string_constant(s, output_buffer),
+        }
+    }
+}
+
 /// This enumeration represents a numeric constant in a function prototype
 /// bytecode.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum NumericConstant {
     Integer(i32),
     Float(f64),
+}
+
+impl NumericConstant {
+    /// Encode the numeric constant in the LuaJIT bytecode format and add the
+    /// result in the provided output buffer.
+    pub fn encode(&self, output_buffer: &mut Vec<u8>) {
+        match self {
+            NumericConstant::Integer(i) => write_uleb128(output_buffer, ((*i as u32) as u64) << 1),
+            NumericConstant::Float(f) => {
+                let float_bits = f.to_bits();
+                write_uleb128(output_buffer, ((float_bits & 0xFFFFFFFF) << 1) | 1);
+                write_uleb128(output_buffer, float_bits >> 32);
+            }
+        }
+    }
+}
+
+/// Function to write an ULEB128 encoded value into the given output buffer.
+fn write_uleb128(output_buffer: &mut Vec<u8>, val: u64) {
+    leb128::write::unsigned(output_buffer, val).unwrap();
+}
+
+/// Function to encode a string into the LuaJIT constant format and append the
+/// result to the provided output buffer.
+fn encode_string_constant(s: &String, output_buffer: &mut Vec<u8>) {
+    write_uleb128(
+        output_buffer,
+        (s.len() + COMPLEX_CONST_STR_KIND as usize) as u64,
+    );
+    for b in s.bytes() {
+        output_buffer.push(b);
+    }
+}
+
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_prototype_encode() {
+        let mut bytes = Vec::<u8>::new();
+
+        Prototype {
+            has_child: true,
+            is_variadic: false,
+            has_ffi: true,
+            arg_count: 3,
+            frame_size: 4,
+            instructions: vec![Instruction::AD { a: 1, d: 2, op: 3 }],
+            up_values: vec![UpValueConstant::ParentLocalSlot(0)],
+            complex_consts: vec![ComplexConstant::Child],
+            numeric_consts: vec![NumericConstant::Integer(42)],
+        }
+        .encode(&mut bytes);
+        assert_eq!(
+            bytes,
+            vec![
+                0x0F, 0x05, 0x03, 0x04, 0x01, 0x01, 0x01, 0x01, 0x03, 0x01, 0x02, 0x00, 0x00, 0xC0,
+                0x00, 0x54
+            ]
+        )
+    }
+
+    #[test]
+    fn test_up_value_constant_encode() {
+        let mut bytes = Vec::<u8>::new();
+
+        // Try encoding a parent slot referencing up-value
+        UpValueConstant::ParentLocalSlot(42).encode(&mut bytes);
+        assert_eq!(bytes, vec![0x2A, 0xC0]);
+        bytes.clear();
+
+        // Try encoding a parent up-value referencing up-value
+        UpValueConstant::ParentUpValue(42).encode(&mut bytes);
+        assert_eq!(bytes, vec![0x2A, 0x00]);
+        bytes.clear();
+    }
+
+    #[test]
+    fn test_complex_constant_encode() {
+        let mut bytes = Vec::<u8>::new();
+
+        // Try encoding a child constant
+        ComplexConstant::Child.encode(&mut bytes);
+        assert_eq!(bytes, vec![0x0]);
+        bytes.clear();
+
+        // Try encoding a table constant
+        let one_constant = TableConstantElement::Integer(1);
+        ComplexConstant::Table {
+            array_part: vec![one_constant.clone()],
+            hash_part: vec![(
+                TableConstantElement::String(String::from("a")),
+                one_constant,
+            )],
+        }
+        .encode(&mut bytes);
+        assert_eq!(
+            bytes,
+            vec![0x01, 0x02, 0x01, 0x00, 0x03, 0x01, 0x06, 0x61, 0x03, 0x01]
+        );
+        bytes.clear();
+
+        // Try encoding a positive integer constant
+        ComplexConstant::Integer(42).encode(&mut bytes);
+        assert_eq!(bytes, vec![0x02, 0x2A]);
+        bytes.clear();
+
+        // Try encoding a negative integer constant
+        ComplexConstant::Integer(-42).encode(&mut bytes);
+        assert_eq!(
+            bytes,
+            vec![
+                0x02, 0xD6, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x01
+            ]
+        );
+        bytes.clear();
+
+        // Try encoding a unsigned integer constant
+        ComplexConstant::UnsignedInteger(u64::MAX).encode(&mut bytes);
+        assert_eq!(
+            bytes,
+            vec![
+                0x03, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x01
+            ]
+        );
+        bytes.clear();
+
+        // Try encoding a string constant
+        ComplexConstant::String(String::from("Hello!")).encode(&mut bytes);
+        assert_eq!(bytes, vec![0x0B, 0x48, 0x65, 0x6C, 0x6C, 0x6F, 0x21]);
+        bytes.clear();
+    }
+
+    #[test]
+    fn test_table_constant_element_encode() {
+        let mut bytes = Vec::<u8>::new();
+
+        // Try encoding a nil constant
+        TableConstantElement::Nil.encode(&mut bytes);
+        assert_eq!(bytes, vec![0x00]);
+        bytes.clear();
+
+        // Try encoding a false constant
+        TableConstantElement::False.encode(&mut bytes);
+        assert_eq!(bytes, vec![0x01]);
+        bytes.clear();
+
+        // Try encoding a true constant
+        TableConstantElement::True.encode(&mut bytes);
+        assert_eq!(bytes, vec![0x02]);
+        bytes.clear();
+
+        // Try encoding a positive integer constant
+        TableConstantElement::Integer(42).encode(&mut bytes);
+        assert_eq!(bytes, vec![0x03, 0x2A]);
+        bytes.clear();
+
+        // Try encoding a negative integer constant
+        TableConstantElement::Integer(-42).encode(&mut bytes);
+        assert_eq!(bytes, vec![0x03, 0xD6, 0xFF, 0xFF, 0xFF, 0x0F]);
+        bytes.clear();
+
+        // Try encoding an float constant
+        TableConstantElement::Float(1.1).encode(&mut bytes);
+        assert_eq!(
+            bytes,
+            vec![
+                0x04, 0x9A, 0xB3, 0xE6, 0xCC, 0x09, 0x99, 0xB3, 0xC6, 0xFF, 0x03
+            ]
+        );
+        bytes.clear();
+
+        // Try encoding an string constant
+        TableConstantElement::String(String::from("Hello!")).encode(&mut bytes);
+        assert_eq!(bytes, vec![0x0B, 0x48, 0x65, 0x6C, 0x6C, 0x6F, 0x21]);
+        bytes.clear();
+    }
+
+    #[test]
+    fn test_numeric_constant_encode() {
+        let mut bytes = Vec::<u8>::new();
+
+        // Test encoding a positive integer constant
+        NumericConstant::Integer(4625538).encode(&mut bytes);
+        assert_eq!(bytes, vec![0x84, 0xD2, 0xB4, 0x04]);
+        bytes.clear();
+
+        // Test encoding a negative integer constant
+        NumericConstant::Integer(-4625538).encode(&mut bytes);
+        assert_eq!(bytes, vec![0xFC, 0xAD, 0xCB, 0xFB, 0x1F]);
+        bytes.clear();
+
+        // Test encoding a float constant
+        NumericConstant::Float(1.1).encode(&mut bytes);
+        assert_eq!(
+            bytes,
+            vec![0xB5, 0xE6, 0xCC, 0x99, 0x13, 0x99, 0xB3, 0xC6, 0xFF, 0x03]
+        );
+        bytes.clear();
+    }
+
+    #[test]
+    fn test_write_uleb128() {
+        let mut bytes = Vec::<u8>::new();
+
+        // Test encoding a small number in uleb128
+        write_uleb128(&mut bytes, 42);
+        assert_eq!(bytes, vec![0x2A]);
+        bytes.clear();
+
+        // Test encoding a big number in uleb128
+        write_uleb128(&mut bytes, 4625538);
+        assert_eq!(bytes, vec![0x82, 0xA9, 0x9A, 0x02]);
+        bytes.clear();
+    }
+
+    #[test]
+    fn test_encode_string_constant() {
+        let mut bytes = Vec::<u8>::new();
+
+        // Test encoding a simple string
+        encode_string_constant(&String::from("Hello!"), &mut bytes);
+        assert_eq!(bytes, vec![0x0B, 0x48, 0x65, 0x6C, 0x6C, 0x6F, 0x21]);
+        bytes.clear();
+
+        // Test encoding an empty string
+        encode_string_constant(&String::from(""), &mut bytes);
+        assert_eq!(bytes, vec![0x05]);
+        bytes.clear();
+
+        // Test encoding an UTF-8 string
+        encode_string_constant(&String::from("Ϣ"), &mut bytes);
+        assert_eq!(bytes, vec![0x07, 0xCF, 0xA2]);
+        bytes.clear();
+    }
 }
