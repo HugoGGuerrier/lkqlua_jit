@@ -4,6 +4,7 @@
 //! stuff to parse, compile and execute LKQL sources.
 
 mod bytecode;
+mod intermediate_tree;
 mod sources;
 
 use sources::SourceSection;
