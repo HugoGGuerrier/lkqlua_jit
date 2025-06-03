@@ -7,7 +7,7 @@
 //! This module provide a [`SourceRepository`] type to store and cache analyzed
 //! sources.
 
-use std::{cell::OnceCell, collections::HashMap, fs, path::Path, rc::Rc};
+use std::{cell::OnceCell, collections::HashMap, fmt::Display, fs, path::Path, rc::Rc};
 
 use liblkqllang::LkqlNode;
 
@@ -166,6 +166,12 @@ pub struct SourceSection {
     pub source: Rc<Source>,
     pub start: Location,
     pub end: Location,
+}
+
+impl Display for SourceSection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}:{}:{}", self.source.id(), self.start.line, self.start.col)
+    }
 }
 
 /// This structure represents a location in a source, defined by a line and
