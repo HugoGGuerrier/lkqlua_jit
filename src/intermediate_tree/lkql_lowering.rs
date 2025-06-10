@@ -44,7 +44,7 @@ impl Function {
         ctx: &mut LoweringContext,
     ) -> Result<Rc<RefCell<Self>>, Error> {
         // Create a location object for the current function
-        let function_location: SourceSection = ctx.source_repo.section_from_lkql_node(node)?;
+        let function_location: SourceSection = SourceSection::from_lkql_node(node)?;
 
         // From all declarations, extract all local symbols, synthesizing names
         // for lambdas.
@@ -160,7 +160,7 @@ impl Node {
                 NodeVariant::InitLocal {
                     symbol: Identifier::from_node(&id_node, ctx)?,
                     val: Box::new(Node {
-                        origin_location: ctx.source_repo.section_from_lkql_node(&val_node)?,
+                        origin_location: SourceSection::from_lkql_node(&val_node)?,
                         variant: NodeVariant::ChildFunRef(*ctx.child_index_map.get(node).unwrap()),
                     }),
                 }
@@ -185,7 +185,7 @@ impl Node {
                                         message: String::from(
                                             "Positional argument after a named one",
                                         ),
-                                        location: ctx.source_repo.section_from_lkql_node(arg)?,
+                                        location: SourceSection::from_lkql_node(arg)?,
                                         hints: vec![],
                                     });
                                 }
@@ -348,7 +348,7 @@ impl Node {
         };
 
         // Finally return the resulting node
-        Ok(Node { origin_location: ctx.source_repo.section_from_lkql_node(node)?, variant })
+        Ok(Node { origin_location: SourceSection::from_lkql_node(node)?, variant })
     }
 }
 
@@ -388,17 +388,14 @@ impl Operator {
             _ => unreachable!(),
         };
 
-        Ok(Operator { origin_location: ctx.source_repo.section_from_lkql_node(node)?, variant })
+        Ok(Operator { origin_location: SourceSection::from_lkql_node(node)?, variant })
     }
 }
 
 impl Identifier {
     /// Util function to easily create an identifier from an LKQL node.
     fn from_node(node: &LkqlNode, ctx: &LoweringContext) -> Result<Self, Error> {
-        Ok(Self {
-            origin_location: ctx.source_repo.section_from_lkql_node(node)?,
-            text: node.text()?,
-        })
+        Ok(Self { origin_location: SourceSection::from_lkql_node(node)?, text: node.text()? })
     }
 }
 

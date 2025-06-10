@@ -7,9 +7,9 @@
 //! This module provide a [`SourceRepository`] type to store and cache analyzed
 //! sources.
 
-use std::{cell::OnceCell, collections::HashMap, fmt::Display, fs, path::Path, rc::Rc};
+use std::{cell::OnceCell, collections::HashMap, fmt::Display, fs, path::Path};
 
-use liblkqllang::LkqlNode;
+use liblkqllang::{LkqlNode, SourceLocation};
 
 use crate::Error;
 
@@ -17,7 +17,7 @@ use crate::Error;
 /// holds all created sources, associating each one to its identifier.
 #[derive(Debug)]
 pub struct SourceRepository {
-    source_map: HashMap<SourceId, Rc<Source>>,
+    source_map: HashMap<SourceId, Source>,
 }
 
 impl SourceRepository {
@@ -32,87 +32,36 @@ impl SourceRepository {
     /// before returning a referece to it.
     /// This function returns an [`Error`] if the provided path is not
     /// designating an existing file.
-    pub fn get_file_source(&mut self, file_path: &Path) -> Result<Rc<Source>, Error> {
+    pub fn get_file_source(&mut self, file_path: &Path) -> Result<&Source, Error> {
         let source_id = SourceId::from(file_path.canonicalize()?.to_str().unwrap());
 
-        // Check if the source map already contains a source for this file
-        if let Some(source) = self.source_map.get(&source_id) {
-            Ok(source.clone())
+        // If it is not already present, insert the source in the map
+        if !self.source_map.contains_key(&source_id) {
+            self.source_map.insert(
+                source_id.clone(),
+                Source::File { canonical_path: source_id.clone(), content: OnceCell::new() },
+            );
         }
-        // Else, create the source object and store it into the map
-        else {
-            let res_source = Rc::new(Source::File {
-                canonical_path: source_id.clone(),
-                content: OnceCell::new(),
-            });
-            self.source_map.insert(source_id, res_source.clone());
-            Ok(res_source)
-        }
+
+        Ok(self.source_map.get(&source_id).unwrap())
     }
 
     /// Get the source object associated to the provided buffer, if it is
     /// already store in the [`self`] repository, return a reference to it.
     /// Otherwise, create a new source object and store it into the repository
     /// before returning a reference to it.
-    pub fn get_buffer_source(&mut self, name: &str, content: &str) -> Rc<Source> {
+    pub fn get_buffer_source(&mut self, name: &str, content: &str) -> &Source {
         let source_id = SourceId::from(name);
 
-        // Check if the source map already contains a a source for this buffer
-        // name.
-        if let Some(source) = self.source_map.get(&source_id) {
-            source.clone()
+        // If it is not already present, insert the source in the map
+        if !self.source_map.contains_key(&source_id) {
+            self.source_map.insert(
+                source_id.clone(),
+                Source::Buffer { name: source_id.clone(), content: String::from(content) },
+            );
         }
-        // Else, create a new source object and store it into the repository
-        else {
-            let res_source =
-                Rc::new(Source::Buffer { name: source_id.clone(), content: String::from(content) });
-            self.source_map.insert(source_id, res_source.clone());
-            res_source
-        }
-    }
 
-    /// Get whether this repository has a registered source with the provided
-    /// name.
-    pub fn has_source_with_id(&self, source_id: &SourceId) -> bool {
-        self.source_map.contains_key(source_id)
-    }
-
-    /// Get the source section corresponding to the provided LKQL node. Returns
-    /// an [`Error`] in the following cases:
-    ///   * If there is any exception in [`liblkqllang`]
-    ///   * If the node has no related unit
-    ///   * If the node's unit source is not included in this repository
-    pub fn section_from_lkql_node(&self, node: &LkqlNode) -> Result<SourceSection, Error> {
-        // Get the node's unit
-        if let Some(unit) = node.unit()? {
-            // Get required information about the node and its unit
-            let slocr = node.sloc_range()?;
-            let source_id = unit.filename()?;
-
-            // If the source is in the repository, return a successful result
-            if let Some(source) = self.source_map.get(&source_id) {
-                Ok(SourceSection {
-                    source: source.clone(),
-                    start: Location {
-                        line: slocr.start.line as u64,
-                        col: slocr.start.column as u32,
-                    },
-                    end: Location { line: slocr.end.line as u64, col: slocr.end.column as u32 },
-                })
-            }
-            // Else, the source is not included in the repository, return an
-            // error.
-            else {
-                Err(Error::Messaged(format!(
-                    "Cannot retrieve a source corresponding to \"{source_id}\""
-                )))
-            }
-        }
-        // Else, the node has no related unit (this is very weird), return an
-        // error.
-        else {
-            Err(Error::Messaged(format!("Cannot get unit from node {node}")))
-        }
+        self.source_map.get(&source_id).unwrap()
     }
 }
 
@@ -163,14 +112,26 @@ impl Source {
 /// This structure represents an extract from a [`Source`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourceSection {
-    pub source: Rc<Source>,
+    pub source: SourceId,
     pub start: Location,
     pub end: Location,
 }
 
 impl Display for SourceSection {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}:{}:{}", self.source.id(), self.start.line, self.start.col)
+        write!(f, "{}:{}:{}", self.source, self.start.line, self.start.col)
+    }
+}
+
+impl SourceSection {
+    /// Create a [`SourceSection`] object from a [`liblkqllang`] node.
+    pub fn from_lkql_node(node: &LkqlNode) -> Result<Self, Error> {
+        let sloc_range = node.sloc_range()?;
+        Ok(Self {
+            source: node.unit()?.unwrap().filename()?,
+            start: Location::from_lkql_location(sloc_range.start),
+            end: Location::from_lkql_location(sloc_range.end),
+        })
     }
 }
 
@@ -180,4 +141,10 @@ impl Display for SourceSection {
 pub struct Location {
     pub line: u64,
     pub col: u32,
+}
+
+impl Location {
+    pub fn from_lkql_location(location: SourceLocation) -> Self {
+        Self { line: location.line as u64, col: location.column as u32 }
+    }
 }
