@@ -23,6 +23,8 @@ use std::{
 
 use crate::sources::SourceSection;
 
+pub mod lkql_lowering;
+
 const INDENT_STR: &str = "|  ";
 const EMPTY_STR: &str = "[EMPTY]";
 
