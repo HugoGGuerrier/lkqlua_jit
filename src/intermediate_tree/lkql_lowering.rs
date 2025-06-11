@@ -8,7 +8,7 @@ use std::{
 };
 
 use crate::{
-    Diagnostic, Error,
+    Report,
     intermediate_tree::{
         Function, Identifier, Node, NodeVariant, Operator, OperatorVariant, Program,
     },
@@ -21,7 +21,10 @@ impl Program {
     /// Lower the provided LKQL node as an intermediate [`Program`]. The
     /// provided node MUST be one of the following variants:
     ///   * [`LkqlNode::TopLevelList`]
-    pub fn lower_lkql_node(node: &LkqlNode, source_repo: &SourceRepository) -> Result<Self, Error> {
+    pub fn lower_lkql_node(
+        node: &LkqlNode,
+        source_repo: &SourceRepository,
+    ) -> Result<Self, Report> {
         match node {
             LkqlNode::TopLevelList(_) => {
                 let mut ctx = LoweringContext::new(source_repo);
@@ -42,7 +45,7 @@ impl Function {
     fn lower_lkql_node(
         node: &LkqlNode,
         ctx: &mut LoweringContext,
-    ) -> Result<Rc<RefCell<Self>>, Error> {
+    ) -> Result<Rc<RefCell<Self>>, Report> {
         // Create a location object for the current function
         let function_location: SourceSection = SourceSection::from_lkql_node(node)?;
 
@@ -107,9 +110,11 @@ impl Function {
                 .borrow_mut()
                 .parent_function
                 .set(Rc::downgrade(&res))
-                .map_err(|_| Error::Located {
-                    location: function_location.clone(),
-                    message: format!("{:?} parent is already set", child),
+                .map_err(|_| {
+                    Report::bug_diag(
+                        format!("{:?} parent is already set", child),
+                        function_location.clone(),
+                    )
                 })?
         }
         Ok(res)
@@ -121,7 +126,7 @@ impl Function {
         parameters: &LkqlNode,
         ctx: &mut LoweringContext,
         output_vec: &mut Vec<(Identifier, Option<Node>)>,
-    ) -> Result<(), Error> {
+    ) -> Result<(), Report> {
         for maybe_param_decl in parameters {
             match maybe_param_decl? {
                 Some(LkqlNode::ParameterDecl(pd)) => {
@@ -143,7 +148,7 @@ impl Function {
 impl Node {
     /// Lower an LKQL node as an intermediate node. All LKQL node kinds should
     /// be accepted by this function.
-    fn lower_lkql_node(node: &LkqlNode, ctx: &mut LoweringContext) -> Result<Self, Error> {
+    fn lower_lkql_node(node: &LkqlNode, ctx: &mut LoweringContext) -> Result<Self, Report> {
         // Lower the node
         let variant = match node {
             // --- Declarations
@@ -181,13 +186,10 @@ impl Node {
                                     positional_args
                                         .push(Self::lower_lkql_node(&ea.f_value_expr()?, ctx)?);
                                 } else {
-                                    ctx.diagnostics.push(Diagnostic {
-                                        message: String::from(
-                                            "Positional argument after a named one",
-                                        ),
-                                        location: SourceSection::from_lkql_node(arg)?,
-                                        hints: vec![],
-                                    });
+                                    ctx.diagnostics.push(Report::error_diag(
+                                        String::from("Positional argument after a named one"),
+                                        SourceSection::from_lkql_node(arg)?,
+                                    ));
                                 }
                             }
                             LkqlNode::NamedArg(na) => named_args.push((
@@ -369,7 +371,7 @@ impl Operator {
     ///   * [`LkqlNode::OpGt`]
     ///   * [`LkqlNode::OpGeq`]
     ///   * [`LkqlNode::OpNot`]
-    fn lower_lkql_node(node: &LkqlNode, ctx: &mut LoweringContext) -> Result<Self, Error> {
+    fn lower_lkql_node(node: &LkqlNode, ctx: &mut LoweringContext) -> Result<Self, Report> {
         let variant = match node {
             LkqlNode::OpPlus(_) => OperatorVariant::Plus,
             LkqlNode::OpMinus(_) => OperatorVariant::Minus,
@@ -394,7 +396,7 @@ impl Operator {
 
 impl Identifier {
     /// Util function to easily create an identifier from an LKQL node.
-    fn from_node(node: &LkqlNode, ctx: &LoweringContext) -> Result<Self, Error> {
+    fn from_node(node: &LkqlNode, ctx: &LoweringContext) -> Result<Self, Report> {
         Ok(Self { origin_location: SourceSection::from_lkql_node(node)?, text: node.text()? })
     }
 }
@@ -408,7 +410,7 @@ struct LoweringContext<'a> {
     child_index_map: HashMap<LkqlNode, usize>,
 
     /// The list of diagnostics emitted during the lowering.
-    diagnostics: Vec<Diagnostic>,
+    diagnostics: Vec<Report>,
 }
 
 impl<'a> LoweringContext<'a> {
@@ -432,7 +434,7 @@ impl<'a> LoweringContext<'a> {
 ///   * [`LkqlNode::SelectorDecl`]
 ///   * [`LkqlNode::AnonymousFunction`]
 ///   * [`LkqlNode::ListComprehension`]
-fn all_local_decls(node: &LkqlNode, output: &mut Vec<LkqlNode>) -> Result<(), Error> {
+fn all_local_decls(node: &LkqlNode, output: &mut Vec<LkqlNode>) -> Result<(), Report> {
     for maybe_child in node {
         if let Some(child) = maybe_child? {
             match child {
@@ -455,12 +457,12 @@ fn all_local_decls(node: &LkqlNode, output: &mut Vec<LkqlNode>) -> Result<(), Er
 /// Util function to get all lexical symbols which are local to the given node.
 /// This function relies on [`all_local_decls`] to compute its result, meaning
 /// that all concepts described in the latter's doc is true for this function.
-fn all_local_symbols(node: &LkqlNode) -> Result<HashSet<String>, Error> {
+fn all_local_symbols(node: &LkqlNode) -> Result<HashSet<String>, Report> {
     let mut local_decls = Vec::new();
     all_local_decls(node, &mut local_decls)?;
     Ok(local_decls
         .iter()
-        .map(|n| -> Result<String, Error> {
+        .map(|n| -> Result<String, Report> {
             match n {
                 LkqlNode::ValDecl(vd) => Ok(vd.f_identifier()?.text()?),
                 LkqlNode::FunDecl(fd) => Ok(fd.f_name()?.text()?),
@@ -468,7 +470,7 @@ fn all_local_symbols(node: &LkqlNode) -> Result<HashSet<String>, Error> {
                 _ => unreachable!(),
             }
         })
-        .collect::<Result<HashSet<String>, Error>>()?)
+        .collect::<Result<HashSet<String>, Report>>()?)
 }
 
 /// Util function to find all functions in the local environment of the
@@ -477,7 +479,7 @@ fn all_local_symbols(node: &LkqlNode) -> Result<HashSet<String>, Error> {
 /// [`Function::lower_lkql_node`] method.
 /// The locality is defined the same way as it is defined in the
 /// [`all_local_decls`] function.
-fn all_local_functions(node: &LkqlNode, output: &mut Vec<LkqlNode>) -> Result<(), Error> {
+fn all_local_functions(node: &LkqlNode, output: &mut Vec<LkqlNode>) -> Result<(), Report> {
     for maybe_child in node {
         if let Some(child) = maybe_child? {
             match child {

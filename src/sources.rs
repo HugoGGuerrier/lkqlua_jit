@@ -12,7 +12,7 @@ use std::{collections::HashMap, fmt::Display, fs, path::Path};
 use ariadne::{Cache, Source};
 use liblkqllang::{AnalysisContext, AnalysisUnit, LkqlNode, SourceLocation};
 
-use crate::Error;
+use crate::Report;
 
 /// This structure is the main entry point of abstract source handling, it
 /// holds all created sources, associating each one to its identifier.
@@ -45,7 +45,7 @@ impl SourceRepository {
     ///   * The provided path doesn't designate an existing file
     ///   * The file designated by the provided file is not UTF-8 encoded
     ///     (see https://github.com/HugoGGuerrier/lkqlua_jit/issues/1)
-    pub fn add_source_file(&mut self, file_path: &Path, update: bool) -> Result<SourceId, Error> {
+    pub fn add_source_file(&mut self, file_path: &Path, update: bool) -> Result<SourceId, Report> {
         let canonical_path = file_path.canonicalize()?;
         let source_id = canonical_path.to_string_lossy().to_string();
         self.add_source(source_id, || fs::read_to_string(&canonical_path), update)
@@ -63,9 +63,9 @@ impl SourceRepository {
         name: &str,
         content: &str,
         update: bool,
-    ) -> Result<SourceId, Error> {
+    ) -> Result<SourceId, Report> {
         let source_id = String::from(name);
-        self.add_source(source_id, || Ok::<String, Error>(String::from(content)), update)
+        self.add_source(source_id, || Ok::<String, Report>(String::from(content)), update)
     }
 
     /// Internal function for adding sources.
@@ -74,13 +74,13 @@ impl SourceRepository {
         id: SourceId,
         content_provider: F,
         update: bool,
-    ) -> Result<SourceId, Error>
+    ) -> Result<SourceId, Report>
     where
         F: Fn() -> Result<String, E>,
-        Error: From<E>,
+        Report: From<E>,
     {
         if self.source_map.contains_key(&id) && !update {
-            return Err(Error::Messaged(format!(
+            return Err(Report::bug_msg(format!(
                 "File \"{id}\" is already in the source repository"
             )));
         }
@@ -101,7 +101,7 @@ impl SourceRepository {
         &mut self,
         source: &SourceId,
         reparse: bool,
-    ) -> Result<AnalysisUnit, Error> {
+    ) -> Result<AnalysisUnit, Report> {
         todo!()
     }
 }
@@ -112,7 +112,7 @@ impl Cache<SourceId> for SourceRepository {
     fn fetch(&mut self, id: &SourceId) -> Result<&Source<Self::Storage>, impl std::fmt::Debug> {
         self.source_map
             .get(id)
-            .map_or(Err(Error::Messaged(format!("No source identified by \"{id}\""))), |s| {
+            .map_or(Err(Report::bug_msg(format!("No source identified by \"{id}\""))), |s| {
                 Ok(s)
             })
     }
@@ -141,7 +141,7 @@ impl Display for SourceSection {
 
 impl SourceSection {
     /// Create a new source section from a [`liblkqllang::LkqlNode`] object.
-    pub fn from_lkql_node(node: &LkqlNode) -> Result<Self, Error> {
+    pub fn from_lkql_node(node: &LkqlNode) -> Result<Self, Report> {
         let sloc_range = node.sloc_range()?;
         Ok(Self {
             source: node.unit()?.unwrap().filename()?,
