@@ -20,7 +20,6 @@ use crate::Report;
 pub struct SourceRepository {
     lkql_context: AnalysisContext,
     source_map: HashMap<SourceId, Source>,
-    lkql_unit_map: HashMap<SourceId, AnalysisUnit>,
 }
 
 impl SourceRepository {
@@ -30,7 +29,6 @@ impl SourceRepository {
         Self {
             lkql_context: AnalysisContext::create_default().unwrap(),
             source_map: HashMap::new(),
-            lkql_unit_map: HashMap::new(),
         }
     }
 
@@ -90,19 +88,37 @@ impl SourceRepository {
     }
 
     /// Parse the source designated by the provided identifier using the LKQL
-    /// parsing library. If the parsing succeeds, or if the source has already
-    /// been successfully parsed as LKQL, this function return the resulting
-    /// analysis unit.
+    /// parsing library. If the parsing succeeds, this function return the
+    /// resulting analysis unit that contains the parsing tree.
     /// This method may fail if:
     ///   * An exception occurs in the parsing library
+    ///   * There is no source corresponding to the provided identifier
     ///   * The source designated by the provided identifier is not a valid
     ///     LKQL source
-    pub fn parse_as_lkql(
-        &mut self,
-        source: &SourceId,
-        reparse: bool,
-    ) -> Result<AnalysisUnit, Report> {
-        todo!()
+    pub fn parse_as_lkql(&mut self, source_id: &SourceId) -> Result<AnalysisUnit, Report> {
+        // Ensure the source exists
+        let maybe_source = self.source_map.get(source_id);
+        if maybe_source.is_none() {
+            return Err(Report::bug_msg(format!("No source identified by \"{source_id}\"")));
+        }
+
+        // Parse the source as LKQL
+        let source = maybe_source.unwrap();
+        let unit = self
+            .lkql_context
+            .get_unit_from_buffer(source_id, source.text(), None, None)?;
+
+        // Check parsing diagnostics
+        let parsing_diags = unit.diagnostics()?;
+        if !parsing_diags.is_empty() {
+            let mut parsing_reports: Vec<Report> = Vec::with_capacity(parsing_diags.len());
+            for diag in &parsing_diags {
+                parsing_reports.push(Report::from_lkql_diagnostic(&unit, diag)?);
+            }
+            Err(Report::Composed(parsing_reports))
+        } else {
+            Ok(unit)
+        }
     }
 }
 

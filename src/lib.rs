@@ -7,7 +7,10 @@ pub mod bytecode;
 pub mod intermediate_tree;
 pub mod sources;
 
+use liblkqllang::{AnalysisUnit, Diagnostic};
 use sources::SourceSection;
+
+use crate::sources::Location;
 
 /// This type is the top-level of all report that can be emitted by the engine.
 /// This type is designed to be used in [`Result::Err`] values, and can be
@@ -88,6 +91,51 @@ impl Report {
         Self::Single {
             kind: ReportKind::Bug,
             variant: ReportVariant::Diagnostic { location, message, hints: vec![] },
+        }
+    }
+
+    // --- Creation methods
+
+    /// Create a new report from an LKQL parsing diagnostic.
+    pub fn from_lkql_diagnostic(
+        unit: &AnalysisUnit,
+        diagnostic: &Diagnostic,
+    ) -> Result<Self, Report> {
+        Ok(Self::Single {
+            kind: ReportKind::Error,
+            variant: ReportVariant::Diagnostic {
+                location: SourceSection {
+                    source: unit.filename()?,
+                    start: Location::from_lkql_location(diagnostic.sloc_range.start),
+                    end: Location::from_lkql_location(diagnostic.sloc_range.end),
+                },
+                message: diagnostic.message.clone(),
+                hints: None,
+            },
+        })
+    }
+
+    // --- Other methods
+
+    /// Combine two report in a [`Report::Composed`] one.
+    pub fn combine(self, other: Report) -> Self {
+        match (self, other) {
+            (
+                Report::Single { kind: self_kind, variant: self_variant },
+                Report::Single { kind: other_kind, variant: other_variant },
+            ) => Self::Composed(vec![
+                Self::Single { kind: self_kind, variant: self_variant },
+                Self::Single { kind: other_kind, variant: other_variant },
+            ]),
+            (Report::Composed(mut reports), Report::Single { kind, variant })
+            | (Report::Single { kind, variant }, Report::Composed(mut reports)) => {
+                reports.push(Self::Single { kind, variant });
+                Self::Composed(reports)
+            }
+            (Report::Composed(mut self_reports), Report::Composed(mut other_reports)) => {
+                self_reports.append(&mut other_reports);
+                Self::Composed(self_reports)
+            }
         }
     }
 }
