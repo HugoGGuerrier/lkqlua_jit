@@ -175,6 +175,28 @@ impl SourceSection {
         })
     }
 
+    /// Create a new source section start from the `from` start location and
+    /// finishing at the `to` end.
+    /// This method returns an error if:
+    ///   * Sections are not about the same source
+    ///   * `to`'s end is before `from`'s start
+    pub fn range(from: &Self, to: &Self) -> Result<Self, Report> {
+        // Ensure both sections are about the same source
+        if from.source != to.source {
+            return Err(Report::bug_msg(format!(
+                "Cannot get a range from sections about different sources"
+            )));
+        }
+
+        // Ensure the `from` start is lower or equals to `to` end
+        if from.start > to.end {
+            return Err(Report::bug_msg(format!("Cannot create a span from {from} to {to}")));
+        }
+
+        // Finally create the new source section
+        Ok(Self { source: from.source.clone(), start: from.start.clone(), end: to.end.clone() })
+    }
+
     /// Create an [`ariadne::Span`] value from this source section.
     pub fn to_span(
         &self,
@@ -193,6 +215,15 @@ impl SourceSection {
 pub struct Location {
     pub line: usize,
     pub col: usize,
+}
+
+impl PartialOrd for Location {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        match self.line.partial_cmp(&other.line) {
+            Some(core::cmp::Ordering::Equal) => self.col.partial_cmp(&other.col),
+            ord => ord,
+        }
+    }
 }
 
 impl Location {

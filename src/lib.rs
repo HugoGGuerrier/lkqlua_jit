@@ -19,7 +19,8 @@ const INFO_KIND_COLOR: ariadne::Color = ariadne::Color::BrightCyan;
 const WARNING_KIND_COLOR: ariadne::Color = ariadne::Color::BrightYellow;
 const ERROR_KIND_COLOR: ariadne::Color = ariadne::Color::BrightRed;
 const BUG_KIND_COLOR: ariadne::Color = ariadne::Color::Red;
-const HINT_COLOR: ariadne::Color = ariadne::Color::BrightBlue;
+const HINT_COLOR: ariadne::Color = ariadne::Color::Fixed(69);
+// const HINT_MESSAGE_COLOR: ariadne::Color = ariadne::Color::Fixed(249);
 
 /// This type is the top-level of all report that can be emitted by the engine.
 /// This type is designed to be used in [`Result::Err`] values, and can be
@@ -85,6 +86,18 @@ impl Report {
         Self::Single {
             kind: ReportKind::Error,
             variant: ReportVariant::Diagnostic { location, message, hints: vec![] },
+        }
+    }
+
+    /// Create a new error report with a located message and additional hints.
+    pub fn error_diag_and_hints(
+        message: String,
+        location: SourceSection,
+        hints: Vec<Hint>,
+    ) -> Self {
+        Self::Single {
+            kind: ReportKind::Error,
+            variant: ReportVariant::Diagnostic { location, message, hints },
         }
     }
 
@@ -180,13 +193,19 @@ impl Report {
                     .with_label(
                         Label::new(location.to_span(source_repo).unwrap())
                             .with_message(message)
-                            .with_color(kind.color()),
+                            .with_color(kind.color())
+                            .with_priority(10)
+                            .with_order(0),
                     )
                     // Add all hints
                     .with_labels(hints.iter().map(|h| {
                         Label::new(h.location.to_span(source_repo).unwrap())
-                            .with_message(&h.message)
+                            .with_message(
+                                format!("{} {}", "Hint:".fg(HINT_COLOR), &h.message).as_str(),
+                            )
                             .with_color(HINT_COLOR)
+                            .with_priority(1)
+                            .with_order(1)
                     }));
 
                     // Then print the report

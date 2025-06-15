@@ -8,7 +8,7 @@ use std::{
 };
 
 use crate::{
-    Report,
+    Hint, Report,
     intermediate_tree::{
         Function, Identifier, Node, NodeVariant, Operator, OperatorVariant, Program,
     },
@@ -21,6 +21,9 @@ impl Program {
     /// Lower the provided LKQL node as an intermediate [`Program`]. The
     /// provided node MUST be one of the following variants:
     ///   * [`LkqlNode::TopLevelList`]
+    ///
+    /// If there is errors in the lowered LKQL source, this function returns a
+    /// [`Result::Err`] which contains all diagnostics.
     pub fn lower_lkql_node(
         node: &LkqlNode,
         source_repo: &SourceRepository,
@@ -29,7 +32,11 @@ impl Program {
             LkqlNode::TopLevelList(_) => {
                 let mut ctx = LoweringContext::new(source_repo);
                 let main_function = Function::lower_lkql_node(node, &mut ctx)?;
-                Ok(Program { main_function })
+                if ctx.diagnostics.is_empty() {
+                    Ok(Program { main_function })
+                } else {
+                    Err(Report::Composed(ctx.diagnostics))
+                }
             }
             _ => unreachable!(),
         }
@@ -186,9 +193,19 @@ impl Node {
                                     positional_args
                                         .push(Self::lower_lkql_node(&ea.f_value_expr()?, ctx)?);
                                 } else {
-                                    ctx.diagnostics.push(Report::error_diag(
+                                    let (last_id, last_node) = named_args.last().unwrap();
+                                    ctx.diagnostics.push(Report::error_diag_and_hints(
                                         String::from("Positional argument after a named one"),
                                         SourceSection::from_lkql_node(arg)?,
+                                        vec![Hint {
+                                            location: SourceSection::range(
+                                                &last_id.origin_location,
+                                                &last_node.origin_location,
+                                            )?,
+                                            message: String::from(
+                                                "Previous named argument is here",
+                                            ),
+                                        }],
                                     ));
                                 }
                             }
