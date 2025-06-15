@@ -7,10 +7,19 @@ pub mod bytecode;
 pub mod intermediate_tree;
 pub mod sources;
 
+use std::io::Write;
+
+use ariadne::{self, Label, StdoutFmt};
 use liblkqllang::{AnalysisUnit, Diagnostic};
 use sources::SourceSection;
 
-use crate::sources::Location;
+use crate::sources::{Location, SourceRepository};
+
+const INFO_KIND_COLOR: ariadne::Color = ariadne::Color::BrightCyan;
+const WARNING_KIND_COLOR: ariadne::Color = ariadne::Color::BrightYellow;
+const ERROR_KIND_COLOR: ariadne::Color = ariadne::Color::BrightRed;
+const BUG_KIND_COLOR: ariadne::Color = ariadne::Color::Red;
+const HINT_COLOR: ariadne::Color = ariadne::Color::BrightBlue;
 
 /// This type is the top-level of all report that can be emitted by the engine.
 /// This type is designed to be used in [`Result::Err`] values, and can be
@@ -138,6 +147,59 @@ impl Report {
             }
         }
     }
+
+    /// Format this report and output the result in provided writable object.
+    /// If the result is going to be printed on `stdout`, please set the
+    /// related parameter accordingly.
+    pub fn print<W: Write>(
+        &self,
+        source_repo: &SourceRepository,
+        output: &mut W,
+        for_stdout: bool,
+    ) {
+        match self {
+            Report::Composed(reports) => reports
+                .iter()
+                .for_each(|r| r.print(source_repo, output, for_stdout)),
+            Report::Single { kind, variant } => match variant {
+                ReportVariant::Message(msg) => {
+                    let line_prefix = format!("{}:", kind.label()).fg(kind.color());
+                    output
+                        .write(format!("{line_prefix} {msg}").as_bytes())
+                        .expect(format!("Error while printing report \"{msg}\"").as_str());
+                }
+                ReportVariant::Diagnostic { location, message, hints } => {
+                    // Create a new report builder
+                    let rep_builder = ariadne::Report::build(
+                        kind.to_ariadne_kind(),
+                        location.to_span(source_repo).unwrap(),
+                    )
+                    // Add the error message
+                    .with_message(message)
+                    // Add the main label with the diagnostic color
+                    .with_label(
+                        Label::new(location.to_span(source_repo).unwrap())
+                            .with_message(message)
+                            .with_color(kind.color()),
+                    )
+                    // Add all hints
+                    .with_labels(hints.iter().map(|h| {
+                        Label::new(h.location.to_span(source_repo).unwrap())
+                            .with_message(&h.message)
+                            .with_color(HINT_COLOR)
+                    }));
+
+                    // Then print the report
+                    if for_stdout {
+                        rep_builder.finish().write_for_stdout(source_repo, output)
+                    } else {
+                        rep_builder.finish().write(source_repo, output)
+                    }
+                    .expect(format!("Error while printing report {:?}", self).as_str())
+                }
+            },
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -146,6 +208,30 @@ pub enum ReportKind {
     Warning,
     Error,
     Bug,
+}
+
+impl ReportKind {
+    fn to_ariadne_kind(&self) -> ariadne::ReportKind {
+        ariadne::ReportKind::Custom(self.label(), self.color())
+    }
+
+    fn color(&self) -> ariadne::Color {
+        match self {
+            ReportKind::Info => INFO_KIND_COLOR,
+            ReportKind::Warning => WARNING_KIND_COLOR,
+            ReportKind::Error => ERROR_KIND_COLOR,
+            ReportKind::Bug => BUG_KIND_COLOR,
+        }
+    }
+
+    fn label(&self) -> &str {
+        match self {
+            ReportKind::Info => "Info",
+            ReportKind::Warning => "Warning",
+            ReportKind::Error => "Error",
+            ReportKind::Bug => "Bug",
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

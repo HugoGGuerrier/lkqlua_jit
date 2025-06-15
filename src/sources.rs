@@ -7,7 +7,7 @@
 //! This module provide a [`SourceRepository`] type to store and cache analyzed
 //! sources.
 
-use std::{collections::HashMap, fmt::Display, fs, path::Path};
+use std::{collections::HashMap, fmt::Display, fs, ops::Range, path::Path};
 
 use ariadne::{Cache, Source};
 use liblkqllang::{AnalysisContext, AnalysisUnit, LkqlNode, SourceLocation};
@@ -20,6 +20,21 @@ use crate::Report;
 pub struct SourceRepository {
     lkql_context: AnalysisContext,
     source_map: HashMap<SourceId, Source>,
+}
+
+impl Cache<SourceId> for &SourceRepository {
+    type Storage = String;
+
+    fn fetch(
+        &mut self,
+        source_id: &SourceId,
+    ) -> Result<&Source<Self::Storage>, impl std::fmt::Debug> {
+        self.get_source(source_id)
+    }
+
+    fn display<'a>(&self, id: &'a SourceId) -> Option<impl std::fmt::Display + 'a> {
+        Some(id)
+    }
 }
 
 impl SourceRepository {
@@ -79,12 +94,28 @@ impl SourceRepository {
     {
         if self.source_map.contains_key(&id) && !update {
             return Err(Report::bug_msg(format!(
-                "File \"{id}\" is already in the source repository"
+                "Source \"{id}\" is already in the source repository"
             )));
         }
         self.source_map
             .insert(id.clone(), Source::from(content_provider()?));
         Ok(id)
+    }
+
+    /// Get the source designated by the provided identifier, if there is no
+    /// sources associated to it, return an [`Result::Err`].
+    pub fn get_source(&self, source_id: &SourceId) -> Result<&Source, Report> {
+        if let Some(source) = self.source_map.get(source_id) {
+            Ok(source)
+        } else {
+            Err(Report::bug_msg(format!("Unknown source \"{source_id}\"")))
+        }
+    }
+
+    /// Get the source designated by the provided identifier, panicking if
+    /// there is no source related to it.
+    pub fn get_source_unchecked(&self, source_id: &SourceId) -> &Source {
+        self.get_source(source_id).expect("Unknown source")
     }
 
     /// Parse the source designated by the provided identifier using the LKQL
@@ -96,14 +127,8 @@ impl SourceRepository {
     ///   * The source designated by the provided identifier is not a valid
     ///     LKQL source
     pub fn parse_as_lkql(&mut self, source_id: &SourceId) -> Result<AnalysisUnit, Report> {
-        // Ensure the source exists
-        let maybe_source = self.source_map.get(source_id);
-        if maybe_source.is_none() {
-            return Err(Report::bug_msg(format!("No source identified by \"{source_id}\"")));
-        }
-
         // Parse the source as LKQL
-        let source = maybe_source.unwrap();
+        let source = self.get_source(source_id).unwrap();
         let unit = self
             .lkql_context
             .get_unit_from_buffer(source_id, source.text(), None, None)?;
@@ -122,24 +147,8 @@ impl SourceRepository {
     }
 }
 
-impl Cache<SourceId> for SourceRepository {
-    type Storage = String;
-
-    fn fetch(&mut self, id: &SourceId) -> Result<&Source<Self::Storage>, impl std::fmt::Debug> {
-        self.source_map
-            .get(id)
-            .map_or(Err(Report::bug_msg(format!("No source identified by \"{id}\""))), |s| {
-                Ok(s)
-            })
-    }
-
-    fn display<'a>(&self, id: &'a SourceId) -> Option<impl std::fmt::Display + 'a> {
-        Some(id)
-    }
-}
-
 /// A source identifier is just a string.
-type SourceId = String;
+pub type SourceId = String;
 
 /// This structure represents an extract from a source object.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -165,19 +174,30 @@ impl SourceSection {
             end: Location::from_lkql_location(sloc_range.end),
         })
     }
+
+    /// Create an [`ariadne::Span`] value from this source section.
+    pub fn to_span(
+        &self,
+        source_repo: &SourceRepository,
+    ) -> Result<(SourceId, Range<usize>), Report> {
+        let source = source_repo.get_source(&self.source)?;
+        let start_offset = source.line(self.start.line - 1).unwrap().offset() + self.start.col - 1;
+        let end_offset = source.line(self.end.line - 1).unwrap().offset() + self.end.col - 1;
+        Ok((self.source.clone(), start_offset..end_offset))
+    }
 }
 
 /// This structure represents a location in a source, defined by a line and
 /// a colon.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Location {
-    pub line: u64,
-    pub col: u32,
+    pub line: usize,
+    pub col: usize,
 }
 
 impl Location {
     /// Create a new location from a [`liblkqllang::SourceLocation`] object.
     pub fn from_lkql_location(location: SourceLocation) -> Self {
-        Self { line: location.line as u64, col: location.column as u32 }
+        Self { line: location.line as usize, col: location.column as usize }
     }
 }
