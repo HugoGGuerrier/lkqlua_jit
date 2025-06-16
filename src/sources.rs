@@ -12,7 +12,7 @@ use std::{collections::HashMap, fmt::Display, fs, ops::Range, path::Path};
 use ariadne::{Cache, Source};
 use liblkqllang::{AnalysisContext, AnalysisUnit, LkqlNode, SourceLocation};
 
-use crate::Report;
+use crate::report::Report;
 
 /// This structure is the main entry point of abstract source handling, it
 /// holds all created sources, associating each one to its identifier.

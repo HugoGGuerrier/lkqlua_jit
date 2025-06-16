@@ -8,10 +8,10 @@ use std::{
 };
 
 use crate::{
-    Report,
     intermediate_tree::{
         Function, Identifier, Node, NodeVariant, Operator, OperatorVariant, Program,
     },
+    report::Report,
     sources::SourceSection,
 };
 
