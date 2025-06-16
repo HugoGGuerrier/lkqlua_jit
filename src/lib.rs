@@ -199,13 +199,13 @@ impl Report {
                     // Create a new report builder
                     let rep_builder = ariadne::Report::build(
                         kind.to_ariadne_kind(),
-                        location.to_span(source_repo).unwrap(),
+                        location.to_span(source_repo),
                     )
                     // Add the error message
                     .with_message(message)
                     // Add the main label with the diagnostic color
                     .with_label(
-                        Label::new(location.to_span(source_repo).unwrap())
+                        Label::new(location.to_span(source_repo))
                             .with_message(message)
                             .with_color(kind.color())
                             .with_priority(10)
@@ -213,7 +213,7 @@ impl Report {
                     )
                     // Add all hints
                     .with_labels(hints.iter().map(|h| {
-                        Label::new(h.location.to_span(source_repo).unwrap())
+                        Label::new(h.location.to_span(source_repo))
                             .with_message(
                                 format!("{} {}", "Hint:".fg(HINT_COLOR), &h.message).as_str(),
                             )

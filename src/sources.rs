@@ -114,7 +114,7 @@ impl SourceRepository {
 
     /// Get the source designated by the provided identifier, panicking if
     /// there is no source related to it.
-    pub fn get_source_unchecked(&self, source_id: &SourceId) -> &Source {
+    pub fn get_source_unsafe(&self, source_id: &SourceId) -> &Source {
         self.get_source(source_id).expect("Unknown source")
     }
 
@@ -128,7 +128,7 @@ impl SourceRepository {
     ///     LKQL source
     pub fn parse_as_lkql(&mut self, source_id: &SourceId) -> Result<AnalysisUnit, Report> {
         // Parse the source as LKQL
-        let source = self.get_source(source_id).unwrap();
+        let source = self.get_source_unsafe(source_id);
         let unit = self
             .lkql_context
             .get_unit_from_buffer(source_id, source.text(), None, None)?;
@@ -198,14 +198,11 @@ impl SourceSection {
     }
 
     /// Create an [`ariadne::Span`] value from this source section.
-    pub fn to_span(
-        &self,
-        source_repo: &SourceRepository,
-    ) -> Result<(SourceId, Range<usize>), Report> {
-        let source = source_repo.get_source(&self.source)?;
+    pub fn to_span(&self, source_repo: &SourceRepository) -> (SourceId, Range<usize>) {
+        let source = source_repo.get_source_unsafe(&self.source);
         let start_offset = source.line(self.start.line - 1).unwrap().offset() + self.start.col - 1;
         let end_offset = source.line(self.end.line - 1).unwrap().offset() + self.end.col - 1;
-        Ok((self.source.clone(), start_offset..end_offset))
+        (self.source.clone(), start_offset..end_offset)
     }
 }
 
