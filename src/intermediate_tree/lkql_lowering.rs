@@ -2,9 +2,9 @@
 //! to an intermediate representation.
 
 use std::{
-    cell::{OnceCell, RefCell},
+    cell::RefCell,
     collections::{HashMap, HashSet},
-    rc::Rc,
+    rc::{Rc, Weak},
 };
 
 use crate::{
@@ -12,7 +12,7 @@ use crate::{
     intermediate_tree::{
         Function, Identifier, Node, NodeVariant, Operator, OperatorVariant, Program,
     },
-    sources::{SourceRepository, SourceSection},
+    sources::SourceSection,
 };
 
 use liblkqllang::{BaseFunction, LkqlNode};
@@ -24,13 +24,10 @@ impl Program {
     ///
     /// If there is errors in the lowered LKQL source, this function returns a
     /// [`Result::Err`] which contains all diagnostics.
-    pub fn lower_lkql_node(
-        node: &LkqlNode,
-        source_repo: &SourceRepository,
-    ) -> Result<Self, Report> {
+    pub fn lower_lkql_node(node: &LkqlNode) -> Result<Self, Report> {
         match node {
             LkqlNode::TopLevelList(_) => {
-                let mut ctx = LoweringContext::new(source_repo);
+                let mut ctx = LoweringContext::new();
                 let main_function = Function::lower_lkql_node(node, &mut ctx)?;
                 if ctx.diagnostics.is_empty() {
                     Ok(Program { main_function })
@@ -61,69 +58,66 @@ impl Function {
         let local_symbols = all_local_symbols(node)?;
 
         // Create the result object with empty fields
-        let mut lowered_function: Function = Function {
+        let res = Rc::new(RefCell::new(Function {
             origin_location: function_location.clone(),
-            parent_function: OnceCell::new(),
-            children_function: Vec::new(),
+            parent_function: ctx.current_function.clone(),
+            children_functions: Vec::new(),
             local_symbols,
             params: Vec::new(),
             body: Vec::new(),
-        };
+        }));
 
-        // Lower the children functions
-        let mut child_function_nodes = Vec::new();
-        all_local_functions(node, &mut child_function_nodes)?;
+        {
+            // Borrow the lowered function as mutable to fill it
+            let mut lowered_function = res.borrow_mut();
 
-        for child_function_node in child_function_nodes {
-            ctx.child_index_map
-                .insert(child_function_node.clone(), lowered_function.children_function.len());
-            lowered_function
-                .children_function
-                .push(Self::lower_lkql_node(&child_function_node, ctx)?);
-        }
+            // Lower the children functions
+            let mut child_function_nodes = Vec::new();
+            all_local_functions(node, &mut child_function_nodes)?;
 
-        // Lower the function parameters and body
-        match node {
-            LkqlNode::TopLevelList(tl) => {
-                for stmt in tl {
-                    if let Some(n) = stmt? {
-                        lowered_function.body.push(Node::lower_lkql_node(&n, ctx)?);
+            ctx.current_function = Some(Rc::downgrade(&res));
+            for child_function_node in child_function_nodes {
+                ctx.child_index_map
+                    .insert(child_function_node.clone(), lowered_function.children_functions.len());
+                lowered_function
+                    .children_functions
+                    .push(Self::lower_lkql_node(&child_function_node, ctx)?);
+            }
+            ctx.current_function = lowered_function.parent_function.clone();
+
+            // Lower the function parameters and body
+            match node {
+                LkqlNode::TopLevelList(tl) => {
+                    for stmt in tl {
+                        if let Some(n) = stmt? {
+                            lowered_function.body.push(Node::lower_lkql_node(&n, ctx)?);
+                        }
                     }
                 }
-            }
-            LkqlNode::FunDecl(fd) => match fd.f_fun_expr()? {
-                LkqlNode::NamedFunction(nf) => {
-                    Self::lower_parameters(&nf.f_parameters()?, ctx, &mut lowered_function.params)?;
+                LkqlNode::FunDecl(fd) => match fd.f_fun_expr()? {
+                    LkqlNode::NamedFunction(nf) => {
+                        Self::lower_parameters(
+                            &nf.f_parameters()?,
+                            ctx,
+                            &mut lowered_function.params,
+                        )?;
+                        lowered_function
+                            .body
+                            .push(Node::lower_lkql_node(&nf.f_body_expr()?, ctx)?);
+                    }
+                    _ => unreachable!(),
+                },
+                LkqlNode::AnonymousFunction(af) => {
+                    Self::lower_parameters(&af.f_parameters()?, ctx, &mut lowered_function.params)?;
                     lowered_function
                         .body
-                        .push(Node::lower_lkql_node(&nf.f_body_expr()?, ctx)?);
+                        .push(Node::lower_lkql_node(&af.f_body_expr()?, ctx)?);
                 }
                 _ => unreachable!(),
-            },
-            LkqlNode::AnonymousFunction(af) => {
-                Self::lower_parameters(&af.f_parameters()?, ctx, &mut lowered_function.params)?;
-                lowered_function
-                    .body
-                    .push(Node::lower_lkql_node(&af.f_body_expr()?, ctx)?);
-            }
-            _ => unreachable!(),
-        };
-
-        // Finally, create the result reference and set it as parent into all
-        // children.
-        let res = Rc::new(RefCell::new(lowered_function));
-        for child in res.borrow().children_function.iter() {
-            child
-                .borrow_mut()
-                .parent_function
-                .set(Rc::downgrade(&res))
-                .map_err(|_| {
-                    Report::bug_diag(
-                        format!("{:?} parent is already set", child),
-                        function_location.clone(),
-                    )
-                })?
+            };
         }
+
+        // Finally, return the lowered function
         Ok(res)
     }
 
@@ -137,7 +131,7 @@ impl Function {
         for maybe_param_decl in parameters {
             match maybe_param_decl? {
                 Some(LkqlNode::ParameterDecl(pd)) => {
-                    let name = Identifier::from_node(&pd.f_param_identifier()?, ctx)?;
+                    let name = Identifier::from_node(&pd.f_param_identifier()?)?;
                     let default_expr = if let Some(n) = pd.f_default_expr()? {
                         Some(Node::lower_lkql_node(&n, ctx)?)
                     } else {
@@ -160,7 +154,7 @@ impl Node {
         let variant = match node {
             // --- Declarations
             LkqlNode::ValDecl(vd) => NodeVariant::InitLocal {
-                symbol: Identifier::from_node(&vd.f_identifier()?, ctx)?,
+                symbol: Identifier::from_node(&vd.f_identifier()?)?,
                 val: Box::new(Self::lower_lkql_node(&vd.f_value()?, ctx)?),
             },
             LkqlNode::FunDecl(_) | LkqlNode::SelectorDecl(_) => {
@@ -170,7 +164,7 @@ impl Node {
                     _ => unreachable!(),
                 };
                 NodeVariant::InitLocal {
-                    symbol: Identifier::from_node(&id_node, ctx)?,
+                    symbol: Identifier::from_node(&id_node)?,
                     val: Box::new(Node {
                         origin_location: SourceSection::from_lkql_node(&val_node)?,
                         variant: NodeVariant::ChildFunRef(*ctx.child_index_map.get(node).unwrap()),
@@ -210,7 +204,7 @@ impl Node {
                                 }
                             }
                             LkqlNode::NamedArg(na) => named_args.push((
-                                Identifier::from_node(&na.f_arg_name()?, ctx)?,
+                                Identifier::from_node(&na.f_arg_name()?)?,
                                 Self::lower_lkql_node(&na.f_value_expr()?, ctx)?,
                             )),
                             _ => unreachable!(),
@@ -235,7 +229,7 @@ impl Node {
                 };
                 NodeVariant::DottedExpr {
                     prefix: Box::new(Self::lower_lkql_node(&receiver?, ctx)?),
-                    suffix: Identifier::from_node(&member?, ctx)?,
+                    suffix: Identifier::from_node(&member?)?,
                     is_safe,
                 }
             }
@@ -293,14 +287,14 @@ impl Node {
                 };
                 NodeVariant::BinOp {
                     left: Box::new(Self::lower_lkql_node(&left?, ctx)?),
-                    operator: Operator::lower_lkql_node(&op?, ctx)?,
+                    operator: Operator::lower_lkql_node(&op?)?,
                     right: Box::new(Self::lower_lkql_node(&right?, ctx)?),
                 }
             }
 
             // --- Unary operation
             LkqlNode::UnOp(uo) => NodeVariant::UnOp {
-                operator: Operator::lower_lkql_node(&uo.f_op()?, ctx)?,
+                operator: Operator::lower_lkql_node(&uo.f_op()?)?,
                 operand: Box::new(Self::lower_lkql_node(&uo.f_operand()?, ctx)?),
             },
 
@@ -350,14 +344,14 @@ impl Node {
                 for maybe_assoc_node in &assocs_node {
                     if let Some(LkqlNode::ObjectAssoc(ref assoc_node)) = maybe_assoc_node? {
                         assocs.push((
-                            Identifier::from_node(&assoc_node.f_name()?, ctx)?,
+                            Identifier::from_node(&assoc_node.f_name()?)?,
                             Self::lower_lkql_node(&assoc_node.f_expr()?, ctx)?,
                         ));
                     }
                 }
                 NodeVariant::ObjectLiteral(assocs)
             }
-            LkqlNode::Identifier(_) => NodeVariant::ReadLocal(Identifier::from_node(node, ctx)?),
+            LkqlNode::Identifier(_) => NodeVariant::ReadLocal(Identifier::from_node(node)?),
             LkqlNode::AnonymousFunction(_) => {
                 NodeVariant::ChildFunRef(*ctx.child_index_map.get(node).unwrap())
             }
@@ -388,7 +382,7 @@ impl Operator {
     ///   * [`LkqlNode::OpGt`]
     ///   * [`LkqlNode::OpGeq`]
     ///   * [`LkqlNode::OpNot`]
-    fn lower_lkql_node(node: &LkqlNode, ctx: &mut LoweringContext) -> Result<Self, Report> {
+    fn lower_lkql_node(node: &LkqlNode) -> Result<Self, Report> {
         let variant = match node {
             LkqlNode::OpPlus(_) => OperatorVariant::Plus,
             LkqlNode::OpMinus(_) => OperatorVariant::Minus,
@@ -413,28 +407,28 @@ impl Operator {
 
 impl Identifier {
     /// Util function to easily create an identifier from an LKQL node.
-    fn from_node(node: &LkqlNode, ctx: &LoweringContext) -> Result<Self, Report> {
+    fn from_node(node: &LkqlNode) -> Result<Self, Report> {
         Ok(Self { origin_location: SourceSection::from_lkql_node(node)?, text: node.text()? })
     }
 }
 
-struct LoweringContext<'a> {
-    /// Associated source repository.
-    source_repo: &'a SourceRepository,
-
+struct LoweringContext {
     /// Map each function declaration node to the "child index" of its produced
     /// [`Function`] object.
     child_index_map: HashMap<LkqlNode, usize>,
+
+    /// The function that is currently lowered.
+    current_function: Option<Weak<RefCell<Function>>>,
 
     /// The list of diagnostics emitted during the lowering.
     diagnostics: Vec<Report>,
 }
 
-impl<'a> LoweringContext<'a> {
-    pub fn new(source_repo: &'a SourceRepository) -> Self {
+impl LoweringContext {
+    pub fn new() -> Self {
         Self {
-            source_repo: source_repo,
             child_index_map: HashMap::new(),
+            current_function: None,
             diagnostics: Vec::new(),
         }
     }

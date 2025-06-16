@@ -14,7 +14,7 @@
 //!     declared.
 
 use std::{
-    cell::{OnceCell, RefCell},
+    cell::RefCell,
     collections::HashSet,
     fmt::{Debug, Display},
     hash::Hash,
@@ -55,11 +55,12 @@ pub struct Function {
     /// Source location that was used to create this function object.
     pub origin_location: SourceSection,
 
-    /// Function object parenting this one.
-    pub parent_function: OnceCell<Weak<RefCell<Function>>>,
+    /// Function object parenting this one. If the function hasn't any parent
+    /// this field isn't initialized.
+    pub parent_function: Option<Weak<RefCell<Function>>>,
 
     /// List of children function.
-    pub children_function: Vec<Rc<RefCell<Function>>>,
+    pub children_functions: Vec<Rc<RefCell<Function>>>,
 
     /// A set of symbols ([`String`]) that are locally reachable in the
     /// function.
@@ -74,6 +75,7 @@ pub struct Function {
 }
 
 impl Function {
+    /// Get a pretty tree representation of this function.
     fn pretty_print(&self, indent_level: usize, fun_name: Option<&str>) -> String {
         // Create the current level indentation string and the initial result
         let indent = INDENT_STR.repeat(indent_level);
@@ -112,10 +114,10 @@ impl Function {
 
         // Then, add the children functions
         res.push_str(&format!("\n{indent}|children:"));
-        if self.children_function.is_empty() {
+        if self.children_functions.is_empty() {
             res.push_str(&format!("\n{indent_further}{EMPTY_STR}"));
         } else {
-            for child in &self.children_function {
+            for child in &self.children_functions {
                 res.push('\n');
                 res.push_str(&child.borrow().pretty_print(indent_level + 1, None));
             }
@@ -242,7 +244,7 @@ impl Node {
                     ("alternative", Self::pretty_print_option(alternative, child_lvl)),
                 ],
             ),
-            NodeVariant::BlockExpr { local_symbols, body, val } => (
+            NodeVariant::BlockExpr { local_symbols: _, body, val } => (
                 "BlockExpr",
                 vec![
                     ("body", Self::pretty_print_vec(body, child_lvl)),
