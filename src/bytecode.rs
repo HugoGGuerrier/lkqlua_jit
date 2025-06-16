@@ -15,7 +15,7 @@
 //!
 //! A LuaJIT bytecode buffer header part is defined like this:
 //!
-//! ```no_run
+//! ```text
 //! MAGIC (3 byte) = [0x1B, 0x4C, 0x4A]
 //! VERSION (1 byte) = 0x01 | 0x02
 //! FLAGS (1 byte) = {
@@ -34,7 +34,7 @@
 //!
 //! Here is the structure of a function prototype in LuaJIT bytecode format:
 //!
-//! ```no_run
+//! ```text
 //! SIZE (1 uleb128)
 //! FLAGS (1 byte) = {
 //!     0b00000001 = HAS_CHILD
@@ -81,7 +81,7 @@
 //!
 //! ### Up-value constants
 //!
-//! ```no_run
+//! ```text
 //! UPVALUE_CONSTS (1 short16[UPVAL_COUNT])
 //! COMPLEX_CONSTS (1 COMPLEX_CONST[COMPLEX_CONST_COUNT])
 //! NUMERIC_CONSTS (1 NUMERIC_CONST[NUM_CONST_COUNT])
@@ -102,7 +102,7 @@
 //!
 //! A `COMPLEX_CONST` in the LuaJIT bytecode is composed of two parts:
 //!
-//! ```no_run
+//! ```text
 //! CONSTANT_KIND (1 uleb128) = {
 //!     0 = CHILD
 //!     1 = TABLE
@@ -121,7 +121,7 @@
 //!
 //! Table constants are structured as specified bellow:
 //!
-//! ```no_run
+//! ```text
 //! ARRAY_ITEM_COUNT (1 uleb128)
 //! HASH_ITEM_COUNT (1 uleb128)
 //! ARRAY (TABLE_CONSTANT[ARRAY_ITEM_COUNT])
@@ -136,7 +136,7 @@
 //! `COMPLEX_CONSTANT`: an ULEB128 as kind with a constant data which size
 //! is depending of the type, as the following description shows:
 //!
-//! ```no_run
+//! ```text
 //! TABLE_CONSTANT_KIND (1 uleb128) = {
 //!     0 = nil
 //!     1 = false
@@ -198,7 +198,7 @@
 //! Decimal numbers are represented using float64 encoded values, their
 //! representation in the bytecode buffer is done as described bellow:
 //!
-//! ```no_run
+//! ```text
 //! LOW_PART = (1 uleb128)  // The 32 least significant bits of the f64 with
 //!                         // the numeric constant flag on the first byte
 //! HIGH_PART = (1 uleb128) // The 32 most significant bits of the f64
