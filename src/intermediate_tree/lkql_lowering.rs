@@ -8,7 +8,7 @@ use std::{
 };
 
 use crate::{
-    Hint, Report,
+    Report,
     intermediate_tree::{
         Function, Identifier, Node, NodeVariant, Operator, OperatorVariant, Program,
     },
@@ -188,18 +188,12 @@ impl Node {
                                         .push(Self::lower_lkql_node(&ea.f_value_expr()?, ctx)?);
                                 } else {
                                     let (last_id, last_node) = named_args.last().unwrap();
-                                    ctx.diagnostics.push(Report::error_diag_and_hints(
-                                        String::from("Positional argument after a named one"),
+                                    ctx.diagnostics.push(Report::pos_arg_after_named(
                                         SourceSection::from_lkql_node(arg)?,
-                                        vec![Hint {
-                                            location: SourceSection::range(
-                                                &last_id.origin_location,
-                                                &last_node.origin_location,
-                                            )?,
-                                            message: String::from(
-                                                "Previous named argument is here",
-                                            ),
-                                        }],
+                                        SourceSection::range(
+                                            &last_id.origin_location,
+                                            &last_node.origin_location,
+                                        )?,
                                     ));
                                 }
                             }

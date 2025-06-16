@@ -116,6 +116,20 @@ impl Report {
         }
     }
 
+    // --- Lowering diagnostics
+
+    /// Report a positional argument after a named one in a function call.
+    pub fn pos_arg_after_named(pos_arg: SourceSection, named_arg: SourceSection) -> Self {
+        Self::error_diag_and_hints(
+            String::from("Positional argument after a named one"),
+            pos_arg,
+            vec![Hint {
+                location: named_arg,
+                message: String::from("Previous named argument is here"),
+            }],
+        )
+    }
+
     // --- Creation methods
 
     /// Create a new report from an LKQL parsing diagnostic.
