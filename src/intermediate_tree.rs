@@ -75,6 +75,8 @@ pub struct Function {
 }
 
 impl Function {
+    // --- Pretty printing
+
     /// Get a pretty tree representation of this function.
     fn pretty_print(&self, indent_level: usize, fun_name: Option<&str>) -> String {
         // Create the current level indentation string and the initial result
@@ -208,6 +210,9 @@ pub enum NodeVariant {
 }
 
 impl Node {
+    // --- Pretty printing
+
+    /// Get a pretty tree representation of this node.
     fn pretty_print(&self, indent_level: usize) -> String {
         let child_lvl = indent_level + 1;
         // Match the node variant to extract information to display
@@ -329,7 +334,7 @@ impl Node {
         res
     }
 
-    /// Util internal function used to easily get the pretty representation of
+    /// Internal util function used to easily get the pretty representation of
     /// an optional node.
     fn pretty_print_option(opt_node: &Option<Box<Node>>, indent_level: usize) -> String {
         opt_node
@@ -337,7 +342,7 @@ impl Node {
             .map_or(String::from("None"), |n| n.pretty_print(indent_level))
     }
 
-    /// Util internal function used to ease the pretty print for a vector of
+    /// Internal util function used to ease the pretty print of a vector of
     /// nodes.
     fn pretty_print_vec(nodes: &Vec<Node>, indent_level: usize) -> String {
         Self::vec_pretty_print_helper(
@@ -350,6 +355,8 @@ impl Node {
         )
     }
 
+    /// Internal util function used to ease the pretty print of a vector of
+    /// labeled nodes.
     fn pretty_print_labeled_vec(nodes: &Vec<(Identifier, Node)>, indent_level: usize) -> String {
         Self::vec_pretty_print_helper(
             &nodes
@@ -360,6 +367,7 @@ impl Node {
         )
     }
 
+    /// Internal util function factorizing the node vector printing process.
     fn vec_pretty_print_helper(
         labeled_nodes: &Vec<(String, &Node)>,
         indent_level: usize,

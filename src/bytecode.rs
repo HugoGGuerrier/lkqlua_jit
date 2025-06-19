@@ -72,7 +72,7 @@
 //! ```
 //!
 //! In the bytecode representation of the previous Lua code, `a` variable is
-//! stored in the local slot `0` and `b` in the `1`.
+//! stored in the local slot `0` and `b` in the slot `1`.
 //!
 //! ## The constant table
 //!

@@ -459,9 +459,9 @@ fn all_local_decls(node: &LkqlNode, output: &mut Vec<LkqlNode>) -> Result<(), Re
     Ok(())
 }
 
-/// Util function to get all lexical symbols which are local to the given node.
+/// Util function to get all lexical symbols that are local to the given node.
 /// This function relies on [`all_local_decls`] to compute its result, meaning
-/// that all concepts described in the latter's doc is true for this function.
+/// that all concepts described in the latter's doc are true for this function.
 fn all_local_symbols(node: &LkqlNode) -> Result<HashSet<String>, Report> {
     let mut local_decls = Vec::new();
     all_local_decls(node, &mut local_decls)?;
