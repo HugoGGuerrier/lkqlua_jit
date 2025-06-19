@@ -7,7 +7,7 @@
 //! This module provide a [`SourceRepository`] type to store and cache analyzed
 //! sources.
 
-use std::{collections::HashMap, fmt::Display, fs, ops::Range, path::Path};
+use std::{collections::HashMap, env::current_dir, fmt::Display, fs, ops::Range, path::Path};
 
 use ariadne::{Cache, Source};
 use liblkqllang::{AnalysisContext, AnalysisUnit, LkqlNode, SourceLocation};
@@ -77,7 +77,11 @@ impl SourceRepository {
         content: &str,
         update: bool,
     ) -> Result<SourceId, Report> {
-        let source_id = String::from(name);
+        // We add the current working directory before the buffer name in order
+        // to be compatible with Langkit unit's `filename`.
+        let mut canonical_path = current_dir()?.canonicalize()?;
+        canonical_path.push(name);
+        let source_id = canonical_path.to_string_lossy().to_string();
         self.add_source(source_id, || Ok::<String, Report>(String::from(content)), update)
     }
 
