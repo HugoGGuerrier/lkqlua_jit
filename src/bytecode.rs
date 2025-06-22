@@ -499,7 +499,7 @@ impl TableConstantElement {
 
 /// This enumeration represents a numeric constant in a function prototype
 /// bytecode.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum NumericConstant {
     Integer(i32),
     Float(f64),
