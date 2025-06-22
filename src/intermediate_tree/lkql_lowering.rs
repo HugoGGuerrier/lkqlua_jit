@@ -3,7 +3,7 @@
 
 use std::{
     cell::RefCell,
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     rc::{Rc, Weak},
 };
 
@@ -53,16 +53,11 @@ impl Function {
         // Create a location object for the current function
         let function_location: SourceSection = SourceSection::from_lkql_node(node)?;
 
-        // From all declarations, extract all local symbols, synthesizing names
-        // for lambdas.
-        let local_symbols = all_local_symbols(node)?;
-
         // Create the result object with empty fields
         let res = Rc::new(RefCell::new(Function {
             origin_location: function_location.clone(),
             parent_function: ctx.current_function.clone(),
             children_functions: Vec::new(),
-            local_symbols,
             params: Vec::new(),
             body: Vec::new(),
         }));
@@ -446,6 +441,7 @@ fn all_local_decls(node: &LkqlNode, output: &mut Vec<LkqlNode>) -> Result<(), Re
                 LkqlNode::TopLevelList(_) => (),
                 LkqlNode::AnonymousFunction(_) => (),
                 LkqlNode::ListComprehension(_) => (),
+                LkqlNode::BlockExpr(_) => (),
                 LkqlNode::ValDecl(_) => {
                     all_local_decls(&child, output)?;
                     output.push(child);
@@ -460,30 +456,34 @@ fn all_local_decls(node: &LkqlNode, output: &mut Vec<LkqlNode>) -> Result<(), Re
 }
 
 /// Util function to get all lexical symbols that are local to the given node.
+/// Local symbols are represented by identifiers with their locations being
+/// the declaration location.
 /// This function relies on [`all_local_decls`] to compute its result, meaning
 /// that all concepts described in the latter's doc are true for this function.
-fn all_local_symbols(node: &LkqlNode) -> Result<HashSet<String>, Report> {
+fn all_local_symbols(node: &LkqlNode) -> Result<Vec<Identifier>, Report> {
     let mut local_decls = Vec::new();
     all_local_decls(node, &mut local_decls)?;
     Ok(local_decls
         .iter()
-        .map(|n| -> Result<String, Report> {
-            match n {
-                LkqlNode::ValDecl(vd) => Ok(vd.f_identifier()?.text()?),
-                LkqlNode::FunDecl(fd) => Ok(fd.f_name()?.text()?),
-                LkqlNode::SelectorDecl(sd) => Ok(sd.f_name()?.text()?),
+        .map(|n| -> Result<Identifier, Report> {
+            let text = match n {
+                LkqlNode::ValDecl(vd) => vd.f_identifier()?.text()?,
+                LkqlNode::FunDecl(fd) => fd.f_name()?.text()?,
+                LkqlNode::SelectorDecl(sd) => sd.f_name()?.text()?,
                 _ => unreachable!(),
-            }
+            };
+            Ok(Identifier { origin_location: SourceSection::from_lkql_node(n)?, text })
         })
-        .collect::<Result<HashSet<String>, Report>>()?)
+        .collect::<Result<Vec<Identifier>, Report>>()?)
 }
 
 /// Util function to find all functions in the local environment of the
 /// provided node.
 /// A node is considered as a "function" if it can be lowered by the
 /// [`Function::lower_lkql_node`] method.
-/// The locality is defined the same way as it is defined in the
-/// [`all_local_decls`] function.
+/// The locality is different from the one defined in the [`all_local_decls`]
+/// function. We explore the whole tree to found all functions, only bounding
+/// to function bodies, thus, only direct children functions are returned.
 fn all_local_functions(node: &LkqlNode, output: &mut Vec<LkqlNode>) -> Result<(), Report> {
     for maybe_child in node {
         if let Some(child) = maybe_child? {

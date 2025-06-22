@@ -15,7 +15,6 @@
 
 use std::{
     cell::RefCell,
-    collections::HashSet,
     fmt::{Debug, Display},
     hash::Hash,
     rc::{Rc, Weak},
@@ -61,10 +60,6 @@ pub struct Function {
 
     /// List of children function.
     pub children_functions: Vec<Rc<RefCell<Function>>>,
-
-    /// A set of symbols ([`String`]) that are locally reachable in the
-    /// function.
-    pub local_symbols: HashSet<String>,
 
     /// Function parameters, each one being optionally associated to a default
     /// value.
@@ -166,7 +161,7 @@ pub enum NodeVariant {
         alternative: Option<Box<Node>>,
     },
     BlockExpr {
-        local_symbols: HashSet<String>,
+        local_symbols: Vec<Identifier>,
         body: Vec<Node>,
         val: Box<Node>,
     },
@@ -249,9 +244,13 @@ impl Node {
                     ("alternative", Self::pretty_print_option(alternative, child_lvl)),
                 ],
             ),
-            NodeVariant::BlockExpr { local_symbols: _, body, val } => (
+            NodeVariant::BlockExpr { local_symbols, body, val } => (
                 "BlockExpr",
                 vec![
+                    (
+                        "locals",
+                        format!("{:?}", local_symbols.iter().map(|i| &i.text).collect::<Vec<_>>()),
+                    ),
                     ("body", Self::pretty_print_vec(body, child_lvl)),
                     ("val", val.pretty_print(child_lvl)),
                 ],
