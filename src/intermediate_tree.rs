@@ -27,101 +27,110 @@ pub mod lkql_lowering;
 const INDENT_STR: &str = "|  ";
 const EMPTY_STR: &str = "[EMPTY]";
 
-/// This structure represents a program in the intermediate format. This should
-/// be the result of lowering a top-level node.
-#[derive(Debug)]
-pub struct Program {
-    pub main_function: Rc<RefCell<Function>>,
+/// This type represents an intermediate execution unit. This is a part of
+/// code that can be executed such as functions or modules. This type is used
+/// to map parsing structures to the [`crate::bytecode::Prototype`] concept.
+pub struct ExecutionUnit {
+    /// Source location that was used to create this function object.
+    origin_location: SourceSection,
+
+    /// Execution unit owning (parenting) this one.
+    parent_unit: Option<Weak<RefCell<ExecutionUnit>>>,
+
+    /// List of children execution units.
+    children_units: Vec<Rc<RefCell<ExecutionUnit>>>,
+
+    /// Variant part, containing specific data.
+    variant: ExecutionUnitVariant,
 }
 
-impl Display for Program {
+pub enum ExecutionUnitVariant {
+    Module {
+        /// The name of the module.
+        name: String,
+
+        /// All symbols declared in this module, those are used to fill the
+        /// result table and compute the frame size.
+        symbols: Vec<Identifier>,
+
+        /// All elements of the module (declarations and expressions).
+        elements: Vec<Node>,
+    },
+    Function {
+        /// Function parameters, each one being optionally associated to a
+        /// default value.
+        params: Vec<(Identifier, Option<Node>)>,
+
+        /// The body of the function, representing its semantics.
+        body: Node,
+    },
+}
+
+impl Display for ExecutionUnit {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            self.main_function
-                .borrow()
-                .pretty_print(0, Some("MainFunction"))
-        )
+        write!(f, "{}", self.pretty_print(0))
     }
 }
 
-/// This structure represents a function in the intermediate format. This
-/// structure contains all its children function in order to map easily to the
-/// LuaJIT bytecode prototypes standard.
-#[derive(Debug)]
-pub struct Function {
-    /// Source location that was used to create this function object.
-    pub origin_location: SourceSection,
-
-    /// Function object parenting this one. If the function hasn't any parent
-    /// this field isn't initialized.
-    pub parent_function: Option<Weak<RefCell<Function>>>,
-
-    /// List of children function.
-    pub children_functions: Vec<Rc<RefCell<Function>>>,
-
-    /// Function parameters, each one being optionally associated to a default
-    /// value.
-    pub params: Vec<(Identifier, Option<Node>)>,
-
-    /// The body of the function, representing its semantics.
-    pub body: Vec<Node>,
-}
-
-impl Function {
+impl ExecutionUnit {
     // --- Pretty printing
 
-    /// Get a pretty tree representation of this function.
-    fn pretty_print(&self, indent_level: usize, fun_name: Option<&str>) -> String {
-        // Create the current level indentation string and the initial result
-        let indent = INDENT_STR.repeat(indent_level);
-        let indent_further = INDENT_STR.repeat(indent_level + 1);
-        let mut res =
-            format!("{indent}<{} {}>", fun_name.unwrap_or("Function"), self.origin_location);
+    fn pretty_print(&self, indent_level: usize) -> String {
+        // Start by getting images of the specific children
+        let child_level = indent_level + 1;
+        let (name, mut pretty_children) = match &self.variant {
+            ExecutionUnitVariant::Module { name, symbols, elements } => (
+                "Module",
+                vec![
+                    ("name", format!("\"{name}\"")),
+                    (
+                        "symbols",
+                        format!("{:?}", symbols.iter().map(|i| &i.text).collect::<Vec<_>>()),
+                    ),
+                    ("elements", Node::pretty_print_vec(&elements, child_level)),
+                ],
+            ),
+            ExecutionUnitVariant::Function { params, body } => (
+                "Function",
+                vec![
+                    (
+                        "params",
+                        pretty_print_vec_helper(
+                            &params
+                                .iter()
+                                .map(|(id, v)| {
+                                    (
+                                        format!("\"{}\"", id.text),
+                                        v.as_ref().map_or(String::from("None"), |n| {
+                                            n.pretty_print(child_level + 1)
+                                        }),
+                                    )
+                                })
+                                .collect(),
+                            child_level,
+                        ),
+                    ),
+                    ("body", body.pretty_print(child_level)),
+                ],
+            ),
+        };
 
-        // Add parameters in the pretty print image
-        res.push_str(&format!("\n{indent}|params:"));
-        if self.params.is_empty() {
-            res.push_str(&format!("\n{indent_further}{EMPTY_STR}"));
-        } else {
-            for (name, default) in &self.params {
-                res.push_str(&format!(
-                    "\n{indent_further}{name}:{}",
-                    default
-                        .as_ref()
-                        .map_or(String::from(" <no_default>"), |d| format!(
-                            "\n{}",
-                            d.pretty_print(indent_level + 2)
-                        ))
-                ));
-            }
-        }
+        // Then append image of generic children
+        pretty_children.append(&mut vec![(
+            "children_units",
+            pretty_print_vec_helper(
+                &self
+                    .children_units
+                    .iter()
+                    .enumerate()
+                    .map(|(i, c)| (i.to_string(), c.borrow().pretty_print(child_level)))
+                    .collect(),
+                indent_level,
+            ),
+        )]);
 
-        // Add the function body to the result
-        res.push_str(&format!("\n{indent}|body:"));
-        if self.body.is_empty() {
-            res.push_str(&format!("\n{indent_further}{EMPTY_STR}"));
-        } else {
-            for node in &self.body {
-                res.push('\n');
-                res.push_str(&node.pretty_print(indent_level + 1));
-            }
-        }
-
-        // Then, add the children functions
-        res.push_str(&format!("\n{indent}|children:"));
-        if self.children_functions.is_empty() {
-            res.push_str(&format!("\n{indent_further}{EMPTY_STR}"));
-        } else {
-            for child in &self.children_functions {
-                res.push('\n');
-                res.push_str(&child.borrow().pretty_print(indent_level + 1, None));
-            }
-        }
-
-        // Finally return the result
-        res
+        // Finally pretty print all elements of the execution unit
+        pretty_print_node_helper(&(name, pretty_children), indent_level)
     }
 }
 
@@ -209,22 +218,22 @@ impl Node {
 
     /// Get a pretty tree representation of this node.
     fn pretty_print(&self, indent_level: usize) -> String {
-        let child_lvl = indent_level + 1;
+        let child_level = indent_level + 1;
         // Match the node variant to extract information to display
-        let (name, children): (&str, Vec<(&str, String)>) = match &self.variant {
+        let pretty_node: (&str, Vec<(&str, String)>) = match &self.variant {
             NodeVariant::FunCall { callee, positional_args, named_args } => (
                 "FunCall",
                 vec![
-                    ("callee", callee.pretty_print(child_lvl)),
-                    ("positional_args", Self::pretty_print_vec(positional_args, child_lvl)),
-                    ("named_args", Self::pretty_print_labeled_vec(named_args, child_lvl)),
+                    ("callee", callee.pretty_print(child_level)),
+                    ("positional_args", Self::pretty_print_vec(positional_args, child_level)),
+                    ("named_args", Self::pretty_print_labeled_vec(named_args, child_level)),
                 ],
             ),
             NodeVariant::DottedExpr { prefix, suffix, is_safe } => (
                 "DottedExpr",
                 vec![
                     ("is_safe", is_safe.to_string()),
-                    ("prefix", prefix.pretty_print(child_lvl)),
+                    ("prefix", prefix.pretty_print(child_level)),
                     ("suffix", format!("\"{}\"", suffix.text)),
                 ],
             ),
@@ -232,16 +241,16 @@ impl Node {
                 "IndexExpr",
                 vec![
                     ("is_safe", is_safe.to_string()),
-                    ("indexed_val", indexed_val.pretty_print(child_lvl)),
-                    ("index", index.pretty_print(child_lvl)),
+                    ("indexed_val", indexed_val.pretty_print(child_level)),
+                    ("index", index.pretty_print(child_level)),
                 ],
             ),
             NodeVariant::IfExpr { condition, consequence, alternative } => (
                 "IfExpr",
                 vec![
-                    ("condition", condition.pretty_print(child_lvl)),
-                    ("consequence", consequence.pretty_print(child_lvl)),
-                    ("alternative", Self::pretty_print_option(alternative, child_lvl)),
+                    ("condition", condition.pretty_print(child_level)),
+                    ("consequence", consequence.pretty_print(child_level)),
+                    ("alternative", Self::pretty_print_option(alternative, child_level)),
                 ],
             ),
             NodeVariant::BlockExpr { local_symbols, body, val } => (
@@ -251,37 +260,37 @@ impl Node {
                         "locals",
                         format!("{:?}", local_symbols.iter().map(|i| &i.text).collect::<Vec<_>>()),
                     ),
-                    ("body", Self::pretty_print_vec(body, child_lvl)),
-                    ("val", val.pretty_print(child_lvl)),
+                    ("body", Self::pretty_print_vec(body, child_level)),
+                    ("val", val.pretty_print(child_level)),
                 ],
             ),
             NodeVariant::LazySeqExpr { source_seq, next_fun } => (
                 "LazySeqExpr",
                 vec![
-                    ("source_seq", source_seq.pretty_print(child_lvl)),
-                    ("next_fun", next_fun.pretty_print(child_lvl)),
+                    ("source_seq", source_seq.pretty_print(child_level)),
+                    ("next_fun", next_fun.pretty_print(child_level)),
                 ],
             ),
             NodeVariant::BinOp { left, operator, right } => (
                 "BinOp",
                 vec![
-                    ("left", left.pretty_print(child_lvl)),
+                    ("left", left.pretty_print(child_level)),
                     ("operator", operator.to_string()),
-                    ("right", right.pretty_print(child_lvl)),
+                    ("right", right.pretty_print(child_level)),
                 ],
             ),
             NodeVariant::UnOp { operator, operand } => (
                 "BinOp",
                 vec![
                     ("operator", operator.to_string()),
-                    ("operand", operand.pretty_print(child_lvl)),
+                    ("operand", operand.pretty_print(child_level)),
                 ],
             ),
             NodeVariant::InitLocal { symbol, val } => (
                 "InitLocal",
                 vec![
                     ("symbol", format!("\"{}\"", symbol.text)),
-                    ("val", val.pretty_print(child_lvl)),
+                    ("val", val.pretty_print(child_level)),
                 ],
             ),
             NodeVariant::ReadLocal(symbol) => {
@@ -298,39 +307,19 @@ impl Node {
                 ("StringLiteral", vec![("value", format!("{:?}", value))])
             }
             NodeVariant::TupleLiteral(items) => {
-                ("TupleLiteral", vec![("items", Self::pretty_print_vec(items, child_lvl))])
+                ("TupleLiteral", vec![("items", Self::pretty_print_vec(items, child_level))])
             }
             NodeVariant::ListLiteral(items) => {
-                ("ListLiteral", vec![("items", Self::pretty_print_vec(items, child_lvl))])
+                ("ListLiteral", vec![("items", Self::pretty_print_vec(items, child_level))])
             }
             NodeVariant::ObjectLiteral(items) => (
                 "ObjectLiteral",
-                vec![("items", Self::pretty_print_labeled_vec(items, child_lvl))],
+                vec![("items", Self::pretty_print_labeled_vec(items, child_level))],
             ),
         };
 
         // Format the gathered information
-        let indent = INDENT_STR.repeat(indent_level);
-        let mut res = format!("{indent}<{name}>");
-        if !children.is_empty() {
-            let children_string = children
-                .iter()
-                .map(|(name, image)| {
-                    let final_image = if image.contains('\n') {
-                        format!("\n{image}")
-                    } else {
-                        format!(" {}", image.trim_start_matches(INDENT_STR))
-                    };
-                    format!("{indent}|{name}:{final_image}")
-                })
-                .collect::<Vec<String>>()
-                .join("\n");
-            res.push_str(":\n");
-            res.push_str(&children_string);
-        }
-
-        // Finally return the result
-        res
+        pretty_print_node_helper(&pretty_node, indent_level)
     }
 
     /// Internal util function used to easily get the pretty representation of
@@ -344,11 +333,11 @@ impl Node {
     /// Internal util function used to ease the pretty print of a vector of
     /// nodes.
     fn pretty_print_vec(nodes: &Vec<Node>, indent_level: usize) -> String {
-        Self::vec_pretty_print_helper(
+        pretty_print_vec_helper(
             &nodes
                 .iter()
                 .enumerate()
-                .map(|(i, n)| (i.to_string(), n))
+                .map(|(i, n)| (i.to_string(), n.pretty_print(indent_level + 1)))
                 .collect(),
             indent_level,
         )
@@ -357,32 +346,15 @@ impl Node {
     /// Internal util function used to ease the pretty print of a vector of
     /// labeled nodes.
     fn pretty_print_labeled_vec(nodes: &Vec<(Identifier, Node)>, indent_level: usize) -> String {
-        Self::vec_pretty_print_helper(
+        pretty_print_vec_helper(
             &nodes
                 .iter()
-                .map(|(id, n)| (format!("\"{}\"", id.text.clone()), n))
+                .map(|(id, n)| {
+                    (format!("\"{}\"", id.text.clone()), n.pretty_print(indent_level + 1))
+                })
                 .collect(),
             indent_level,
         )
-    }
-
-    /// Internal util function factorizing the node vector printing process.
-    fn vec_pretty_print_helper(
-        labeled_nodes: &Vec<(String, &Node)>,
-        indent_level: usize,
-    ) -> String {
-        let indent = INDENT_STR.repeat(indent_level);
-        if labeled_nodes.is_empty() {
-            String::from(EMPTY_STR)
-        } else {
-            labeled_nodes
-                .iter()
-                .map(|(label, node)| {
-                    format!("{indent}|[{label}]:\n{}", node.pretty_print(indent_level + 1))
-                })
-                .collect::<Vec<String>>()
-                .join("\n")
-        }
     }
 }
 
@@ -443,5 +415,53 @@ impl Hash for Identifier {
 impl PartialEq for Identifier {
     fn eq(&self, other: &Self) -> bool {
         self.text == other.text
+    }
+}
+
+/// Helper function to get the image of a node in a pretty-tree representation.
+fn pretty_print_node_helper(
+    pretty_node: &(&str, Vec<(&str, String)>),
+    indent_level: usize,
+) -> String {
+    let indent = INDENT_STR.repeat(indent_level);
+    let (node_name, node_children) = pretty_node;
+    let mut res = format!("{indent}<{node_name}>");
+    if !node_children.is_empty() {
+        let children_string = node_children
+            .iter()
+            .map(|(name, image)| {
+                let final_image = if image.contains('\n') {
+                    format!("\n{image}")
+                } else {
+                    format!(" {}", image.trim_start_matches(INDENT_STR))
+                };
+                format!("{indent}|{name}:{final_image}")
+            })
+            .collect::<Vec<String>>()
+            .join("\n");
+        res.push_str(":\n");
+        res.push_str(&children_string);
+    }
+    res
+}
+
+/// Internal util function factorizing the node vector printing process.
+fn pretty_print_vec_helper(labeled_values: &Vec<(String, String)>, indent_level: usize) -> String {
+    let indent = INDENT_STR.repeat(indent_level);
+    if labeled_values.is_empty() {
+        String::from(EMPTY_STR)
+    } else {
+        labeled_values
+            .iter()
+            .map(|(label, value)| {
+                let final_image = if value.contains('\n') {
+                    format!("\n{value}")
+                } else {
+                    format!(" {}", value.trim_start_matches(INDENT_STR))
+                };
+                format!("{indent}|[{label}]:{final_image}")
+            })
+            .collect::<Vec<String>>()
+            .join("\n")
     }
 }

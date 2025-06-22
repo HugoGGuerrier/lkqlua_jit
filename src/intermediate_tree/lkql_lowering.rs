@@ -4,12 +4,14 @@
 use std::{
     cell::RefCell,
     collections::HashMap,
+    path::PathBuf,
     rc::{Rc, Weak},
 };
 
 use crate::{
     intermediate_tree::{
-        Function, Identifier, Node, NodeVariant, Operator, OperatorVariant, Program,
+        ExecutionUnit, ExecutionUnitVariant, Identifier, Node, NodeVariant, Operator,
+        OperatorVariant,
     },
     report::Report,
     sources::SourceSection,
@@ -17,103 +19,99 @@ use crate::{
 
 use liblkqllang::{BaseFunction, LkqlNode};
 
-impl Program {
-    /// Lower the provided LKQL node as an intermediate [`Program`]. The
-    /// provided node MUST be one of the following variants:
-    ///   * [`LkqlNode::TopLevelList`]
-    ///
-    /// If there is errors in the lowered LKQL source, this function returns a
-    /// [`Result::Err`] which contains all diagnostics.
-    pub fn lower_lkql_node(node: &LkqlNode) -> Result<Self, Report> {
-        match node {
-            LkqlNode::TopLevelList(_) => {
-                let mut ctx = LoweringContext::new();
-                let main_function = Function::lower_lkql_node(node, &mut ctx)?;
-                if ctx.diagnostics.is_empty() {
-                    Ok(Program { main_function })
-                } else {
-                    Err(Report::Composed(ctx.diagnostics))
-                }
-            }
-            _ => unreachable!(),
-        }
-    }
-}
-
-impl Function {
-    /// Lower the provided LKQL node as an intermediate [`Function`]. The
+impl ExecutionUnit {
+    /// Lower the provided LKQL node as an intermediate [`ExecutionUnit`]. The
     /// provided node MUST be one of the following variants:
     ///   * [`LkqlNode::TopLevelList`]
     ///   * [`LkqlNode::FunDecl`]
     ///   * [`LkqlNode::AnonymousFunction`]
-    fn lower_lkql_node(
+    ///
+    /// If there is errors during the lowering of LKQL source, this function
+    /// returns a [`Result::Err`] which contains all diagnostics.
+    pub fn lower_lkql_node(node: &LkqlNode) -> Result<Rc<RefCell<Self>>, Report> {
+        let mut lowering_context = LoweringContext::new();
+        Self::internal_lower_lkql_node(node, &mut lowering_context)
+    }
+
+    /// Internal function to lower an [`LkqlNode`] to an [`ExecutionUnit`].
+    fn internal_lower_lkql_node(
         node: &LkqlNode,
         ctx: &mut LoweringContext,
     ) -> Result<Rc<RefCell<Self>>, Report> {
-        // Create a location object for the current function
-        let function_location: SourceSection = SourceSection::from_lkql_node(node)?;
-
-        // Create the result object with empty fields
-        let res = Rc::new(RefCell::new(Function {
-            origin_location: function_location.clone(),
-            parent_function: ctx.current_function.clone(),
-            children_functions: Vec::new(),
-            params: Vec::new(),
-            body: Vec::new(),
-        }));
-
-        {
-            // Borrow the lowered function as mutable to fill it
-            let mut lowered_function = res.borrow_mut();
-
-            // Lower the children functions
-            let mut child_function_nodes = Vec::new();
-            all_local_functions(node, &mut child_function_nodes)?;
-
-            ctx.current_function = Some(Rc::downgrade(&res));
-            for child_function_node in child_function_nodes {
-                ctx.child_index_map
-                    .insert(child_function_node.clone(), lowered_function.children_functions.len());
-                lowered_function
-                    .children_functions
-                    .push(Self::lower_lkql_node(&child_function_node, ctx)?);
-            }
-            ctx.current_function = lowered_function.parent_function.clone();
-
-            // Lower the function parameters and body
-            match node {
-                LkqlNode::TopLevelList(tl) => {
-                    for stmt in tl {
-                        if let Some(n) = stmt? {
-                            lowered_function.body.push(Node::lower_lkql_node(&n, ctx)?);
-                        }
-                    }
-                }
-                LkqlNode::FunDecl(fd) => match fd.f_fun_expr()? {
-                    LkqlNode::NamedFunction(nf) => {
-                        Self::lower_parameters(
-                            &nf.f_parameters()?,
-                            ctx,
-                            &mut lowered_function.params,
-                        )?;
-                        lowered_function
-                            .body
-                            .push(Node::lower_lkql_node(&nf.f_body_expr()?, ctx)?);
-                    }
-                    _ => unreachable!(),
-                },
-                LkqlNode::AnonymousFunction(af) => {
-                    Self::lower_parameters(&af.f_parameters()?, ctx, &mut lowered_function.params)?;
-                    lowered_function
-                        .body
-                        .push(Node::lower_lkql_node(&af.f_body_expr()?, ctx)?);
-                }
-                _ => unreachable!(),
-            };
+        // Iterate over all children execution units to associate each one to
+        // an index in the (not yet created) children units vector.
+        // This needs to be done before node lowering.
+        let mut local_units = Vec::new();
+        let mut local_unit_counter = 0;
+        all_local_execution_units(node, &mut local_units)?;
+        for unit in &local_units {
+            ctx.child_index_map.insert(unit.clone(), local_unit_counter);
+            local_unit_counter += 1;
         }
 
-        // Finally, return the lowered function
-        Ok(res)
+        // Create the variant part of the result
+        let variant = match &node {
+            LkqlNode::TopLevelList(top_level) => {
+                // Lower the top level elements
+                let mut module_elements = Vec::new();
+                for maybe_top_level_elem in top_level {
+                    if let Some(top_level_elem) = maybe_top_level_elem? {
+                        module_elements.push(Node::lower_lkql_node(&top_level_elem, ctx)?);
+                    }
+                }
+
+                // Get the module name from the node unit's filename
+                let unit_path = PathBuf::from(top_level.unit()?.unwrap().filename()?);
+                let name = unit_path.file_stem().unwrap().to_string_lossy().to_string();
+
+                // Create the resulting module
+                ExecutionUnitVariant::Module {
+                    name,
+                    symbols: all_local_symbols(node)?,
+                    elements: module_elements,
+                }
+            }
+            LkqlNode::FunDecl(_) | LkqlNode::AnonymousFunction(_) => {
+                let (params_node, body_node) = match &node {
+                    LkqlNode::FunDecl(fd) => match fd.f_fun_expr()? {
+                        LkqlNode::NamedFunction(nf) => (nf.f_parameters()?, nf.f_body_expr()?),
+                        _ => unreachable!(),
+                    },
+                    LkqlNode::AnonymousFunction(af) => (af.f_parameters()?, af.f_body_expr()?),
+                    _ => unreachable!(),
+                };
+                let mut params = Vec::new();
+                Self::lower_parameters(&params_node, ctx, &mut params)?;
+                ExecutionUnitVariant::Function {
+                    params,
+                    body: Node::lower_lkql_node(&body_node, ctx)?,
+                }
+            }
+            _ => unreachable!(),
+        };
+
+        // Create the execution unit
+        let result = Rc::new(RefCell::new(ExecutionUnit {
+            origin_location: SourceSection::from_lkql_node(node)?,
+            parent_unit: ctx.current_execution_unit.clone(),
+            children_units: Vec::new(),
+            variant,
+        }));
+
+        // Lower the children units
+        {
+            let mut current_unit = result.borrow_mut();
+            ctx.current_execution_unit = Some(Rc::downgrade(&result));
+            for unit in &local_units {
+                current_unit
+                    .children_units
+                    .push(Self::internal_lower_lkql_node(&unit, ctx)?);
+            }
+            ctx.current_execution_unit = current_unit.parent_unit.clone();
+        }
+
+        // Finally return the result
+        Ok(result)
     }
 
     /// Util function to lower a node list of parameter declarations an place
@@ -406,8 +404,8 @@ struct LoweringContext {
     /// [`Function`] object.
     child_index_map: HashMap<LkqlNode, usize>,
 
-    /// The function that is currently lowered.
-    current_function: Option<Weak<RefCell<Function>>>,
+    /// The execution unit that is currently being lowered.
+    current_execution_unit: Option<Weak<RefCell<ExecutionUnit>>>,
 
     /// The list of diagnostics emitted during the lowering.
     diagnostics: Vec<Report>,
@@ -417,7 +415,7 @@ impl LoweringContext {
     pub fn new() -> Self {
         Self {
             child_index_map: HashMap::new(),
-            current_function: None,
+            current_execution_unit: None,
             diagnostics: Vec::new(),
         }
     }
@@ -477,23 +475,24 @@ fn all_local_symbols(node: &LkqlNode) -> Result<Vec<Identifier>, Report> {
         .collect::<Result<Vec<Identifier>, Report>>()?)
 }
 
-/// Util function to find all functions in the local environment of the
+/// Util function to find all execution units in the local environment of the
 /// provided node.
-/// A node is considered as a "function" if it can be lowered by the
-/// [`Function::lower_lkql_node`] method.
+/// A node is considered as a "execution units" if it can be lowered by the
+/// [`ExecutionUnit::lower_lkql_node`] method.
 /// The locality is different from the one defined in the [`all_local_decls`]
-/// function. We explore the whole tree to found all functions, only bounding
-/// to function bodies, thus, only direct children functions are returned.
-fn all_local_functions(node: &LkqlNode, output: &mut Vec<LkqlNode>) -> Result<(), Report> {
+/// function. We explore the whole tree to found all units, stopping the
+/// recursion on execution units bodies. IOW, we return all direct children
+/// units.
+fn all_local_execution_units(node: &LkqlNode, output: &mut Vec<LkqlNode>) -> Result<(), Report> {
     for maybe_child in node {
         if let Some(child) = maybe_child? {
             match child {
-                LkqlNode::TopLevelList(_) => (),
+                LkqlNode::TopLevelList(_) => output.push(child),
                 LkqlNode::AnonymousFunction(_) => output.push(child),
                 LkqlNode::ListComprehension(_) => output.push(child),
                 LkqlNode::FunDecl(_) => output.push(child),
                 LkqlNode::SelectorDecl(_) => output.push(child),
-                _ => all_local_functions(&child, output)?,
+                _ => all_local_execution_units(&child, output)?,
             }
         }
     }

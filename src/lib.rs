@@ -7,7 +7,7 @@ use std::{collections::HashSet, io::Write, path::Path};
 
 use clap::ValueEnum;
 
-use crate::{intermediate_tree::Program, report::Report, sources::SourceRepository};
+use crate::{intermediate_tree::ExecutionUnit, report::Report, sources::SourceRepository};
 
 pub mod bytecode;
 pub mod intermediate_tree;
@@ -57,12 +57,12 @@ impl<O: Write, E: Write> ExecutionContext<O, E> {
         }
 
         // Lower the parsing tree
-        let lowering_tree = Program::lower_lkql_node(&root)?;
+        let lowering_tree = ExecutionUnit::lower_lkql_node(&root)?;
 
         // If required display the lowered tree
         if self.config.is_verbose(VerboseElement::LoweringTree) {
             writeln!(self.config.std_out, "===== Lowering tree =====\n")?;
-            writeln!(self.config.std_out, "{}\n", lowering_tree)?;
+            writeln!(self.config.std_out, "{}\n", lowering_tree.borrow())?;
         }
 
         // TODO: Compile the lowering tree and execute it
