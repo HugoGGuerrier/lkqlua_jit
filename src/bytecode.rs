@@ -204,7 +204,7 @@
 //! HIGH_PART = (1 uleb128) // The 32 most significant bits of the f64
 //! ```
 
-mod op_codes;
+pub mod op_codes;
 
 use std::io::Write;
 
