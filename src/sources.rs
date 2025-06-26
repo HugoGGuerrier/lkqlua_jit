@@ -12,7 +12,7 @@ use std::{collections::HashMap, env::current_dir, fmt::Display, fs, ops::Range, 
 use ariadne::{Cache, Source};
 use liblkqllang::{AnalysisContext, AnalysisUnit, LkqlNode, SourceLocation};
 
-use crate::report::Report;
+use crate::{report::Report, sources};
 
 /// This structure is the main entry point of abstract source handling, it
 /// holds all created sources, associating each one to its identifier.
@@ -204,8 +204,28 @@ impl SourceSection {
     /// Create an [`ariadne::Span`] value from this source section.
     pub fn to_span(&self, source_repo: &SourceRepository) -> (SourceId, Range<usize>) {
         let source = source_repo.get_source_unsafe(&self.source);
-        let start_offset = source.line(self.start.line - 1).unwrap().offset() + self.start.col - 1;
-        let end_offset = source.line(self.end.line - 1).unwrap().offset() + self.end.col - 1;
+
+        // Here, we ensure the start offset is included in the source
+        let maybe_start_offset = source
+            .line(self.start.line - 1)
+            .map(|l| l.offset() + self.start.col - 1);
+        let start_offset = maybe_start_offset.unwrap_or(if self.start.line > 1 {
+            source.lines().last().unwrap().span().end
+        } else {
+            0
+        });
+
+        // Doing the same thing for the end offset
+        let maybe_end_offset = source
+            .line(self.end.line - 1)
+            .map(|l| l.offset() + self.end.col - 1);
+        let end_offset = maybe_end_offset.unwrap_or(if self.end.line > 1 {
+            source.lines().last().unwrap().span().end
+        } else {
+            0
+        });
+
+        // Return the resulting span
         (self.source.clone(), start_offset..end_offset)
     }
 }
