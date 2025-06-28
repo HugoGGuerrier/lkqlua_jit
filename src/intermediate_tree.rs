@@ -437,7 +437,7 @@ fn pretty_print_node_helper(
                 };
                 format!("{indent}|{name}:{final_image}")
             })
-            .collect::<Vec<String>>()
+            .collect::<Vec<_>>()
             .join("\n");
         res.push_str(":\n");
         res.push_str(&children_string);
@@ -461,7 +461,7 @@ fn pretty_print_vec_helper(labeled_values: &Vec<(String, String)>, indent_level:
                 };
                 format!("{indent}|[{label}]:{final_image}")
             })
-            .collect::<Vec<String>>()
+            .collect::<Vec<_>>()
             .join("\n")
     }
 }

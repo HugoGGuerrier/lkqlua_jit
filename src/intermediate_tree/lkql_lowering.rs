@@ -472,7 +472,7 @@ fn all_local_symbols(node: &LkqlNode) -> Result<Vec<Identifier>, Report> {
             };
             Ok(Identifier { origin_location: SourceSection::from_lkql_node(n)?, text })
         })
-        .collect::<Result<Vec<Identifier>, Report>>()?)
+        .collect::<Result<_, _>>()?)
 }
 
 /// Util function to find all execution units in the local environment of the
