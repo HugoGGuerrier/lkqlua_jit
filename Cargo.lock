@@ -197,6 +197,7 @@ dependencies = [
  "clap",
  "leb128",
  "liblkqllang",
+ "num-bigint",
 ]
 
 [[package]]
