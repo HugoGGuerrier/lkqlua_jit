@@ -204,6 +204,7 @@
 //! HIGH_PART = (1 uleb128) // The 32 most significant bits of the f64
 //! ```
 
+pub mod extended_bytecode;
 pub mod op_codes;
 
 use std::io::Write;
@@ -384,6 +385,14 @@ impl Instruction {
             le_inst.reverse();
         }
         le_inst.iter().for_each(|b| output_buffer.push(*b));
+    }
+
+    pub fn jump_forward(offset: u16) -> u16 {
+        JUMP_BIASING + offset - 1
+    }
+
+    pub fn jump_backward(offset: u16) -> u16 {
+        JUMP_BIASING - offset - 1
     }
 }
 
