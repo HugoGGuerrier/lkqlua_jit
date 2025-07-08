@@ -207,9 +207,11 @@
 pub mod extended_bytecode;
 pub mod op_codes;
 
-use std::io::Write;
+use std::{fmt::Display, io::Write};
 
 use leb128;
+
+use crate::bytecode::op_codes::JMP;
 
 // ----- Header related constants -----
 
@@ -260,6 +262,18 @@ pub struct BytecodeBuffer {
     pub prototypes: Vec<Prototype>,
 }
 
+impl Display for BytecodeBuffer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (i, proto) in self.prototypes.iter().enumerate() {
+            write!(f, "##### Prototype #{i} #####\n\n{}", proto)?;
+            if i < self.prototypes.len() - 1 {
+                write!(f, "\n\n")?;
+            }
+        }
+        Ok(())
+    }
+}
+
 impl BytecodeBuffer {
     /// Encode the bytecode described by [`self`] in the provided output
     /// buffer.
@@ -306,6 +320,69 @@ pub struct Prototype {
     pub up_values: Vec<UpValueConstant>,
     pub complex_consts: Vec<ComplexConstant>,
     pub numeric_consts: Vec<NumericConstant>,
+}
+
+impl Display for Prototype {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        fn vec_image<T>(vec: &Vec<T>) -> String
+        where
+            T: Display,
+        {
+            if vec.is_empty() {
+                String::from("[]")
+            } else {
+                let indent_str = "  ";
+                format!(
+                    "[\n{}\n]",
+                    vec.iter()
+                        .enumerate()
+                        .map(|(i, v)| format!("{indent_str}{i} - {}", v))
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                )
+            }
+        }
+        let instruction_padding = self.instructions.len().to_string().len();
+        let format_inst = |(i, inst): (usize, &Instruction)| -> String {
+            let additional_info = match inst {
+                Instruction::AD { d, op: JMP, .. } => format!(
+                    "  => {:0instruction_padding$}",
+                    (*d as isize - JUMP_BIASING as isize + 1) + i as isize
+                ),
+                _ => String::new(),
+            };
+            format!("{:0instruction_padding$}  {inst}{additional_info}", i)
+        };
+        write!(
+            f,
+            "--- Header\n\
+            has_child:   {}\n\
+            is_variadic: {}\n\
+            has_ffi:     {}\n\
+            arg_count:   {}\n\
+            frame_size:  {}\n\n\
+            --- Instructions\n\
+            {}\n\n\
+            --- Constants\n\
+            up_values: {}\n\
+            complexes: {}\n\
+            numerics: {}",
+            self.has_child,
+            self.is_variadic,
+            self.has_ffi,
+            self.arg_count,
+            self.frame_size,
+            self.instructions
+                .iter()
+                .enumerate()
+                .map(format_inst)
+                .collect::<Vec<_>>()
+                .join("\n"),
+            vec_image(&self.up_values),
+            vec_image(&self.complex_consts),
+            vec_image(&self.numeric_consts),
+        )
+    }
 }
 
 impl Prototype {
@@ -369,6 +446,28 @@ pub enum Instruction {
     AD { a: u8, d: u16, op: u8 },
 }
 
+impl Display for Instruction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Instruction::ABC { a, b, c, op } => write!(
+                f,
+                "{: <6} | {: <3} | {: <3} | {: <3}",
+                op_codes::NAME_ARRAY[*op as usize],
+                a,
+                b,
+                c,
+            ),
+            Instruction::AD { a, d, op } => {
+                if *op == JMP {
+                    write!(f, "JMP    | {: <3} | {:#06x}", a, d)
+                } else {
+                    write!(f, "{: <6} | {: <3} | {: <6}", op_codes::NAME_ARRAY[*op as usize], a, d,)
+                }
+            }
+        }
+    }
+}
+
 impl Instruction {
     /// Encode the instruction as a byte vector, following the current system
     /// byte order.
@@ -409,6 +508,12 @@ pub enum UpValueConstant {
     ParentUpValue(u16),
 }
 
+impl Display for UpValueConstant {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
 impl UpValueConstant {
     /// Encode the up-value constant to the LuaJIT bytecode format and add the
     /// result to the provided output buffer.
@@ -436,6 +541,12 @@ pub enum ComplexConstant {
     Integer(i64),
     UnsignedInteger(u64),
     String(String),
+}
+
+impl Display for ComplexConstant {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
 
 impl ComplexConstant {
@@ -483,6 +594,12 @@ pub enum TableConstantElement {
     String(String),
 }
 
+impl Display for TableConstantElement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
 impl TableConstantElement {
     /// Encode the table constant in the LuaJIT bytecode format and add the
     /// result to the provided output buffer.
@@ -512,6 +629,12 @@ impl TableConstantElement {
 pub enum NumericConstant {
     Integer(i32),
     Float(f64),
+}
+
+impl Display for NumericConstant {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
 
 impl NumericConstant {
