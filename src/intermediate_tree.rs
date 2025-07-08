@@ -182,13 +182,34 @@ pub enum NodeVariant {
         next_fun: Box<Node>,
     },
 
-    // --- Operations
-    BinOp {
+    // --- Binary operations
+    ArithBinOp {
         left: Box<Node>,
         operator: Operator,
         right: Box<Node>,
     },
-    UnOp {
+    LogicBinOp {
+        left: Box<Node>,
+        operator: Operator,
+        right: Box<Node>,
+    },
+    CompBinOp {
+        left: Box<Node>,
+        operator: Operator,
+        right: Box<Node>,
+    },
+    MiscBinOp {
+        left: Box<Node>,
+        operator: Operator,
+        right: Box<Node>,
+    },
+
+    // --- Unary operations
+    ArithUnOp {
+        operator: Operator,
+        operand: Box<Node>,
+    },
+    LogicUnOp {
         operator: Operator,
         operand: Box<Node>,
     },
@@ -272,16 +293,30 @@ impl Node {
                     ("next_fun", next_fun.pretty_print(child_level)),
                 ],
             ),
-            NodeVariant::BinOp { left, operator, right } => (
-                "BinOp",
+            NodeVariant::ArithBinOp { left, operator, right }
+            | NodeVariant::LogicBinOp { left, operator, right }
+            | NodeVariant::CompBinOp { left, operator, right }
+            | NodeVariant::MiscBinOp { left, operator, right } => (
+                match &self.variant {
+                    NodeVariant::ArithBinOp { .. } => "ArithBinOp",
+                    NodeVariant::LogicBinOp { .. } => "LogicBinOp",
+                    NodeVariant::CompBinOp { .. } => "CompBinOp",
+                    NodeVariant::MiscBinOp { .. } => "MiscBinOp",
+                    _ => unreachable!(),
+                },
                 vec![
                     ("left", left.pretty_print(child_level)),
                     ("operator", operator.to_string()),
                     ("right", right.pretty_print(child_level)),
                 ],
             ),
-            NodeVariant::UnOp { operator, operand } => (
-                "BinOp",
+            NodeVariant::ArithUnOp { operator, operand }
+            | NodeVariant::LogicUnOp { operator, operand } => (
+                match &self.variant {
+                    NodeVariant::ArithUnOp { .. } => "ArithUnOp",
+                    NodeVariant::LogicUnOp { .. } => "LogicUnOp",
+                    _ => unreachable!(),
+                },
                 vec![
                     ("operator", operator.to_string()),
                     ("operand", operand.pretty_print(child_level)),

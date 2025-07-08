@@ -266,24 +266,63 @@ impl Node {
 
             // --- Binary operation
             LkqlNode::BinOp(_) | LkqlNode::RelBinOp(_) | LkqlNode::ArithBinOp(_) => {
-                let (left, op, right) = match node {
+                let (left_node, op_node, right_node) = match node {
                     LkqlNode::BinOp(bo) => (bo.f_left(), bo.f_op(), bo.f_right()),
                     LkqlNode::RelBinOp(bo) => (bo.f_left(), bo.f_op(), bo.f_right()),
                     LkqlNode::ArithBinOp(bo) => (bo.f_left(), bo.f_op(), bo.f_right()),
                     _ => unreachable!(),
                 };
-                NodeVariant::BinOp {
-                    left: Box::new(Self::lower_lkql_node(&left?, ctx)?),
-                    operator: Operator::lower_lkql_node(&op?)?,
-                    right: Box::new(Self::lower_lkql_node(&right?, ctx)?),
+                let left = Box::new(Self::lower_lkql_node(&left_node?, ctx)?);
+                let right = Box::new(Self::lower_lkql_node(&right_node?, ctx)?);
+                let operator = Operator::lower_lkql_node(&op_node?)?;
+                match &operator.variant {
+                    OperatorVariant::Plus
+                    | OperatorVariant::Minus
+                    | OperatorVariant::Divide
+                    | OperatorVariant::Multiply => {
+                        NodeVariant::ArithBinOp { left, operator, right }
+                    }
+                    OperatorVariant::Or | OperatorVariant::And => {
+                        NodeVariant::LogicBinOp { left, operator, right }
+                    }
+                    OperatorVariant::Equals
+                    | OperatorVariant::NotEquals
+                    | OperatorVariant::Greater
+                    | OperatorVariant::GreaterOrEquals
+                    | OperatorVariant::Less
+                    | OperatorVariant::LessOrEquals => {
+                        NodeVariant::CompBinOp { left, operator, right }
+                    }
+                    OperatorVariant::Concat | OperatorVariant::In => {
+                        NodeVariant::MiscBinOp { left, operator, right }
+                    }
+                    OperatorVariant::Not => unreachable!(),
                 }
             }
 
             // --- Unary operation
-            LkqlNode::UnOp(uo) => NodeVariant::UnOp {
-                operator: Operator::lower_lkql_node(&uo.f_op()?)?,
-                operand: Box::new(Self::lower_lkql_node(&uo.f_operand()?, ctx)?),
-            },
+            LkqlNode::UnOp(uo) => {
+                let operand = Box::new(Self::lower_lkql_node(&uo.f_operand()?, ctx)?);
+                let operator = Operator::lower_lkql_node(&uo.f_op()?)?;
+                match &operator.variant {
+                    OperatorVariant::Plus | OperatorVariant::Minus => {
+                        NodeVariant::ArithUnOp { operator, operand }
+                    }
+                    OperatorVariant::Not => NodeVariant::LogicUnOp { operator, operand },
+                    OperatorVariant::Multiply
+                    | OperatorVariant::Divide
+                    | OperatorVariant::Concat
+                    | OperatorVariant::Or
+                    | OperatorVariant::And
+                    | OperatorVariant::In
+                    | OperatorVariant::Equals
+                    | OperatorVariant::NotEquals
+                    | OperatorVariant::Greater
+                    | OperatorVariant::GreaterOrEquals
+                    | OperatorVariant::Less
+                    | OperatorVariant::LessOrEquals => unreachable!(),
+                }
+            }
 
             // --- Literals
             LkqlNode::UnitLiteral(_) => NodeVariant::UnitLiteral,

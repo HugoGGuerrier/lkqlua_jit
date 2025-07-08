@@ -47,46 +47,36 @@ impl Node {
                 }
             }
 
-            // --- Operations
-            NodeVariant::BinOp { left, operator, right } => {
+            // --- Binary operations
+            NodeVariant::ArithBinOp { left, operator, right } => {
+                match (left.eval_as_constant(), right.eval_as_constant()) {
+                    (Some(ConstantValue::Int(ref li)), Some(ConstantValue::Int(ref ri))) => {
+                        Some(ConstantValue::Int(match operator.variant {
+                            OperatorVariant::Plus => li + ri,
+                            OperatorVariant::Minus => li - ri,
+                            OperatorVariant::Multiply => li * ri,
+                            OperatorVariant::Divide => li / ri,
+                            _ => unreachable!(),
+                        }))
+                    }
+                    _ => None,
+                }
+            }
+            NodeVariant::LogicBinOp { left, operator, right } => {
+                match (left.eval_as_constant(), right.eval_as_constant()) {
+                    (Some(ConstantValue::Bool(lb)), Some(ConstantValue::Bool(rb))) => {
+                        Some(ConstantValue::Bool(match operator.variant {
+                            OperatorVariant::Or => lb || rb,
+                            OperatorVariant::And => lb && rb,
+                            _ => unreachable!(),
+                        }))
+                    }
+                    _ => None,
+                }
+            }
+            NodeVariant::CompBinOp { left, operator, right } => {
                 match (left.eval_as_constant(), right.eval_as_constant()) {
                     (Some(constant_left), Some(constant_right)) => match operator.variant {
-                        OperatorVariant::Plus => {
-                            apply_to_ints(constant_left, constant_right, BigInt::add)
-                        }
-                        OperatorVariant::Minus => {
-                            apply_to_ints(constant_left, constant_right, BigInt::sub)
-                        }
-                        OperatorVariant::Multiply => {
-                            apply_to_ints(constant_left, constant_right, BigInt::mul)
-                        }
-                        OperatorVariant::Divide => {
-                            apply_to_ints(constant_left, constant_right, BigInt::div)
-                        }
-                        OperatorVariant::Concat => match (constant_left, constant_right) {
-                            (ConstantValue::String(ls), ConstantValue::String(rs)) => {
-                                Some(ConstantValue::String(format!("{ls}{rs}")))
-                            }
-                            (ConstantValue::List(ll), ConstantValue::List(rl)) => {
-                                let mut constant_result = Vec::with_capacity(ll.len() + rl.len());
-                                ll.iter().for_each(|e| constant_result.push(e.clone()));
-                                rl.iter().for_each(|e| constant_result.push(e.clone()));
-                                Some(ConstantValue::List(constant_result))
-                            }
-                            _ => None,
-                        },
-                        OperatorVariant::Or => {
-                            apply_to_bools(constant_left, constant_right, |l, r| l || r)
-                        }
-                        OperatorVariant::And => {
-                            apply_to_bools(constant_left, constant_right, |l, r| l && r)
-                        }
-                        OperatorVariant::In => match constant_right {
-                            ConstantValue::List(values) => Some(ConstantValue::Bool(
-                                values.into_iter().find(|e| e == &constant_left).is_some(),
-                            )),
-                            _ => None,
-                        },
                         OperatorVariant::Equals => {
                             Some(ConstantValue::Bool(constant_left == constant_right))
                         }
@@ -117,26 +107,59 @@ impl Node {
                             BigInt::le,
                             String::le,
                         ),
-                        _ => None,
+                        _ => unreachable!(),
                     },
                     _ => None,
                 }
             }
-            NodeVariant::UnOp { operator, operand } => {
-                operand
-                    .eval_as_constant()
-                    .and_then(|constant_operand| match constant_operand {
-                        ConstantValue::Bool(b) => match operator.variant {
-                            OperatorVariant::Not => Some(ConstantValue::Bool(!b)),
+            NodeVariant::MiscBinOp { left, operator, right } => {
+                match (left.eval_as_constant(), right.eval_as_constant()) {
+                    (Some(constant_left), Some(constant_right)) => match operator.variant {
+                        OperatorVariant::Concat => match (constant_left, constant_right) {
+                            (ConstantValue::String(ls), ConstantValue::String(rs)) => {
+                                Some(ConstantValue::String(format!("{ls}{rs}")))
+                            }
+                            (ConstantValue::List(ll), ConstantValue::List(rl)) => {
+                                let mut constant_result = Vec::with_capacity(ll.len() + rl.len());
+                                ll.iter().for_each(|e| constant_result.push(e.clone()));
+                                rl.iter().for_each(|e| constant_result.push(e.clone()));
+                                Some(ConstantValue::List(constant_result))
+                            }
                             _ => None,
                         },
-                        ConstantValue::Int(ref i) => match operator.variant {
-                            OperatorVariant::Plus => Some(constant_operand),
-                            OperatorVariant::Minus => Some(ConstantValue::Int(-i)),
+                        OperatorVariant::In => match constant_right {
+                            ConstantValue::List(values) => Some(ConstantValue::Bool(
+                                values.into_iter().find(|e| e == &constant_left).is_some(),
+                            )),
                             _ => None,
                         },
-                        _ => None,
+                        _ => unreachable!(),
+                    },
+                    _ => None,
+                }
+            }
+
+            // --- Unary operations
+            NodeVariant::ArithUnOp { operator, operand } => {
+                if let Some(ConstantValue::Int(ref i)) = operand.eval_as_constant() {
+                    Some(match &operator.variant {
+                        OperatorVariant::Plus => ConstantValue::Int(i.clone()),
+                        OperatorVariant::Minus => ConstantValue::Int(-i),
+                        _ => unreachable!(),
                     })
+                } else {
+                    None
+                }
+            }
+            NodeVariant::LogicUnOp { operator, operand } => {
+                if let Some(ConstantValue::Bool(ref b)) = operand.eval_as_constant() {
+                    Some(match &operator.variant {
+                        OperatorVariant::Not => ConstantValue::Bool(!b),
+                        _ => unreachable!(),
+                    })
+                } else {
+                    None
+                }
             }
 
             // --- Composite expressions
@@ -417,22 +440,22 @@ mod tests {
     #[test]
     fn test_arithmetic_binary_operations() {
         // Test additions
-        let mut intermediate_tree = new_node(NodeVariant::BinOp {
+        let mut intermediate_tree = new_node(NodeVariant::ArithBinOp {
             left: Box::new(int_node("40")),
             operator: new_op(OperatorVariant::Plus),
             right: Box::new(int_node("2")),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(int_cst("42")));
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::ArithBinOp {
             left: Box::new(int_node("42")),
             operator: new_op(OperatorVariant::Plus),
             right: Box::new(int_node("-2")),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(int_cst("40")));
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::ArithBinOp {
             left: Box::new(int_node("10")),
             operator: new_op(OperatorVariant::Plus),
-            right: Box::new(new_node(NodeVariant::BinOp {
+            right: Box::new(new_node(NodeVariant::ArithBinOp {
                 left: Box::new(int_node("6")),
                 operator: new_op(OperatorVariant::Plus),
                 right: Box::new(int_node("10")),
@@ -441,22 +464,22 @@ mod tests {
         assert_eq!(intermediate_tree.eval_as_constant(), Some(int_cst("26")));
 
         // Test subtractions
-        let mut intermediate_tree = new_node(NodeVariant::BinOp {
+        let mut intermediate_tree = new_node(NodeVariant::ArithBinOp {
             left: Box::new(int_node("40")),
             operator: new_op(OperatorVariant::Minus),
             right: Box::new(int_node("2")),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(int_cst("38")));
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::ArithBinOp {
             left: Box::new(int_node("42")),
             operator: new_op(OperatorVariant::Minus),
             right: Box::new(int_node("-2")),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(int_cst("44")));
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::ArithBinOp {
             left: Box::new(int_node("10")),
             operator: new_op(OperatorVariant::Minus),
-            right: Box::new(new_node(NodeVariant::BinOp {
+            right: Box::new(new_node(NodeVariant::ArithBinOp {
                 left: Box::new(int_node("6")),
                 operator: new_op(OperatorVariant::Minus),
                 right: Box::new(int_node("10")),
@@ -465,22 +488,22 @@ mod tests {
         assert_eq!(intermediate_tree.eval_as_constant(), Some(int_cst("14")));
 
         // Test multiplications
-        let mut intermediate_tree = new_node(NodeVariant::BinOp {
+        let mut intermediate_tree = new_node(NodeVariant::ArithBinOp {
             left: Box::new(int_node("40")),
             operator: new_op(OperatorVariant::Multiply),
             right: Box::new(int_node("2")),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(int_cst("80")));
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::ArithBinOp {
             left: Box::new(int_node("42")),
             operator: new_op(OperatorVariant::Multiply),
             right: Box::new(int_node("-2")),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(int_cst("-84")));
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::ArithBinOp {
             left: Box::new(int_node("10")),
             operator: new_op(OperatorVariant::Multiply),
-            right: Box::new(new_node(NodeVariant::BinOp {
+            right: Box::new(new_node(NodeVariant::ArithBinOp {
                 left: Box::new(int_node("6")),
                 operator: new_op(OperatorVariant::Multiply),
                 right: Box::new(int_node("10")),
@@ -489,22 +512,22 @@ mod tests {
         assert_eq!(intermediate_tree.eval_as_constant(), Some(int_cst("600")));
 
         // Test divisions
-        let mut intermediate_tree = new_node(NodeVariant::BinOp {
+        let mut intermediate_tree = new_node(NodeVariant::ArithBinOp {
             left: Box::new(int_node("40")),
             operator: new_op(OperatorVariant::Divide),
             right: Box::new(int_node("2")),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(int_cst("20")));
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::ArithBinOp {
             left: Box::new(int_node("42")),
             operator: new_op(OperatorVariant::Divide),
             right: Box::new(int_node("-2")),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(int_cst("-21")));
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::ArithBinOp {
             left: Box::new(int_node("10")),
             operator: new_op(OperatorVariant::Divide),
-            right: Box::new(new_node(NodeVariant::BinOp {
+            right: Box::new(new_node(NodeVariant::ArithBinOp {
                 left: Box::new(int_node("16")),
                 operator: new_op(OperatorVariant::Divide),
                 right: Box::new(int_node("4")),
@@ -513,7 +536,7 @@ mod tests {
         assert_eq!(intermediate_tree.eval_as_constant(), Some(int_cst("2")));
 
         // Test an invalid evaluation
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::ArithBinOp {
             left: Box::new(int_node("40")),
             operator: new_op(OperatorVariant::Plus),
             right: Box::new(str_node("not an int")),
@@ -524,22 +547,22 @@ mod tests {
     #[test]
     fn test_concatenation_operations() {
         // Test string concatenation
-        let mut intermediate_tree = new_node(NodeVariant::BinOp {
+        let mut intermediate_tree = new_node(NodeVariant::MiscBinOp {
             left: Box::new(str_node("hello")),
             operator: new_op(OperatorVariant::Concat),
             right: Box::new(str_node(" world")),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(str_cst("hello world")));
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::MiscBinOp {
             left: Box::new(str_node("hello")),
             operator: new_op(OperatorVariant::Concat),
             right: Box::new(str_node("")),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(str_cst("hello")));
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::MiscBinOp {
             left: Box::new(str_node("hello")),
             operator: new_op(OperatorVariant::Concat),
-            right: Box::new(new_node(NodeVariant::BinOp {
+            right: Box::new(new_node(NodeVariant::MiscBinOp {
                 left: Box::new(str_node(" ")),
                 operator: new_op(OperatorVariant::Concat),
                 right: Box::new(str_node("world")),
@@ -548,7 +571,7 @@ mod tests {
         assert_eq!(intermediate_tree.eval_as_constant(), Some(str_cst("hello world")));
 
         // Test list concatenation
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::MiscBinOp {
             left: Box::new(new_node(NodeVariant::ListLiteral(vec![int_node("1"), int_node("2")]))),
             operator: new_op(OperatorVariant::Concat),
             right: Box::new(new_node(NodeVariant::ListLiteral(vec![int_node("3"), int_node("4")]))),
@@ -562,16 +585,16 @@ mod tests {
                 int_cst("4"),
             ]))
         );
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::MiscBinOp {
             left: Box::new(str_node("hello")),
             operator: new_op(OperatorVariant::Concat),
             right: Box::new(str_node("")),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(str_cst("hello")));
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::MiscBinOp {
             left: Box::new(str_node("hello")),
             operator: new_op(OperatorVariant::Concat),
-            right: Box::new(new_node(NodeVariant::BinOp {
+            right: Box::new(new_node(NodeVariant::MiscBinOp {
                 left: Box::new(str_node(" ")),
                 operator: new_op(OperatorVariant::Concat),
                 right: Box::new(str_node("world")),
@@ -580,7 +603,7 @@ mod tests {
         assert_eq!(intermediate_tree.eval_as_constant(), Some(str_cst("hello world")));
 
         // Test invalid concatenation
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::MiscBinOp {
             left: Box::new(str_node("hello")),
             operator: new_op(OperatorVariant::Concat),
             right: Box::new(int_node("40")),
@@ -591,13 +614,13 @@ mod tests {
     #[test]
     fn test_logical_binary_operations() {
         // Test the logical and
-        let mut intermediate_tree = new_node(NodeVariant::BinOp {
+        let mut intermediate_tree = new_node(NodeVariant::LogicBinOp {
             left: Box::new(bool_node(false)),
             operator: new_op(OperatorVariant::And),
             right: Box::new(bool_node(true)),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(bool_cst(false)));
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::LogicBinOp {
             left: Box::new(bool_node(true)),
             operator: new_op(OperatorVariant::And),
             right: Box::new(bool_node(true)),
@@ -605,13 +628,13 @@ mod tests {
         assert_eq!(intermediate_tree.eval_as_constant(), Some(bool_cst(true)));
 
         // Test the logical or
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::LogicBinOp {
             left: Box::new(bool_node(false)),
             operator: new_op(OperatorVariant::Or),
             right: Box::new(bool_node(true)),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(bool_cst(true)));
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::LogicBinOp {
             left: Box::new(bool_node(false)),
             operator: new_op(OperatorVariant::Or),
             right: Box::new(bool_node(false)),
@@ -619,7 +642,7 @@ mod tests {
         assert_eq!(intermediate_tree.eval_as_constant(), Some(bool_cst(false)));
 
         // Test invalid logical operation
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::LogicBinOp {
             left: Box::new(int_node("1")),
             operator: new_op(OperatorVariant::Or),
             right: Box::new(bool_node(false)),
@@ -630,7 +653,7 @@ mod tests {
     #[test]
     fn test_in_operation() {
         // Test valid "in" operations
-        let mut intermediate_tree = new_node(NodeVariant::BinOp {
+        let mut intermediate_tree = new_node(NodeVariant::MiscBinOp {
             left: Box::new(int_node("2")),
             operator: new_op(OperatorVariant::In),
             right: Box::new(new_node(NodeVariant::ListLiteral(vec![
@@ -640,7 +663,7 @@ mod tests {
             ]))),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(bool_cst(true)));
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::MiscBinOp {
             left: Box::new(int_node("4")),
             operator: new_op(OperatorVariant::In),
             right: Box::new(new_node(NodeVariant::ListLiteral(vec![
@@ -652,7 +675,7 @@ mod tests {
         assert_eq!(intermediate_tree.eval_as_constant(), Some(bool_cst(false)));
 
         // Test an invalid "in" operation
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::MiscBinOp {
             left: Box::new(int_node("2")),
             operator: new_op(OperatorVariant::In),
             right: Box::new(str_node("123")),
@@ -663,31 +686,31 @@ mod tests {
     #[test]
     fn test_equality_operations() {
         // Test equality operations
-        let mut intermediate_tree = new_node(NodeVariant::BinOp {
+        let mut intermediate_tree = new_node(NodeVariant::CompBinOp {
             left: Box::new(int_node("2")),
             operator: new_op(OperatorVariant::Equals),
             right: Box::new(int_node("2")),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(bool_cst(true)));
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::CompBinOp {
             left: Box::new(str_node("hello")),
             operator: new_op(OperatorVariant::Equals),
             right: Box::new(str_node("hello")),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(bool_cst(true)));
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::CompBinOp {
             left: Box::new(str_node("hello")),
             operator: new_op(OperatorVariant::Equals),
             right: Box::new(str_node("world")),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(bool_cst(false)));
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::CompBinOp {
             left: Box::new(int_node("1")),
             operator: new_op(OperatorVariant::Equals),
             right: Box::new(str_node("1")),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(bool_cst(false)));
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::CompBinOp {
             left: Box::new(new_node(NodeVariant::ListLiteral(vec![
                 int_node("1"),
                 int_node("2"),
@@ -701,7 +724,7 @@ mod tests {
             ]))),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(bool_cst(true)));
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::CompBinOp {
             left: Box::new(new_node(NodeVariant::ListLiteral(vec![
                 int_node("1"),
                 int_node("2"),
@@ -718,31 +741,31 @@ mod tests {
         assert_eq!(intermediate_tree.eval_as_constant(), Some(bool_cst(false)));
 
         // Test inequality operations
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::CompBinOp {
             left: Box::new(int_node("2")),
             operator: new_op(OperatorVariant::NotEquals),
             right: Box::new(int_node("2")),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(bool_cst(false)));
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::CompBinOp {
             left: Box::new(str_node("hello")),
             operator: new_op(OperatorVariant::NotEquals),
             right: Box::new(str_node("hello")),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(bool_cst(false)));
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::CompBinOp {
             left: Box::new(str_node("hello")),
             operator: new_op(OperatorVariant::NotEquals),
             right: Box::new(str_node("world")),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(bool_cst(true)));
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::CompBinOp {
             left: Box::new(int_node("1")),
             operator: new_op(OperatorVariant::NotEquals),
             right: Box::new(str_node("1")),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(bool_cst(true)));
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::CompBinOp {
             left: Box::new(new_node(NodeVariant::ListLiteral(vec![
                 int_node("1"),
                 int_node("2"),
@@ -756,7 +779,7 @@ mod tests {
             ]))),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(bool_cst(false)));
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::CompBinOp {
             left: Box::new(new_node(NodeVariant::ListLiteral(vec![
                 int_node("1"),
                 int_node("2"),
@@ -776,38 +799,38 @@ mod tests {
     #[test]
     fn test_comparison_operations() {
         // Test "greater than" operations
-        let mut intermediate_tree = new_node(NodeVariant::BinOp {
+        let mut intermediate_tree = new_node(NodeVariant::CompBinOp {
             left: Box::new(int_node("2")),
             operator: new_op(OperatorVariant::Greater),
             right: Box::new(int_node("1")),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(bool_cst(true)));
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::CompBinOp {
             left: Box::new(int_node("2")),
             operator: new_op(OperatorVariant::Greater),
             right: Box::new(int_node("2")),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(bool_cst(false)));
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::CompBinOp {
             left: Box::new(int_node("2")),
             operator: new_op(OperatorVariant::Greater),
             right: Box::new(int_node("3")),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(bool_cst(false)));
 
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::CompBinOp {
             left: Box::new(str_node("b")),
             operator: new_op(OperatorVariant::Greater),
             right: Box::new(str_node("a")),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(bool_cst(true)));
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::CompBinOp {
             left: Box::new(str_node("b")),
             operator: new_op(OperatorVariant::Greater),
             right: Box::new(str_node("b")),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(bool_cst(false)));
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::CompBinOp {
             left: Box::new(str_node("b")),
             operator: new_op(OperatorVariant::Greater),
             right: Box::new(str_node("c")),
@@ -815,38 +838,38 @@ mod tests {
         assert_eq!(intermediate_tree.eval_as_constant(), Some(bool_cst(false)));
 
         // Test "greater or equals" operations
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::CompBinOp {
             left: Box::new(int_node("2")),
             operator: new_op(OperatorVariant::GreaterOrEquals),
             right: Box::new(int_node("1")),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(bool_cst(true)));
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::CompBinOp {
             left: Box::new(int_node("2")),
             operator: new_op(OperatorVariant::GreaterOrEquals),
             right: Box::new(int_node("2")),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(bool_cst(true)));
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::CompBinOp {
             left: Box::new(int_node("2")),
             operator: new_op(OperatorVariant::GreaterOrEquals),
             right: Box::new(int_node("3")),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(bool_cst(false)));
 
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::CompBinOp {
             left: Box::new(str_node("b")),
             operator: new_op(OperatorVariant::GreaterOrEquals),
             right: Box::new(str_node("a")),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(bool_cst(true)));
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::CompBinOp {
             left: Box::new(str_node("b")),
             operator: new_op(OperatorVariant::GreaterOrEquals),
             right: Box::new(str_node("b")),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(bool_cst(true)));
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::CompBinOp {
             left: Box::new(str_node("b")),
             operator: new_op(OperatorVariant::GreaterOrEquals),
             right: Box::new(str_node("c")),
@@ -854,38 +877,38 @@ mod tests {
         assert_eq!(intermediate_tree.eval_as_constant(), Some(bool_cst(false)));
 
         // Test "less than" operations
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::CompBinOp {
             left: Box::new(int_node("2")),
             operator: new_op(OperatorVariant::Less),
             right: Box::new(int_node("1")),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(bool_cst(false)));
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::CompBinOp {
             left: Box::new(int_node("2")),
             operator: new_op(OperatorVariant::Less),
             right: Box::new(int_node("2")),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(bool_cst(false)));
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::CompBinOp {
             left: Box::new(int_node("2")),
             operator: new_op(OperatorVariant::Less),
             right: Box::new(int_node("3")),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(bool_cst(true)));
 
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::CompBinOp {
             left: Box::new(str_node("b")),
             operator: new_op(OperatorVariant::Less),
             right: Box::new(str_node("a")),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(bool_cst(false)));
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::CompBinOp {
             left: Box::new(str_node("b")),
             operator: new_op(OperatorVariant::Less),
             right: Box::new(str_node("b")),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(bool_cst(false)));
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::CompBinOp {
             left: Box::new(str_node("b")),
             operator: new_op(OperatorVariant::Less),
             right: Box::new(str_node("c")),
@@ -893,38 +916,38 @@ mod tests {
         assert_eq!(intermediate_tree.eval_as_constant(), Some(bool_cst(true)));
 
         // Test "less or equals" operations
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::CompBinOp {
             left: Box::new(int_node("2")),
             operator: new_op(OperatorVariant::LessOrEquals),
             right: Box::new(int_node("1")),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(bool_cst(false)));
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::CompBinOp {
             left: Box::new(int_node("2")),
             operator: new_op(OperatorVariant::LessOrEquals),
             right: Box::new(int_node("2")),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(bool_cst(true)));
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::CompBinOp {
             left: Box::new(int_node("2")),
             operator: new_op(OperatorVariant::LessOrEquals),
             right: Box::new(int_node("3")),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(bool_cst(true)));
 
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::CompBinOp {
             left: Box::new(str_node("b")),
             operator: new_op(OperatorVariant::LessOrEquals),
             right: Box::new(str_node("a")),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(bool_cst(false)));
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::CompBinOp {
             left: Box::new(str_node("b")),
             operator: new_op(OperatorVariant::LessOrEquals),
             right: Box::new(str_node("b")),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(bool_cst(true)));
-        intermediate_tree = new_node(NodeVariant::BinOp {
+        intermediate_tree = new_node(NodeVariant::CompBinOp {
             left: Box::new(str_node("b")),
             operator: new_op(OperatorVariant::LessOrEquals),
             right: Box::new(str_node("c")),
@@ -934,17 +957,17 @@ mod tests {
 
     #[test]
     fn test_arithmetic_unary_operation() {
-        let mut intermediate_tree = new_node(NodeVariant::UnOp {
+        let mut intermediate_tree = new_node(NodeVariant::ArithUnOp {
             operator: new_op(OperatorVariant::Minus),
             operand: Box::new(int_node("42")),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(int_cst("-42")));
-        intermediate_tree = new_node(NodeVariant::UnOp {
+        intermediate_tree = new_node(NodeVariant::ArithUnOp {
             operator: new_op(OperatorVariant::Minus),
             operand: Box::new(int_node("-5")),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(int_cst("5")));
-        intermediate_tree = new_node(NodeVariant::UnOp {
+        intermediate_tree = new_node(NodeVariant::ArithUnOp {
             operator: new_op(OperatorVariant::Minus),
             operand: Box::new(str_node("hello")),
         });
@@ -953,17 +976,17 @@ mod tests {
 
     #[test]
     fn test_logical_unary_operation() {
-        let mut intermediate_tree = new_node(NodeVariant::UnOp {
+        let mut intermediate_tree = new_node(NodeVariant::LogicUnOp {
             operator: new_op(OperatorVariant::Not),
             operand: Box::new(bool_node(false)),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(bool_cst(true)));
-        intermediate_tree = new_node(NodeVariant::UnOp {
+        intermediate_tree = new_node(NodeVariant::LogicUnOp {
             operator: new_op(OperatorVariant::Not),
             operand: Box::new(bool_node(true)),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(bool_cst(false)));
-        intermediate_tree = new_node(NodeVariant::UnOp {
+        intermediate_tree = new_node(NodeVariant::LogicUnOp {
             operator: new_op(OperatorVariant::Not),
             operand: Box::new(int_node("42")),
         });
