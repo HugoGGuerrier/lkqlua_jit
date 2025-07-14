@@ -165,6 +165,10 @@ pub enum NodeVariant {
         index: Box<Node>,
         is_safe: bool,
     },
+    InClause {
+        value: Box<Node>,
+        collection: Box<Node>,
+    },
     IfExpr {
         condition: Box<Node>,
         consequence: Box<Node>,
@@ -265,6 +269,13 @@ impl Node {
                     ("is_safe", is_safe.to_string()),
                     ("indexed_val", indexed_val.pretty_print(child_level)),
                     ("index", index.pretty_print(child_level)),
+                ],
+            ),
+            NodeVariant::InClause { value, collection } => (
+                "InClause",
+                vec![
+                    ("value", value.pretty_print(child_level)),
+                    ("collection", collection.pretty_print(child_level)),
                 ],
             ),
             NodeVariant::IfExpr { condition, consequence, alternative } => (
@@ -413,7 +424,6 @@ pub enum OperatorVariant {
     Or,
     And,
     Not,
-    In,
     Equals,
     NotEquals,
     Greater,

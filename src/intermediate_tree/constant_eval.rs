@@ -127,12 +127,6 @@ impl Node {
                             }
                             _ => None,
                         },
-                        OperatorVariant::In => match constant_right {
-                            ConstantValue::List(values) => Some(ConstantValue::Bool(
-                                values.into_iter().find(|e| e == &constant_left).is_some(),
-                            )),
-                            _ => None,
-                        },
                         _ => unreachable!(),
                     },
                     _ => None,
@@ -207,6 +201,19 @@ impl Node {
                         }),
                     _ => None,
                 }),
+            NodeVariant::InClause { value, collection } => {
+                match (value.eval_as_constant(), collection.eval_as_constant()) {
+                    (Some(value_constant), Some(ConstantValue::List(collection_elements))) => {
+                        Some(ConstantValue::Bool(
+                            collection_elements
+                                .into_iter()
+                                .find(|e| e == &value_constant)
+                                .is_some(),
+                        ))
+                    }
+                    _ => None,
+                }
+            }
 
             // --- All other nodes cannot be evaluated as constant
             _ => None,
@@ -651,22 +658,20 @@ mod tests {
     }
 
     #[test]
-    fn test_in_operation() {
-        // Test valid "in" operations
-        let mut intermediate_tree = new_node(NodeVariant::MiscBinOp {
-            left: Box::new(int_node("2")),
-            operator: new_op(OperatorVariant::In),
-            right: Box::new(new_node(NodeVariant::ListLiteral(vec![
+    fn test_in_clause() {
+        // Test valid "in" clauses
+        let mut intermediate_tree = new_node(NodeVariant::InClause {
+            value: Box::new(int_node("2")),
+            collection: Box::new(new_node(NodeVariant::ListLiteral(vec![
                 int_node("1"),
                 int_node("2"),
                 int_node("3"),
             ]))),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(bool_cst(true)));
-        intermediate_tree = new_node(NodeVariant::MiscBinOp {
-            left: Box::new(int_node("4")),
-            operator: new_op(OperatorVariant::In),
-            right: Box::new(new_node(NodeVariant::ListLiteral(vec![
+        intermediate_tree = new_node(NodeVariant::InClause {
+            value: Box::new(int_node("4")),
+            collection: Box::new(new_node(NodeVariant::ListLiteral(vec![
                 int_node("1"),
                 int_node("2"),
                 int_node("3"),
@@ -674,11 +679,10 @@ mod tests {
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(bool_cst(false)));
 
-        // Test an invalid "in" operation
-        intermediate_tree = new_node(NodeVariant::MiscBinOp {
-            left: Box::new(int_node("2")),
-            operator: new_op(OperatorVariant::In),
-            right: Box::new(str_node("123")),
+        // Test an invalid "in" clause
+        intermediate_tree = new_node(NodeVariant::InClause {
+            value: Box::new(int_node("2")),
+            collection: Box::new(str_node("123")),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), None);
     }

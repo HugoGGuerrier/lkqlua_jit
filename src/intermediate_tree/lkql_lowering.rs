@@ -235,6 +235,12 @@ impl Node {
                 }
             }
 
+            // --- In clause
+            LkqlNode::InClause(ic) => NodeVariant::InClause {
+                value: Box::new(Self::lower_lkql_node(&ic.f_value_expr()?, ctx)?),
+                collection: Box::new(Self::lower_lkql_node(&ic.f_list_expr()?, ctx)?),
+            },
+
             // --- If expression
             LkqlNode::CondExpr(ce) => NodeVariant::IfExpr {
                 condition: Box::new(Self::lower_lkql_node(&ce.f_condition()?, ctx)?),
@@ -293,9 +299,7 @@ impl Node {
                     | OperatorVariant::LessOrEquals => {
                         NodeVariant::CompBinOp { left, operator, right }
                     }
-                    OperatorVariant::Concat | OperatorVariant::In => {
-                        NodeVariant::MiscBinOp { left, operator, right }
-                    }
+                    OperatorVariant::Concat => NodeVariant::MiscBinOp { left, operator, right },
                     OperatorVariant::Not => unreachable!(),
                 }
             }
@@ -314,7 +318,6 @@ impl Node {
                     | OperatorVariant::Concat
                     | OperatorVariant::Or
                     | OperatorVariant::And
-                    | OperatorVariant::In
                     | OperatorVariant::Equals
                     | OperatorVariant::NotEquals
                     | OperatorVariant::Greater
