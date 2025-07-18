@@ -249,7 +249,13 @@ impl Node {
                     .f_else_expr()?
                     .map(|n| Self::lower_lkql_node(&n, ctx))
                     .transpose()?
-                    .map(|n| Box::new(n)),
+                    .map_or(
+                        Box::new(Node {
+                            origin_location: SourceSection::from_lkql_node(node)?,
+                            variant: NodeVariant::BoolLiteral(true),
+                        }),
+                        |n| Box::new(n),
+                    ),
             },
 
             // --- Block expression

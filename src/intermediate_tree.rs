@@ -172,7 +172,7 @@ pub enum NodeVariant {
     IfExpr {
         condition: Box<Node>,
         consequence: Box<Node>,
-        alternative: Option<Box<Node>>,
+        alternative: Box<Node>,
     },
     BlockExpr {
         local_symbols: Vec<Identifier>,
@@ -283,7 +283,7 @@ impl Node {
                 vec![
                     ("condition", condition.pretty_print(child_level)),
                     ("consequence", consequence.pretty_print(child_level)),
-                    ("alternative", Self::pretty_print_option(alternative, child_level)),
+                    ("alternative", alternative.pretty_print(child_level)),
                 ],
             ),
             NodeVariant::BlockExpr { local_symbols, body, val } => (
