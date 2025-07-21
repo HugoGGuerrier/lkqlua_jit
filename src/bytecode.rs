@@ -100,6 +100,9 @@
 //!
 //! ### Complex constants
 //!
+//! The complex constant table is reversed, meaning that constant with the
+//! index 0 is the last one in the table.
+//!
 //! A `COMPLEX_CONST` in the LuaJIT bytecode is composed of two parts:
 //!
 //! ```text
@@ -426,6 +429,7 @@ impl Prototype {
             .for_each(|uv| uv.encode(&mut prototype_bytes));
         self.complex_consts
             .iter()
+            .rev()
             .for_each(|c| c.encode(&mut prototype_bytes));
         self.numeric_consts
             .iter()
