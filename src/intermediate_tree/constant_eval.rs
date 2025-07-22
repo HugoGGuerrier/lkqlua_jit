@@ -393,7 +393,7 @@ mod tests {
         );
         intermediate_tree = new_node(NodeVariant::TupleLiteral(vec![
             new_node(NodeVariant::UnitLiteral),
-            new_node(NodeVariant::ReadLocal(new_id("nope"))),
+            new_node(NodeVariant::ReadSymbol(new_id("nope"))),
         ]));
         assert_eq!(intermediate_tree.eval_as_constant(), None);
 
@@ -413,7 +413,7 @@ mod tests {
         );
         intermediate_tree = new_node(NodeVariant::ListLiteral(vec![
             new_node(NodeVariant::UnitLiteral),
-            new_node(NodeVariant::ReadLocal(new_id("nope"))),
+            new_node(NodeVariant::ReadSymbol(new_id("nope"))),
         ]));
         assert_eq!(intermediate_tree.eval_as_constant(), None);
 
@@ -439,7 +439,7 @@ mod tests {
         );
         intermediate_tree = new_node(NodeVariant::ObjectLiteral(vec![
             (new_id("a"), new_node(NodeVariant::UnitLiteral)),
-            (new_id("a"), new_node(NodeVariant::ReadLocal(new_id("nope")))),
+            (new_id("a"), new_node(NodeVariant::ReadSymbol(new_id("nope")))),
         ]));
         assert_eq!(intermediate_tree.eval_as_constant(), None);
     }

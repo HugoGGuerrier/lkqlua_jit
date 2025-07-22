@@ -386,7 +386,7 @@ impl Node {
                 }
                 NodeVariant::ObjectLiteral(assocs)
             }
-            LkqlNode::Identifier(_) => NodeVariant::ReadLocal(Identifier::from_node(node)?),
+            LkqlNode::Identifier(_) => NodeVariant::ReadSymbol(Identifier::from_node(node)?),
             LkqlNode::AnonymousFunction(_) => {
                 NodeVariant::ChildFunRef(*ctx.child_index_map.get(node).unwrap())
             }

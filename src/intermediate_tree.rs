@@ -223,7 +223,7 @@ pub enum NodeVariant {
         symbol: Identifier,
         val: Box<Node>,
     },
-    ReadLocal(Identifier),
+    ReadSymbol(Identifier),
 
     // --- Children function access
     ChildFunRef(usize),
@@ -340,8 +340,8 @@ impl Node {
                     ("val", val.pretty_print(child_level)),
                 ],
             ),
-            NodeVariant::ReadLocal(symbol) => {
-                ("ReadLocal", vec![("symbol", format!("\"{}\"", symbol.text))])
+            NodeVariant::ReadSymbol(symbol) => {
+                ("ReadSymbol", vec![("symbol", format!("\"{}\"", symbol.text))])
             }
             NodeVariant::ChildFunRef(index) => ("ChildFunRef", vec![("index", index.to_string())]),
             NodeVariant::NullLiteral => ("NullLiteral", vec![]),
