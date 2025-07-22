@@ -3,11 +3,12 @@
 //! This module contains all required entities to evaluate an [`Node`] as a
 //! constant value.
 
-use std::ops::{Add, Div, Mul, Sub};
-
 use num_bigint::BigInt;
 
-use crate::intermediate_tree::{Node, NodeVariant, OperatorVariant};
+use crate::{
+    bytecode::{ComplexConstant, NumericConstant, TableConstantElement},
+    intermediate_tree::{Node, NodeVariant, OperatorVariant},
+};
 
 impl Node {
     /// Try to evaluate this node as a constant value, returning it if this is
@@ -232,6 +233,87 @@ pub enum ConstantValue {
     Tuple(Vec<ConstantValue>),
     List(Vec<ConstantValue>),
     Object(Vec<(String, ConstantValue)>),
+}
+
+impl ConstantValue {
+    /// Get the complex constant representing this constant value if it one
+    /// exists. Otherwise, this function returns [`None`].
+    pub fn to_complex_constant(&self) -> Option<ComplexConstant> {
+        match self {
+            ConstantValue::String(value) => Some(ComplexConstant::String(value.clone())),
+            ConstantValue::Tuple(constant_values) | ConstantValue::List(constant_values) => {
+                let array_part = constant_values
+                    .iter()
+                    .filter_map(|c| c.to_table_constant_element())
+                    .collect::<Vec<_>>();
+                if array_part.len() == constant_values.len() {
+                    Some(ComplexConstant::Table { array_part, hash_part: Vec::new() })
+                } else {
+                    None
+                }
+            }
+            ConstantValue::Object(items) => {
+                let hash_part = items
+                    .iter()
+                    .filter_map(|(name, value)| {
+                        value
+                            .to_table_constant_element()
+                            .map(|tc| (TableConstantElement::String(name.clone()), tc))
+                    })
+                    .collect::<Vec<_>>();
+                if hash_part.len() == items.len() {
+                    Some(ComplexConstant::Table { array_part: Vec::new(), hash_part })
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// Get the complex constant representing this constant value if it one
+    /// exists. Otherwise, this function returns [`None`].
+    pub fn to_numeric_constant(&self) -> Option<NumericConstant> {
+        match self {
+            ConstantValue::Int(value) => {
+                if value >= &BigInt::from(i32::MIN) && value <= &BigInt::from(i32::MAX) {
+                    let value_le_bytes = value.to_signed_bytes_le();
+                    let mut le_bytes = [0 as u8; 4];
+                    for i in 0..value_le_bytes.len() {
+                        le_bytes[i] = *value_le_bytes.get(i).unwrap_or(&0);
+                    }
+                    Some(NumericConstant::Integer(i32::from_le_bytes(le_bytes)))
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// Get the table constant element representing this constant value if one
+    /// exists. Otherwise, this function return [`None`].
+    pub fn to_table_constant_element(&self) -> Option<TableConstantElement> {
+        match self {
+            ConstantValue::Bool(value) => {
+                Some(if *value { TableConstantElement::True } else { TableConstantElement::False })
+            }
+            ConstantValue::Int(value) => {
+                if value <= &BigInt::from(i32::MAX) {
+                    let value_le_bytes = value.to_signed_bytes_le();
+                    let mut le_bytes = [0 as u8; 4];
+                    for i in 0..le_bytes.len() {
+                        le_bytes[i] = *value_le_bytes.get(i).unwrap_or(&0);
+                    }
+                    Some(TableConstantElement::Integer(i32::from_le_bytes(le_bytes)))
+                } else {
+                    None
+                }
+            }
+            ConstantValue::String(value) => Some(TableConstantElement::String(value.clone())),
+            _ => None,
+        }
+    }
 }
 
 /// If both provided constants are [`ConstantValue::Int`], then call the
