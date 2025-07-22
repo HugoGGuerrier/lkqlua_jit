@@ -29,6 +29,12 @@ impl ExtendedInstructionBuffer {
         res
     }
 
+    /// Insert the provided instruction to the buffer at the provided index.
+    pub fn insert_inst(&mut self, index: usize, inst: Instruction) {
+        self.instructions
+            .insert(index, ExtendedInstruction::Basic(inst));
+    }
+
     /// Add an instruction from the extended set in this buffer.
     pub fn add_ext(&mut self, inst: ExtendedInstruction) {
         self.instructions.push(inst);
@@ -37,6 +43,26 @@ impl ExtendedInstructionBuffer {
     /// Add a instruction from [`crate::bytecode::Instruction`] in this buffer.
     pub fn add_inst(&mut self, inst: Instruction) {
         self.instructions.push(ExtendedInstruction::Basic(inst));
+    }
+
+    /// Shortcut function to emit a [`ExtendedInstruction::Goto`] instruction.
+    pub fn goto(&mut self, label: Label, next_available_slot: u8) {
+        self.add_ext(ExtendedInstruction::Goto { label, next_available_slot });
+    }
+
+    /// Shortcut function to emit a [`ExtendedInstruction::Label`].
+    pub fn label(&mut self, label: Label) {
+        self.add_ext(ExtendedInstruction::Label(label));
+    }
+
+    /// Shortcut function to emit an `ABC` bytecode instruction.
+    pub fn abc(&mut self, op: u8, a: u8, b: u8, c: u8) {
+        self.add_inst(Instruction::ABC { a, b, c, op });
+    }
+
+    /// Shortcut function to emit an `AD` bytecode instruction.
+    pub fn ad(&mut self, op: u8, a: u8, d: u16) {
+        self.add_inst(Instruction::AD { a, d, op });
     }
 
     /// Generate the instruction vector from this buffer of instructions from
@@ -99,20 +125,18 @@ mod tests {
     #[test]
     fn test_goto() {
         let mut extended_instructions = ExtendedInstructionBuffer::new();
-        extended_instructions.add_inst(Instruction::AD { a: 0, d: 0, op: 0 });
-        extended_instructions.add_ext(ExtendedInstruction::Label(0));
-        extended_instructions.add_inst(Instruction::AD { a: 0, d: 0, op: 1 });
-        extended_instructions.add_inst(Instruction::AD { a: 0, d: 0, op: 2 });
-        extended_instructions
-            .add_ext(ExtendedInstruction::Goto { label: 0, next_available_slot: 0 });
-        extended_instructions.add_inst(Instruction::AD { a: 0, d: 0, op: 3 });
-        extended_instructions
-            .add_ext(ExtendedInstruction::Goto { label: 1, next_available_slot: 0 });
-        extended_instructions.add_inst(Instruction::AD { a: 0, d: 0, op: 4 });
-        extended_instructions.add_inst(Instruction::AD { a: 0, d: 0, op: 5 });
-        extended_instructions.add_inst(Instruction::AD { a: 0, d: 0, op: 6 });
-        extended_instructions.add_ext(ExtendedInstruction::Label(1));
-        extended_instructions.add_inst(Instruction::AD { a: 0, d: 0, op: 7 });
+        extended_instructions.ad(0, 0, 0);
+        extended_instructions.label(0);
+        extended_instructions.ad(1, 0, 0);
+        extended_instructions.ad(2, 0, 0);
+        extended_instructions.goto(0, 0);
+        extended_instructions.ad(3, 0, 0);
+        extended_instructions.goto(1, 0);
+        extended_instructions.ad(4, 0, 0);
+        extended_instructions.ad(5, 0, 0);
+        extended_instructions.ad(6, 0, 0);
+        extended_instructions.label(1);
+        extended_instructions.ad(7, 0, 0);
 
         assert_eq!(
             extended_instructions.to_instructions(),
