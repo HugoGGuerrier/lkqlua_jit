@@ -120,6 +120,7 @@ pub enum ExtendedInstruction {
 pub type Label = usize;
 
 mod tests {
+    #[allow(unused)]
     use super::*;
 
     #[test]

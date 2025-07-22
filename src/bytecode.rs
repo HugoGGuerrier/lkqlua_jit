@@ -671,6 +671,7 @@ fn encode_string_constant(s: &String, output_buffer: &mut Vec<u8>) {
 }
 
 mod tests {
+    #[allow(unused)]
     use super::*;
 
     #[test]

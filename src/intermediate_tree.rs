@@ -369,14 +369,6 @@ impl Node {
         pretty_print_node_helper(&pretty_node, indent_level)
     }
 
-    /// Internal util function used to easily get the pretty representation of
-    /// an optional node.
-    fn pretty_print_option(opt_node: &Option<Box<Node>>, indent_level: usize) -> String {
-        opt_node
-            .as_ref()
-            .map_or(String::from("None"), |n| n.pretty_print(indent_level))
-    }
-
     /// Internal util function used to ease the pretty print of a vector of
     /// nodes.
     fn pretty_print_vec(nodes: &Vec<Node>, indent_level: usize) -> String {
