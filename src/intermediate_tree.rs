@@ -219,7 +219,15 @@ pub enum NodeVariant {
     },
 
     // --- Symbol accesses
+    /// Standard local symbol initialization
     InitLocal {
+        symbol: Identifier,
+        val: Box<Node>,
+    },
+    /// Recursive local symbol initialization, meaning that the symbol is
+    /// accessible from the value initializing it (used for function-like
+    /// constructs).
+    InitRecLocal {
         symbol: Identifier,
         val: Box<Node>,
     },
@@ -333,8 +341,12 @@ impl Node {
                     ("operand", operand.pretty_print(child_level)),
                 ],
             ),
-            NodeVariant::InitLocal { symbol, val } => (
-                "InitLocal",
+            NodeVariant::InitLocal { symbol, val } | NodeVariant::InitRecLocal { symbol, val } => (
+                match &self.variant {
+                    NodeVariant::InitLocal { .. } => "InitLocal",
+                    NodeVariant::InitRecLocal { .. } => "InitRecLocal",
+                    _ => unreachable!(),
+                },
                 vec![
                     ("symbol", format!("\"{}\"", symbol.text)),
                     ("val", val.pretty_print(child_level)),

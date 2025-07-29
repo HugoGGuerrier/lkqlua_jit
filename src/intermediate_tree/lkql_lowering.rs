@@ -156,7 +156,7 @@ impl Node {
                     LkqlNode::SelectorDecl(sd) => (sd.f_name()?, node.clone()),
                     _ => unreachable!(),
                 };
-                NodeVariant::InitLocal {
+                NodeVariant::InitRecLocal {
                     symbol: Identifier::from_node(&id_node)?,
                     val: Box::new(Node {
                         origin_location: SourceSection::from_lkql_node(&val_node)?,
