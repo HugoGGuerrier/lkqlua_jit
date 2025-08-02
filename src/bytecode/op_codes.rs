@@ -170,14 +170,14 @@ pub const ISFC: u8 = 0x0D;
 
 // ----- Unary test operations -----
 
-/// Jump D is true (Always followed by a [`JMP`] instruction holding the
+/// Jump if D is true (Always followed by a [`JMP`] instruction holding the
 /// branching target).
 /// ```text
 /// D: slot
 /// ```
 pub const IST: u8 = 0x0E;
 
-/// Jump D is false (Always followed by a [`JMP`] instruction holding the
+/// Jump if D is false (Always followed by a [`JMP`] instruction holding the
 /// branching target).
 /// ```text
 /// D: slot
@@ -576,7 +576,7 @@ pub const TSETR: u8 = 0x40;
 /// ```
 pub const CALLM: u8 = 0x41;
 
-/// Call A(A+2...A+C-1) and set A,A+1...A+B-2 to returned values.
+/// Call A(A+2...A+C) and set A,A+1...A+B-2 to returned values.
 /// ```text
 /// A: slot
 /// B: lit
