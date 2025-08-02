@@ -189,32 +189,32 @@ pub enum NodeVariant {
     // --- Binary operations
     ArithBinOp {
         left: Box<Node>,
-        operator: Operator,
+        operator: ArithOperator,
         right: Box<Node>,
     },
     LogicBinOp {
         left: Box<Node>,
-        operator: Operator,
+        operator: LogicOperator,
         right: Box<Node>,
     },
     CompBinOp {
         left: Box<Node>,
-        operator: Operator,
+        operator: CompOperator,
         right: Box<Node>,
     },
     MiscBinOp {
         left: Box<Node>,
-        operator: Operator,
+        operator: MiscOperator,
         right: Box<Node>,
     },
 
     // --- Unary operations
     ArithUnOp {
-        operator: Operator,
+        operator: ArithOperator,
         operand: Box<Node>,
     },
     LogicUnOp {
-        operator: Operator,
+        operator: LogicOperator,
         operand: Box<Node>,
     },
 
@@ -312,30 +312,47 @@ impl Node {
                     ("next_fun", next_fun.pretty_print(child_level)),
                 ],
             ),
-            NodeVariant::ArithBinOp { left, operator, right }
-            | NodeVariant::LogicBinOp { left, operator, right }
-            | NodeVariant::CompBinOp { left, operator, right }
-            | NodeVariant::MiscBinOp { left, operator, right } => (
-                match &self.variant {
-                    NodeVariant::ArithBinOp { .. } => "ArithBinOp",
-                    NodeVariant::LogicBinOp { .. } => "LogicBinOp",
-                    NodeVariant::CompBinOp { .. } => "CompBinOp",
-                    NodeVariant::MiscBinOp { .. } => "MiscBinOp",
-                    _ => unreachable!(),
-                },
+            NodeVariant::ArithBinOp { left, operator, right } => (
+                "ArithBinOp",
                 vec![
                     ("left", left.pretty_print(child_level)),
                     ("operator", operator.to_string()),
                     ("right", right.pretty_print(child_level)),
                 ],
             ),
-            NodeVariant::ArithUnOp { operator, operand }
-            | NodeVariant::LogicUnOp { operator, operand } => (
-                match &self.variant {
-                    NodeVariant::ArithUnOp { .. } => "ArithUnOp",
-                    NodeVariant::LogicUnOp { .. } => "LogicUnOp",
-                    _ => unreachable!(),
-                },
+            NodeVariant::LogicBinOp { left, operator, right } => (
+                "LogicBinOp",
+                vec![
+                    ("left", left.pretty_print(child_level)),
+                    ("operator", operator.to_string()),
+                    ("right", right.pretty_print(child_level)),
+                ],
+            ),
+            NodeVariant::CompBinOp { left, operator, right } => (
+                "CompBinOp",
+                vec![
+                    ("left", left.pretty_print(child_level)),
+                    ("operator", operator.to_string()),
+                    ("right", right.pretty_print(child_level)),
+                ],
+            ),
+            NodeVariant::MiscBinOp { left, operator, right } => (
+                "MiscBinOp",
+                vec![
+                    ("left", left.pretty_print(child_level)),
+                    ("operator", operator.to_string()),
+                    ("right", right.pretty_print(child_level)),
+                ],
+            ),
+            NodeVariant::ArithUnOp { operator, operand } => (
+                "ArithUnOp",
+                vec![
+                    ("operator", operator.to_string()),
+                    ("operand", operand.pretty_print(child_level)),
+                ],
+            ),
+            NodeVariant::LogicUnOp { operator, operand } => (
+                "LogicUnOp",
                 vec![
                     ("operator", operator.to_string()),
                     ("operand", operand.pretty_print(child_level)),
@@ -409,25 +426,56 @@ impl Node {
     }
 }
 
-/// This structure represents an operator in the intermediate tree. It wraps
-/// the [`OperatorVariant`] enumeration, adding meta-information on it.
+/// This type represents an arithmetic operator in the intermediate tree.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Operator {
+pub struct ArithOperator {
     pub origin_location: SourceSection,
-    pub variant: OperatorVariant,
+    pub variant: ArithOperatorVariant,
 }
 
-/// This enumeration represents possible operators in the intermediate tree.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum OperatorVariant {
+pub enum ArithOperatorVariant {
     Plus,
     Minus,
     Multiply,
     Divide,
-    Concat,
+}
+
+impl Display for ArithOperator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.variant.fmt(f)
+    }
+}
+
+/// This type represents a logic operator in the intermediate tree.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LogicOperator {
+    pub origin_location: SourceSection,
+    pub variant: LogicOperatorVariant,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LogicOperatorVariant {
     Or,
     And,
     Not,
+}
+
+impl Display for LogicOperator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.variant.fmt(f)
+    }
+}
+
+/// This type represents a comparison operator in the intermediate tree.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CompOperator {
+    pub origin_location: SourceSection,
+    pub variant: CompOperatorVariant,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CompOperatorVariant {
     Equals,
     NotEquals,
     Greater,
@@ -436,7 +484,25 @@ pub enum OperatorVariant {
     LessOrEquals,
 }
 
-impl Display for Operator {
+impl Display for CompOperator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.variant.fmt(f)
+    }
+}
+
+/// This type represents all miscellaneous operator in the intermediate tree.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MiscOperator {
+    pub origin_location: SourceSection,
+    pub variant: MiscOperatorVariant,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MiscOperatorVariant {
+    Concat,
+}
+
+impl Display for MiscOperator {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.variant.fmt(f)
     }
