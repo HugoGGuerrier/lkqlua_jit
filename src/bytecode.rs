@@ -255,6 +255,12 @@ pub const TABLE_CONST_INT_KIND: u8 = 3;
 pub const TABLE_CONST_NUM_KIND: u8 = 4;
 pub const TABLE_CONST_STR_KIND: u8 = 5;
 
+// ----- Primitive values -----
+
+pub const PRIM_NIL: u16 = 0;
+pub const PRIM_FALSE: u16 = 1;
+pub const PRIM_TRUE: u16 = 2;
+
 // ----- Bytecode emission helpers -----
 
 /// This structure represents an executable bytecode buffer, structured as
