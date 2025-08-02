@@ -47,6 +47,7 @@ impl ExecutionUnit {
         for unit in &local_units {
             ctx.child_index_map.insert(unit.clone(), local_unit_counter);
             local_unit_counter += 1;
+            assert!(local_unit_counter < u16::MAX, "Too many children execution units");
         }
 
         // Create the variant part of the result
@@ -450,7 +451,7 @@ impl Identifier {
 struct LoweringContext {
     /// Map each function declaration node to the "child index" of its produced
     /// [`Function`] object.
-    child_index_map: HashMap<LkqlNode, usize>,
+    child_index_map: HashMap<LkqlNode, u16>,
 
     /// The execution unit that is currently being lowered.
     current_execution_unit: Option<Weak<RefCell<ExecutionUnit>>>,

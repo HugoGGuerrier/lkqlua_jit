@@ -234,7 +234,7 @@ pub enum NodeVariant {
     ReadSymbol(Identifier),
 
     // --- Children function access
-    ChildFunRef(usize),
+    ChildFunRef(u16),
 
     // --- Literals
     NullLiteral,
