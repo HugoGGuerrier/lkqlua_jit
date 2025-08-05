@@ -50,7 +50,7 @@ impl<O: Write, E: Write> ExecutionContext<O, E> {
         let unit = self.source_repo.parse_as_lkql(&source)?;
         let root = unit.root()?.unwrap();
 
-        // If required display the parsing tree
+        // If required, display the parsing tree
         if self.config.is_verbose(VerboseElement::ParsingTree) {
             writeln!(self.config.std_out, "===== Parsing tree =====\n")?;
             writeln!(self.config.std_out, "{}\n", root.tree_dump(0)?)?;
@@ -59,14 +59,21 @@ impl<O: Write, E: Write> ExecutionContext<O, E> {
         // Lower the parsing tree
         let lowering_tree = ExecutionUnit::lower_lkql_node(&root)?;
 
-        // If required display the lowered tree
+        // If required, display the lowered tree
         if self.config.is_verbose(VerboseElement::LoweringTree) {
             writeln!(self.config.std_out, "===== Lowering tree =====\n")?;
             writeln!(self.config.std_out, "{}\n", lowering_tree.borrow())?;
         }
 
-        // TODO: Compile the lowering tree and execute it
-        writeln!(self.config.std_out, "TODO: Compile the lowering tree and execute it")?;
+        // Compile the lowering tree and execute it
+        let bytecode_buffer = lowering_tree.borrow().compile()?;
+
+        // If required, display the compiled bytecode
+        if self.config.is_verbose(VerboseElement::Bytecode) {
+            writeln!(self.config.std_out, "===== Bytecode =====\n")?;
+            writeln!(self.config.std_out, "{}\n", bytecode_buffer)?;
+        }
+
         Ok(())
     }
 }
@@ -92,4 +99,5 @@ pub enum VerboseElement {
     All,
     ParsingTree,
     LoweringTree,
+    Bytecode,
 }

@@ -125,6 +125,22 @@ impl Report {
         )
     }
 
+    // --- Compilation diagnostics
+
+    /// Report a duplicated symbol declaration.
+    pub fn duplicated_symbols(first_decl: SourceSection, clashing_decl: SourceSection) -> Self {
+        Self::error_diag_and_hints(
+            format!("The same symbol already exists in the same scope"),
+            clashing_decl,
+            vec![Hint { location: first_decl, message: String::from("Previously declared here") }],
+        )
+    }
+
+    /// Report an access to an non-existing symbol.
+    pub fn unknown_symbol(access_location: SourceSection, accessed_symbol: &str) -> Self {
+        Self::error_diag(format!("Unknown symbol: \"{accessed_symbol}\""), access_location)
+    }
+
     // --- Creation methods
 
     /// Create a new report from an LKQL parsing diagnostic.

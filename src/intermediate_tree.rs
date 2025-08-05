@@ -22,6 +22,7 @@ use std::{
 
 use crate::sources::SourceSection;
 
+pub mod compilation;
 pub mod constant_eval;
 pub mod lkql_lowering;
 
