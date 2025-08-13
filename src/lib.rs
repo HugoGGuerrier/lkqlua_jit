@@ -11,6 +11,7 @@ use crate::{intermediate_tree::ExecutionUnit, report::Report, sources::SourceRep
 
 pub mod bytecode;
 pub mod intermediate_tree;
+pub mod lua;
 pub mod report;
 pub mod sources;
 
