@@ -7,10 +7,13 @@ use std::{collections::HashSet, io::Write, path::Path};
 
 use clap::ValueEnum;
 
-use crate::{intermediate_tree::ExecutionUnit, report::Report, sources::SourceRepository};
+use crate::{
+    engine::Engine, intermediate_tree::ExecutionUnit, report::Report, sources::SourceRepository,
+};
 
 pub mod builtins;
 pub mod bytecode;
+pub mod engine;
 pub mod intermediate_tree;
 pub mod lua;
 pub mod report;
@@ -19,14 +22,15 @@ pub mod sources;
 /// This type holds all required data to run LKQL sources using LuaJIT as a
 /// backend. This is what you have to use.
 pub struct ExecutionContext<O: Write, E: Write> {
-    source_repo: SourceRepository,
     config: EngineConfig<O, E>,
+    source_repo: SourceRepository,
+    engine: Engine,
 }
 
 impl<O: Write, E: Write> ExecutionContext<O, E> {
     /// Create an initialize a new execution context.
     pub fn new(config: EngineConfig<O, E>) -> Self {
-        Self { source_repo: SourceRepository::new(), config }
+        Self { source_repo: SourceRepository::new(), config, engine: Engine::new() }
     }
 
     /// Just run the provided LKQL file, don't return anything and report all
@@ -76,7 +80,8 @@ impl<O: Write, E: Write> ExecutionContext<O, E> {
             writeln!(self.config.std_out, "{}\n", bytecode_buffer)?;
         }
 
-        Ok(())
+        // Finally, use the engine to run the bytecode
+        self.engine.run_bytecode_buffer(&bytecode_buffer)
     }
 }
 
