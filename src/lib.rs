@@ -9,6 +9,7 @@ use clap::ValueEnum;
 
 use crate::{intermediate_tree::ExecutionUnit, report::Report, sources::SourceRepository};
 
+pub mod builtins;
 pub mod bytecode;
 pub mod intermediate_tree;
 pub mod lua;
