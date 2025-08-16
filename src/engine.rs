@@ -52,7 +52,7 @@ impl Engine {
         buffer.encode(&mut encoded_bytecode);
 
         // Load the bytecode buffer in the Lua state
-        if load_buffer(self.lua_state, &encoded_bytecode, "<bytecode>") != 0 {
+        if !load_buffer(self.lua_state, &encoded_bytecode, "<bytecode>") {
             panic!("Cannot load the provided bytecode buffer");
         }
 

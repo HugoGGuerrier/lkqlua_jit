@@ -27,6 +27,21 @@ pub type LuaState = *mut c_void;
 /// A C function that is going to be called from the Lua environment.
 pub type LuaCFunction = unsafe extern "C" fn(LuaState) -> c_int;
 
+/// This type represents type tags for Lua values.
+#[repr(C)]
+pub enum LuaType {
+    None = -1,
+    Nil = 0,
+    Boolean = 1,
+    LightUserData = 2,
+    Number = 3,
+    String = 4,
+    Table = 5,
+    Function = 6,
+    UserData = 7,
+    Thread = 8,
+}
+
 // ----- Public API -----
 
 /// Create a new [`LuaState`] and return it.
@@ -48,12 +63,36 @@ pub fn open_lua_libs(l: LuaState) {
     }
 }
 
-/// Load the given buffer to the Lua stack as a callable value, returning 0 on
-/// success, and other value on failure.
-pub fn load_buffer(l: LuaState, buffer: &Vec<u8>, buffer_name: &str) -> i32 {
+/// Load the given buffer to the Lua stack as a callable value, returning
+/// whether the function succeeded.
+pub fn load_buffer(l: LuaState, buffer: &Vec<u8>, buffer_name: &str) -> bool {
     let ext_buffer = buffer.as_ptr() as *const c_char;
     let ext_buffer_name = CString::from_str(buffer_name).unwrap();
-    unsafe { luaL_loadbuffer(l, ext_buffer, buffer.len(), ext_buffer_name.as_ptr()) }
+    unsafe { luaL_loadbuffer(l, ext_buffer, buffer.len(), ext_buffer_name.as_ptr()) == 0 }
+}
+
+/// Get the type of the value on the stack at the given index.
+pub fn get_type(l: LuaState, index: i32) -> LuaType {
+    unsafe { lua_type(l, index) }
+}
+
+/// Get the value at the provided index as a boolean, implicitly converting
+/// all values that aren't of the boolean type to one.
+pub fn get_boolean(l: LuaState, index: i32) -> bool {
+    unsafe { lua_toboolean(l, index) != 0 }
+}
+
+/// Try to get the value at the provided index as a string and return it. If
+/// this is not possible, the result is [`None`].
+pub fn get_string(l: LuaState, index: i32) -> Option<&'static str> {
+    unsafe {
+        let ext_res = lua_tolstring(l, index, ptr::null_mut());
+        if ext_res.is_null() {
+            None
+        } else {
+            Some(CStr::from_ptr(ext_res).to_str().unwrap())
+        }
+    }
 }
 
 /// Push a new C function value to the Lua stack at the given index. If the
@@ -61,24 +100,6 @@ pub fn load_buffer(l: LuaState, buffer: &Vec<u8>, buffer_name: &str) -> i32 {
 pub fn push_c_function(l: LuaState, function: LuaCFunction, index: Option<i32>) {
     unsafe {
         lua_pushcclosure(l, function, index.unwrap_or(0));
-    }
-}
-
-/// Considering that the stack is filled with `arg_count` arguments and a
-/// callable value: pop all of those and call it. Place on the stack the
-/// specified count of result if any, otherwise, place them all.
-/// This function returns an [`Err`] containing the error message if an error
-/// has been raised during the call.
-pub fn call(l: LuaState, arg_count: i32, res_count: Option<i32>) -> Result<(), String> {
-    unsafe {
-        let call_res = lua_pcall(l, arg_count, res_count.unwrap_or(MUTRET), 0);
-        if call_res == 0 {
-            Ok(())
-        } else {
-            let ext_error_message = lua_tolstring(l, -1, ptr::null_mut());
-            let wrapped_ext_error_message = CStr::from_ptr(ext_error_message);
-            Err(String::from(wrapped_ext_error_message.to_string_lossy()))
-        }
     }
 }
 
@@ -90,6 +111,27 @@ pub fn set_global(l: LuaState, name: &str) {
         let c_name = CString::from_str(name).unwrap();
         lua_setfield(l, GLOBAL_INDEX, c_name.as_ptr());
     }
+}
+
+/// Considering that the stack is filled with `arg_count` arguments and a
+/// callable value: pop all of those and call it. Place on the stack the
+/// specified count of result if any, otherwise, place them all.
+/// This function returns an [`Err`] containing the error message if an error
+/// has been raised during the call.
+pub fn call(l: LuaState, arg_count: i32, res_count: Option<i32>) -> Result<(), String> {
+    unsafe {
+        let call_res = lua_pcall(l, arg_count, res_count.unwrap_or(MUTRET), 0);
+        if call_res == 0 { Ok(()) } else { Err(get_string(l, -1).unwrap().to_string()) }
+    }
+}
+
+/// Call the provided meta-method on the object at the given index. If the
+/// provided index is [`None`], the object on the top of the stack is used.
+/// This function returns whether the call succeeded, and if so, the result
+/// of the call is push on the top of the stack.
+pub fn call_meta(l: LuaState, index: Option<i32>, meta_method: &str) -> bool {
+    let ext_meta_method = CString::from_str(meta_method).unwrap();
+    unsafe { luaL_callmeta(l, index.unwrap_or(-1), ext_meta_method.as_ptr()) == 1 }
 }
 
 // ----- External functions -----
@@ -106,8 +148,13 @@ unsafe extern "C" {
         buffer_name: *const c_char,
     ) -> c_int;
 
+    fn lua_type(l: LuaState, index: c_int) -> LuaType;
+    fn lua_toboolean(l: LuaState, index: c_int) -> c_int;
     fn lua_tolstring(l: LuaState, index: c_int, result_size: *mut usize) -> *const c_char;
+
     fn lua_pushcclosure(l: LuaState, function: LuaCFunction, index: c_int);
-    fn lua_pcall(l: LuaState, nargs: c_int, nres: c_int, errfunc: c_int) -> i32;
     fn lua_setfield(l: LuaState, index: c_int, field: *const c_char);
+
+    fn lua_pcall(l: LuaState, nargs: c_int, nres: c_int, errfunc: c_int) -> i32;
+    fn luaL_callmeta(l: LuaState, obj: c_int, meta_method: *const c_char) -> c_int;
 }

@@ -5,7 +5,7 @@
 
 use std::{
     cell::{Ref, RefCell, RefMut},
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     ops::Range,
     rc::Rc,
     u8,
@@ -14,6 +14,7 @@ use std::{
 use num_bigint::BigInt;
 
 use crate::{
+    builtins::get_builtins,
     bytecode::{
         BytecodeBuffer, ComplexConstant, Instruction, JUMP_BIASING, NumericConstant, PRIM_FALSE,
         PRIM_NIL, PRIM_TRUE, Prototype, TableConstantElement, UpValueConstant,
@@ -540,15 +541,19 @@ impl Node {
                             output.label(next_label);
                         }
                     } else {
-                        // TODO: When supported, try getting the symbol in the
-                        // global context.
-
+                        // Finally, if a built-in is named like the accessed
+                        // symbol, get it in the global table.
+                        if ctx.builtins.contains(identifier.text.as_str()) {
+                            emit_global_read(ctx, output, &identifier.text, result_slot);
+                        }
                         // If all previous step failed, the symbol doesn't
                         // exists, so we emit an error about it.
-                        ctx.diagnostics.push(Report::unknown_symbol(
-                            self.origin_location.clone(),
-                            &identifier.text,
-                        ));
+                        else {
+                            ctx.diagnostics.push(Report::unknown_symbol(
+                                self.origin_location.clone(),
+                                &identifier.text,
+                            ));
+                        }
                     }
                 }
             }
@@ -698,7 +703,7 @@ impl Node {
         if_false_label: Label,
     ) {
         // Use the `internal_compile` function to compile the node as a
-        // branching one
+        // branching one.
         let if_true_label = output.new_label();
         internal_compile(
             self,
@@ -1485,6 +1490,9 @@ impl ValueAccess {
 
 /// This type is the main data holder during the compilation process.
 struct CompilationContext {
+    /// Built-in symbols that are available during the compilation.
+    builtins: HashSet<&'static str>,
+
     /// The frame that is currently being used in the compilation process. This
     /// stores all information about local symbols, up-values and temporary
     /// slots.
@@ -1508,6 +1516,7 @@ struct CompilationContext {
 impl CompilationContext {
     fn new() -> Self {
         Self {
+            builtins: get_builtins().iter().map(|b| b.name).collect(),
             current_frame: Rc::new(RefCell::new(Frame::new(None))),
             exec_unit_data_stack: vec![ExecUnitCompilationData::new()],
             prototypes: Vec::new(),
