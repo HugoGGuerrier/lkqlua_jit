@@ -14,6 +14,13 @@ struct LauncherArgs {
 
     #[arg(long, short, help = "Display additional information during the run")]
     verbose: Vec<VerboseElement>,
+
+    #[arg(
+        long,
+        short,
+        help = "Perform time measurements during compilation and run, and display those information"
+    )]
+    timing: bool,
 }
 
 fn main() {
@@ -25,6 +32,7 @@ fn main() {
         std_out: stdout(),
         std_err: stderr(),
         verbose_elements: args.verbose.into_iter().collect(),
+        perform_timings: args.timing,
     };
 
     // Create a new LKQL execution context

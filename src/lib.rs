@@ -3,7 +3,12 @@
 //! The library entry point of the LKQL engine, here you can find all required
 //! stuff to parse, compile and execute LKQL sources.
 
-use std::{collections::HashSet, io::Write, path::Path};
+use std::{
+    collections::HashSet,
+    io::Write,
+    path::Path,
+    time::{Duration, Instant},
+};
 
 use clap::ValueEnum;
 
@@ -49,12 +54,18 @@ impl<O: Write, E: Write> ExecutionContext<O, E> {
     /// Execute the provided LKQL file, returning possible [`Report`] if the
     /// execution is not successful.
     pub fn execute_lkql_file(&mut self, file: &Path) -> Result<(), Report> {
+        // Create time measurement requirements
+        let mut time_point: Instant;
+        let mut timings: Vec<(String, Duration)> = Vec::new();
+
         // Add the source file to the source repo updating it if required
         let source = self.source_repo.add_source_file(file, true)?;
 
         // Parse the source file
+        time_point = Instant::now();
         let unit = self.source_repo.parse_as_lkql(&source)?;
         let root = unit.root()?.unwrap();
+        timings.push((String::from("parsing"), time_point.elapsed()));
 
         // If required, display the parsing tree
         if self.config.is_verbose(VerboseElement::ParsingTree) {
@@ -63,7 +74,9 @@ impl<O: Write, E: Write> ExecutionContext<O, E> {
         }
 
         // Lower the parsing tree
+        time_point = Instant::now();
         let lowering_tree = ExecutionUnit::lower_lkql_node(&root)?;
+        timings.push((String::from("lowering"), time_point.elapsed()));
 
         // If required, display the lowered tree
         if self.config.is_verbose(VerboseElement::LoweringTree) {
@@ -72,7 +85,9 @@ impl<O: Write, E: Write> ExecutionContext<O, E> {
         }
 
         // Compile the lowering tree and execute it
+        time_point = Instant::now();
         let bytecode_buffer = lowering_tree.borrow().compile()?;
+        timings.push((String::from("compilation"), time_point.elapsed()));
 
         // If required, display the compiled bytecode
         if self.config.is_verbose(VerboseElement::Bytecode) {
@@ -80,8 +95,35 @@ impl<O: Write, E: Write> ExecutionContext<O, E> {
             writeln!(self.config.std_out, "{}\n", bytecode_buffer)?;
         }
 
-        // Finally, use the engine to run the bytecode
-        self.engine.run_bytecode_buffer(&bytecode_buffer)
+        // Use the engine to run the bytecode
+        time_point = Instant::now();
+        let res = self.engine.run_bytecode_buffer(&bytecode_buffer);
+        timings.push((String::from("execution"), time_point.elapsed()));
+
+        // If required, display timing information
+        if self.config.perform_timings {
+            writeln!(self.config.std_out, "===== Timings =====\n")?;
+            let longest_event_name = timings
+                .iter()
+                .max_by_key(|(name, _)| name.len())
+                .unwrap()
+                .0
+                .len();
+            for (event, duration) in &timings {
+                let duration_min = duration.as_secs() / 60;
+                let duration_sec = duration.as_secs() % 60;
+                let duration_ms = duration.as_millis() % 1000;
+                let fill = " ".repeat(longest_event_name - event.len());
+                writeln!(
+                    self.config.std_out,
+                    "  {event}:{fill}  {duration_min}m{duration_sec}.{:0>3}s",
+                    duration_ms
+                )?;
+            }
+        }
+
+        // Finally, return the execution result
+        res
     }
 }
 
@@ -90,6 +132,7 @@ pub struct EngineConfig<O: Write, E: Write> {
     pub std_out: O,
     pub std_err: E,
     pub verbose_elements: HashSet<VerboseElement>,
+    pub perform_timings: bool,
 }
 
 impl<O: Write, E: Write> EngineConfig<O, E> {
