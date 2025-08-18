@@ -31,7 +31,12 @@ impl ExecutionUnit {
     /// returns a [`Result::Err`] which contains all diagnostics.
     pub fn lower_lkql_node(node: &LkqlNode) -> Result<Rc<RefCell<Self>>, Report> {
         let mut lowering_context = LoweringContext::new();
-        Self::internal_lower_lkql_node(node, &mut lowering_context)
+        let res = Self::internal_lower_lkql_node(node, &mut lowering_context)?;
+        if lowering_context.diagnostics.is_empty() {
+            Ok(res)
+        } else {
+            Err(Report::Composed(lowering_context.diagnostics))
+        }
     }
 
     /// Internal function to lower an [`LkqlNode`] to an [`ExecutionUnit`].
