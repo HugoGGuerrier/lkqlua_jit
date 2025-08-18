@@ -1311,6 +1311,7 @@ fn declare_locals(ctx: &mut CompilationContext, symbols: &Vec<Identifier>) {
             ctx.diagnostics.push(Report::duplicated_symbols(
                 previous_binding.declaration_location,
                 symbol.origin_location.clone(),
+                &symbol.text,
             ));
         } else {
             ctx.current_frame_mut()
