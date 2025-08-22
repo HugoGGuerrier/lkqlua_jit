@@ -77,15 +77,19 @@
 //! ## The constant table
 //!
 //! `CONSTANT_TABLE` is a section at the end of every function prototype which
-//! contains all constants used in the function. Its structure is:
-//!
-//! ### Up-value constants
+//! contains all constants used in the function along with some debug
+//! information. Its structure is:
 //!
 //! ```text
 //! UPVALUE_CONSTS (1 short16[UPVAL_COUNT])
 //! COMPLEX_CONSTS (1 COMPLEX_CONST[COMPLEX_CONST_COUNT])
 //! NUMERIC_CONSTS (1 NUMERIC_CONST[NUM_CONST_COUNT])
+//! (
+//!     DEBUG_INFO
+//! ) if !IS_STRIPPED
 //! ```
+//!
+//! ### Up-value constants
 //!
 //! An "up-value" (shortened "UV") is an index that correspond to a local slot
 //! or an UV constant in the parent scope that is referenced in the function.
@@ -206,6 +210,37 @@
 //!                         // the numeric constant flag on the first byte
 //! HIGH_PART = (1 uleb128) // The 32 most significant bits of the f64
 //! ```
+//!
+//! ### Debug information
+//!
+//! The `DEBUG_INFO` section is a byte array at then end of an constant table
+//! that describe all required data to perform debugging operations on the
+//! current buffer. It is split into 3 parts:
+//!   * It starts with a sequence of line offsets, one for each instruction of
+//!     the prototype. An offset value is representing the difference between
+//!     the line the corresponding instruction is mapping to and the line the
+//!     prototype is starting from.
+//!     Each offset is encoded on the minimal unsigned number of bytes, meaning
+//!     that according to the number of lines in the prototype:
+//!       * <= 255: each line offset is encoded on 1 byte
+//!       * > 255 & <= 65,535: each line offset is encoded on 2 bytes
+//!       * > 65535 & <= 4,294,967,295: each line offset is encoded on 4 bytes
+//!   * Then comes the up-value names section: this is a sequence of C-encoded
+//!     strings representing names of the up-values used in this prototype.
+//!     This sequence is in the same order as up-value constants.
+//!   * Finally, there are information about the local variables of the
+//!     prototype. This section is a sequence of variable data, ordered
+//!     following variable declaration order.
+//!     A variable data is structured like this:
+//!       * The variable name in a C-encoded string (ASCII chars with `\0` at
+//!         the end)
+//!       * The variable birth instruction as an ULEB128 encoded instruction
+//!         index difference from the previous local variable birth
+//!         instruction. If the current variable is the first one in the
+//!         sequence, this info is simply the birth instruction index.
+//!       * The variable death instruction as an ULEB128 encoded instruction
+//!         index difference from the birth instruction.
+//!     The variable information section is always terminated by a `0` byte.
 
 pub mod extended_bytecode;
 pub mod op_codes;
