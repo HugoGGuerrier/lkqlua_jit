@@ -372,6 +372,11 @@ struct lua_Debug {
   int i_ci;  /* active function */
 };
 
+/* Custom extensions */
+
+LUA_API int lua_getpc(lua_State *L, const lua_Debug *ar, unsigned int *pc);
+LUA_API const char* lua_getprotoname(lua_State *L, lua_Debug *ar);
+
 /* }====================================================================== */
 
 

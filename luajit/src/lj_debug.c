@@ -550,6 +550,53 @@ LUA_API int lua_getstack(lua_State *L, int level, lua_Debug *ar)
   }
 }
 
+LUA_API int lua_getpc(lua_State *L, const lua_Debug *ar, unsigned int *pc)
+{
+  // Filter out unhandled frames
+  switch (ar->what[0]) {
+    case 'L':
+    case 'm':
+      break;
+
+    default:
+      return 0;
+  }
+
+  // Then get the program counter
+  TValue *frame = NULL;
+  TValue *nextframe = NULL;
+  GCfunc *fn;
+  uint32_t offset = (uint32_t)ar->i_ci & 0xffff;
+  uint32_t size = (uint32_t)ar->i_ci >> 16;
+
+  frame = tvref(L->stack) + offset;
+  if (size) nextframe = frame + size;
+  fn = frame_func(frame);
+
+  *pc = debug_framepc(L, fn, nextframe);
+  if (*pc == NO_BCPOS) return 0;
+
+  // Return the success
+  return 1;
+}
+
+LUA_API const char* lua_getprotoname(lua_State *L, lua_Debug *ar)
+{
+  // Filter out unhandled frames, and get the proto id
+  switch (ar->what[0]) {
+    case 'L':
+      if (!lua_getinfo(L, "n", ar)) return 0;
+      if (ar->name) return ar->name;
+
+    case 'm':
+      return ar->source;
+      break;
+
+    default:
+      return NULL;
+  }
+}
+
 #if LJ_HASPROFILE
 /* Put the chunkname into a buffer. */
 static int debug_putchunkname(SBuf *sb, GCproto *pt, int pathstrip)
@@ -705,4 +752,3 @@ LUALIB_API void luaL_traceback (lua_State *L, lua_State *L1, const char *msg,
   }
   lua_concat(L, (int)(L->top - L->base) - top);
 }
-
