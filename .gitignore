@@ -5,3 +5,7 @@
 /luajit/**/*.o
 /luajit/**/*.so
 /luajit/**/*.a
+
+# LuaJIT clangd artifacts
+/luajit/.cache/
+/luajit/compile_commands.json
