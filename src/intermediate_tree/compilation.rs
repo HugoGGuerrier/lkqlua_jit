@@ -24,7 +24,8 @@ use crate::{
     intermediate_tree::{
         ArithOperator, ArithOperatorVariant, CompOperator, CompOperatorVariant, ExecutionUnit,
         ExecutionUnitVariant, Identifier, LogicOperatorVariant, MiscOperatorVariant, Node,
-        NodeVariant, constant_eval::ConstantValue,
+        NodeVariant,
+        constant_eval::{ConstantValue, ConstantValueVariant},
     },
     report::Report,
     sources::SourceSection,
@@ -857,30 +858,33 @@ impl Node {
             // Get operation code and the "d" operand if possible
             let maybe_op_and_d = match (operator.variant, branching_kind) {
                 (CompOperatorVariant::Equals, BranchingKind::IfFalse)
-                | (CompOperatorVariant::NotEquals, BranchingKind::IfTrue) => match constant_operand
-                {
-                    ConstantValue::Bool(constant_bool) => {
-                        Some((ISNEP, if *constant_bool { PRIM_TRUE } else { PRIM_FALSE }))
+                | (CompOperatorVariant::NotEquals, BranchingKind::IfTrue) => {
+                    match &constant_operand.variant {
+                        ConstantValueVariant::Bool(constant_bool) => {
+                            Some((ISNEP, if *constant_bool { PRIM_TRUE } else { PRIM_FALSE }))
+                        }
+                        ConstantValueVariant::String(s) => {
+                            Some((ISNES, ctx.current_data().constants.get_from_string(s)))
+                        }
+                        _ => constant_operand.to_numeric_constant().map(|n| {
+                            (ISNEN, ctx.current_data().constants.get_from_numeric_constant(n))
+                        }),
                     }
-                    ConstantValue::String(s) => {
-                        Some((ISNES, ctx.current_data().constants.get_from_string(s)))
-                    }
-                    _ => constant_operand.to_numeric_constant().map(|n| {
-                        (ISNEN, ctx.current_data().constants.get_from_numeric_constant(n))
-                    }),
-                },
+                }
                 (CompOperatorVariant::NotEquals, BranchingKind::IfFalse)
-                | (CompOperatorVariant::Equals, BranchingKind::IfTrue) => match constant_operand {
-                    ConstantValue::Bool(constant_bool) => {
-                        Some((ISEQP, if *constant_bool { PRIM_TRUE } else { PRIM_FALSE }))
+                | (CompOperatorVariant::Equals, BranchingKind::IfTrue) => {
+                    match &constant_operand.variant {
+                        ConstantValueVariant::Bool(constant_bool) => {
+                            Some((ISEQP, if *constant_bool { PRIM_TRUE } else { PRIM_FALSE }))
+                        }
+                        ConstantValueVariant::String(s) => {
+                            Some((ISEQS, ctx.current_data().constants.get_from_string(s)))
+                        }
+                        _ => constant_operand.to_numeric_constant().map(|n| {
+                            (ISEQN, ctx.current_data().constants.get_from_numeric_constant(n))
+                        }),
                     }
-                    ConstantValue::String(s) => {
-                        Some((ISEQS, ctx.current_data().constants.get_from_string(s)))
-                    }
-                    _ => constant_operand.to_numeric_constant().map(|n| {
-                        (ISEQN, ctx.current_data().constants.get_from_numeric_constant(n))
-                    }),
-                },
+                }
                 _ => None,
             };
 
@@ -1167,17 +1171,17 @@ impl ConstantValue {
         output: &mut ExtendedInstructionBuffer,
         result_slot: u8,
     ) {
-        match self {
-            ConstantValue::Null => {
+        match &self.variant {
+            ConstantValueVariant::Null => {
                 emit_global_read(ctx, output, result_slot, "<lkql_null>");
             }
-            ConstantValue::Unit => {
+            ConstantValueVariant::Unit => {
                 emit_global_read(ctx, output, result_slot, "<lkql_unit>");
             }
-            ConstantValue::Bool(value) => {
+            ConstantValueVariant::Bool(value) => {
                 output.ad(KPRI, result_slot, if *value { PRIM_TRUE } else { PRIM_FALSE });
             }
-            ConstantValue::Int(value) => {
+            ConstantValueVariant::Int(value) => {
                 let value_le_bytes = value.to_signed_bytes_le();
 
                 // If the value is in the i16 bounds, we can emit a simple
@@ -1202,11 +1206,11 @@ impl ConstantValue {
                     panic!("Big integers aren't handled for now");
                 }
             }
-            ConstantValue::String(value) => {
+            ConstantValueVariant::String(value) => {
                 let value_cst = ctx.current_data().constants.get_from_string(value);
                 output.ad(KSTR, result_slot, value_cst);
             }
-            ConstantValue::Tuple(values) | ConstantValue::List(values) => {
+            ConstantValueVariant::Tuple(values) | ConstantValueVariant::List(values) => {
                 // Create the complex constant, base of the table
                 let mut array_part = Vec::new();
                 let mut remains = Vec::new();
@@ -1234,7 +1238,7 @@ impl ConstantValue {
 
                 // TODO: Set the object meta-table accordingly to its type
             }
-            ConstantValue::Object(items) => {
+            ConstantValueVariant::Object(items) => {
                 // Split constants that can be expressed by a table constant
                 // element from constants that need to be loaded separately.
                 let mut hash_part = Vec::new();
