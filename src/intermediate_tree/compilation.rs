@@ -313,7 +313,7 @@ impl Node {
                 output.ad(ISNEP, result_slot, PRIM_NIL);
                 output.cgoto(ctx, next_label);
                 if *is_safe {
-                    emit_global_read(ctx, output, "<lkql_unit>", result_slot);
+                    emit_global_read(ctx, output, result_slot, "<lkql_unit>");
                 } else {
                     emit_runtime_error(
                         ctx,
@@ -338,7 +338,7 @@ impl Node {
                 output.ad(ISNEP, result_slot, PRIM_NIL);
                 output.cgoto(ctx, next_label);
                 if *is_safe {
-                    emit_global_read(ctx, output, "<lkql_unit>", result_slot);
+                    emit_global_read(ctx, output, result_slot, "<lkql_unit>");
                 } else {
                     emit_runtime_error(ctx, output, "Index out of bounds");
                 }
@@ -524,7 +524,7 @@ impl Node {
                         // Finally, if a built-in is named like the accessed
                         // symbol, get it in the global table.
                         if ctx.builtins.contains(identifier.text.as_str()) {
-                            emit_global_read(ctx, output, &identifier.text, result_slot);
+                            emit_global_read(ctx, output, result_slot, &identifier.text);
                         }
                         // If all previous step failed, the symbol doesn't
                         // exists, so we emit an error about it.
@@ -554,12 +554,12 @@ impl Node {
 
             // --- Non-trivial literals
             NodeVariant::TupleLiteral(elements) | NodeVariant::ListLiteral(elements) => {
-                Self::compile_table(ctx, owning_unit, output, elements, &Vec::new(), result_slot);
+                Self::compile_table(ctx, owning_unit, output, result_slot, elements, &Vec::new());
 
                 // TODO: Set the object meta-table accordingly to its type
             }
             NodeVariant::ObjectLiteral(items) => {
-                Self::compile_table(ctx, owning_unit, output, &Vec::new(), items, result_slot);
+                Self::compile_table(ctx, owning_unit, output, result_slot, &Vec::new(), items);
 
                 // TODO: Set the object meta-table accordingly to its type
             }
@@ -998,9 +998,9 @@ impl Node {
         ctx: &mut CompilationContext,
         owning_unit: &ExecutionUnit,
         output: &mut ExtendedInstructionBuffer,
+        result_slot: u8,
         array_part_nodes: &Vec<Node>,
         hash_part_nodes: &Vec<(Identifier, Node)>,
-        result_slot: u8,
     ) {
         // Create the constant array part
         let mut array_part = Vec::new();
@@ -1101,9 +1101,9 @@ impl Node {
                 ctx,
                 owning_unit,
                 output,
+                call_slots.start + 2,
                 &Vec::new(),
                 named_args,
-                call_slots.start + 2,
             );
         }
 
@@ -1169,10 +1169,10 @@ impl ConstantValue {
     ) {
         match self {
             ConstantValue::Null => {
-                emit_global_read(ctx, output, "<lkql_null>", result_slot);
+                emit_global_read(ctx, output, result_slot, "<lkql_null>");
             }
             ConstantValue::Unit => {
-                emit_global_read(ctx, output, "<lkql_unit>", result_slot);
+                emit_global_read(ctx, output, result_slot, "<lkql_unit>");
             }
             ConstantValue::Bool(value) => {
                 output.ad(KPRI, result_slot, if *value { PRIM_TRUE } else { PRIM_FALSE });
@@ -1314,7 +1314,7 @@ fn emit_runtime_error(
 
     // Reserve temporary slots, fill them and call the function
     let call_slots = ctx.current_frame_mut().reserve_contiguous_slots(3);
-    emit_global_read(ctx, output, "error", call_slots.start);
+    emit_global_read(ctx, output, call_slots.start, "error");
     output.ad(KSTR, call_slots.end - 1, message_cst);
     output.abc(CALL, call_slots.start, 1, 2);
 
@@ -1330,7 +1330,7 @@ fn emit_debug_print(
 ) {
     // Generate instructions for the call
     let call_slots = ctx.current_frame_mut().reserve_contiguous_slots(3);
-    emit_global_read(ctx, output, "print", call_slots.start);
+    emit_global_read(ctx, output, call_slots.start, "print");
     output.ad(MOV, call_slots.end - 1, slot as u16);
     output.abc(CALL, call_slots.start, 1, 2);
 
@@ -1437,8 +1437,8 @@ fn _access_table_field(
 fn emit_global_read(
     ctx: &mut CompilationContext,
     output: &mut ExtendedInstructionBuffer,
-    global_name: &str,
     result_slot: u8,
+    global_name: &str,
 ) {
     let global_name_cst = ctx.current_data().constants.get_from_string(global_name);
     output.ad(GGET, result_slot, global_name_cst);
