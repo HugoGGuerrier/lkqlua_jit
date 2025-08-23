@@ -436,33 +436,13 @@ impl Node {
                     right_access.release(ctx);
                 }
             }
-            NodeVariant::LogicBinOp { .. } => {
+            NodeVariant::LogicBinOp { .. } | NodeVariant::CompBinOp { .. } => {
                 // Create required labels
                 let if_false_label = output.new_label();
                 let next_label = output.new_label();
 
                 // Compile the current node as branching to emit short
                 // circuiting instructions
-                self.compile_as_branching(ctx, owning_unit, output, if_false_label);
-
-                // Emit the code to set the result to "true"
-                output.ad(KPRI, result_slot, PRIM_TRUE);
-                output.cgoto(ctx, next_label);
-
-                // Emit the code to set the result to "false"
-                output.label(if_false_label);
-                output.ad(KPRI, result_slot, PRIM_FALSE);
-
-                // Label the next instruction as such
-                output.label(next_label);
-            }
-            NodeVariant::CompBinOp { .. } => {
-                // Create required labels
-                let if_false_label = output.new_label();
-                let next_label = output.new_label();
-
-                // Compile the current node as branching to emit conditional
-                // instructions.
                 self.compile_as_branching(ctx, owning_unit, output, if_false_label);
 
                 // Emit the code to set the result to "true"
