@@ -1326,22 +1326,6 @@ fn emit_runtime_error(
     ctx.current_frame_mut().release_slots(call_slots);
 }
 
-/// Emit instructions to print the provided slot.
-fn emit_debug_print(
-    ctx: &mut CompilationContext,
-    output: &mut ExtendedInstructionBuffer,
-    slot: u8,
-) {
-    // Generate instructions for the call
-    let call_slots = ctx.current_frame_mut().reserve_contiguous_slots(3);
-    emit_global_read(ctx, output, call_slots.start, "print");
-    output.ad(MOV, call_slots.end - 1, slot as u16);
-    output.abc(CALL, call_slots.start, 1, 2);
-
-    // Free slots reserved for the call
-    ctx.current_frame_mut().release_slots(call_slots);
-}
-
 /// Util functio to get a table element by its index.
 fn emit_table_index_read(
     ctx: &mut CompilationContext,
