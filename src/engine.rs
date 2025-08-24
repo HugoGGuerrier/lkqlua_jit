@@ -5,7 +5,6 @@
 
 use crate::{
     builtins::get_builtins,
-    bytecode::BytecodeBuffer,
     lua::{
         LuaState, call, close_lua_state, load_buffer, new_lua_state, open_lua_libs,
         push_c_function, set_global,
@@ -46,13 +45,9 @@ impl Engine {
 
     /// Run the given bytecode buffer in the engine, returning the potential
     /// report in case of a runtime error.
-    pub fn run_bytecode_buffer(&self, buffer: &BytecodeBuffer) -> Result<(), Report> {
-        // Encode the bytecode buffer to a byte vector
-        let mut encoded_bytecode = Vec::new();
-        buffer.encode(&mut encoded_bytecode);
-
+    pub fn run_bytecode(&self, bytecode_buffer: &Vec<u8>) -> Result<(), Report> {
         // Load the bytecode buffer in the Lua state
-        if !load_buffer(self.lua_state, &encoded_bytecode, "<bytecode>") {
+        if !load_buffer(self.lua_state, bytecode_buffer, "<bytecode>") {
             panic!("Cannot load the provided bytecode buffer");
         }
 

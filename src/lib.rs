@@ -11,6 +11,7 @@ use std::{
 };
 
 use clap::ValueEnum;
+use pretty_hex::PrettyHex;
 
 use crate::{
     engine::Engine, intermediate_tree::ExecutionUnit, report::Report, sources::SourceRepository,
@@ -95,9 +96,19 @@ impl<O: Write, E: Write> ExecutionContext<O, E> {
             writeln!(self.config.std_out, "{}\n", bytecode_buffer)?;
         }
 
+        // Encode the bytecode buffer as a byte vector
+        let mut encoded_bytecode_buffer = Vec::new();
+        bytecode_buffer.encode(&mut encoded_bytecode_buffer);
+
+        // If required, display the raw bytecode buffer
+        if self.config.is_verbose(VerboseElement::RawBytecode) {
+            writeln!(self.config.std_out, "===== Raw bytecode =====\n")?;
+            writeln!(self.config.std_out, "{:?}\n", encoded_bytecode_buffer.hex_dump())?;
+        }
+
         // Use the engine to run the bytecode
         time_point = Instant::now();
-        let res = self.engine.run_bytecode_buffer(&bytecode_buffer);
+        let res = self.engine.run_bytecode(&encoded_bytecode_buffer);
         timings.push((String::from("execution"), time_point.elapsed()));
 
         // If required, display timing information
@@ -150,4 +161,5 @@ pub enum VerboseElement {
     ParsingTree,
     LoweringTree,
     Bytecode,
+    RawBytecode,
 }

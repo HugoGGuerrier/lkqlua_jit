@@ -198,6 +198,7 @@ dependencies = [
  "leb128",
  "liblkqllang",
  "num-bigint",
+ "pretty-hex",
 ]
 
 [[package]]
@@ -233,6 +234,12 @@ name = "once_cell_polyfill"
 version = "1.70.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a4895175b425cb1f87721b59f0f286c2092bd4af812243672510e1ac53e2e0ad"
+
+[[package]]
+name = "pretty-hex"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbc83ee4a840062f368f9096d80077a9841ec117e17e7f700df81958f1451254"
 
 [[package]]
 name = "proc-macro2"
