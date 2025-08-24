@@ -302,8 +302,11 @@ pub const PRIM_TRUE: u16 = 2;
 /// specified in the [`bytecode`](mod@self) module.
 #[derive(Debug)]
 pub struct BytecodeBuffer {
-    // Function prototypes, the last one is considered as the main
+    /// Function prototypes, the last one is considered as the main.
     pub prototypes: Vec<Prototype>,
+
+    /// Name of the source this bytecode buffer is coming from.
+    pub source_name: String,
 }
 
 impl Display for BytecodeBuffer {
@@ -331,10 +334,13 @@ impl BytecodeBuffer {
         // Add the flags byte
         output_buffer.push(
             if cfg!(target_endian = "big") { FLAG_H_IS_BIG_ENDIAN } else { 0 }
-                | FLAG_H_IS_STRIPPED
                 | FLAG_H_HAS_FFI
                 | FLAG_H_FR2,
         );
+
+        // Add the source name
+        write_uleb128(output_buffer, self.source_name.len() as u64);
+        output_buffer.extend_from_slice(self.source_name.as_bytes());
 
         // Add prototypes
         self.prototypes.iter().for_each(|p| p.encode(output_buffer));
@@ -360,10 +366,20 @@ pub struct Prototype {
     // --- Instructions
     pub instructions: Vec<Instruction>,
 
-    // --- Constants
-    pub up_values: Vec<UpValueConstant>,
+    // --- Up-values and constants
+    pub up_values: Vec<UpValue>,
     pub complex_consts: Vec<ComplexConstant>,
     pub numeric_consts: Vec<NumericConstant>,
+
+    // --- Debug information
+    /// The index first line of the prototype, first line of the source being
+    /// indexed as `1`.
+    pub first_line: usize,
+
+    /// Number of lines bellow the starting line that belongs to this
+    /// prototype.
+    pub line_count: usize,
+    pub variable_data: Vec<VariableData>,
 }
 
 impl Display for Prototype {
@@ -388,11 +404,14 @@ impl Display for Prototype {
         }
         let instruction_padding = self.instructions.len().to_string().len();
         let format_inst = |(i, inst): (usize, &Instruction)| -> String {
-            let additional_info = match inst {
-                Instruction::AD { d, op: JMP, .. } => format!(
-                    "  => {:0instruction_padding$}",
-                    (*d as isize - JUMP_BIASING as isize + 1) + i as isize
-                ),
+            let additional_info = match inst.op_code {
+                JMP => match &inst.variant {
+                    InstructionVariant::AD { d, .. } => format!(
+                        "  => {:0instruction_padding$}",
+                        (*d as isize - JUMP_BIASING as isize + 1) + i as isize
+                    ),
+                    _ => unreachable!(),
+                },
                 _ => String::new(),
             };
             format!("{:0instruction_padding$}  {inst}{additional_info}", i)
@@ -453,18 +472,29 @@ impl Prototype {
             panic!("Cannot encode the prototype {:?}, too much up-values", self);
         }
 
-        // Add constant counts
+        // Add constant and up-value counts
         prototype_bytes.push(self.up_values.len() as u8);
         write_uleb128(&mut prototype_bytes, self.complex_consts.len() as u64);
         write_uleb128(&mut prototype_bytes, self.numeric_consts.len() as u64);
 
-        // Add function instructions
+        // Add the instruction count
         write_uleb128(&mut prototype_bytes, self.instructions.len() as u64);
+
+        // Get the debug section to know its size when emitting the first debug
+        // info part.
+        let mut debug_section = self.debug_section();
+
+        // Write the first debug information part
+        write_uleb128(&mut prototype_bytes, debug_section.len() as u64);
+        write_uleb128(&mut prototype_bytes, self.first_line as u64);
+        write_uleb128(&mut prototype_bytes, self.line_count as u64);
+
+        // Add function instructions
         self.instructions
             .iter()
             .for_each(|i| i.encode(&mut prototype_bytes));
 
-        // Add the constant table
+        // Add up-values and constants
         self.up_values
             .iter()
             .for_each(|uv| uv.encode(&mut prototype_bytes));
@@ -476,37 +506,96 @@ impl Prototype {
             .iter()
             .for_each(|n| n.encode(&mut prototype_bytes));
 
+        // Add the debug section
+        prototype_bytes.append(&mut debug_section);
+
         // Finally copy the prototype bytes into the output buffer with its
         // size.
         write_uleb128(output_buffer, prototype_bytes.len() as u64);
         output_buffer.append(&mut prototype_bytes);
     }
+
+    /// Util function to create the debug data section as a byte buffer and
+    /// return it.
+    fn debug_section(&self) -> Vec<u8> {
+        // Create the debug data section
+        let mut res: Vec<u8> = Vec::new();
+
+        // Add line offsets
+        let mut offset_buffer: Vec<u8> = Vec::with_capacity(4);
+        for i in &self.instructions {
+            let offset = i.source_line - self.first_line;
+            match self.line_count {
+                0..256 => offset_buffer.push(offset as u8),
+                256..65536 => offset_buffer.extend_from_slice(&(offset as u16).to_ne_bytes()),
+                65536.. => offset_buffer.extend_from_slice(&(offset as u32).to_ne_bytes()),
+            };
+            res.append(&mut offset_buffer);
+        }
+
+        // Append up-value names
+        for uv in &self.up_values {
+            res.extend_from_slice(uv.name.as_bytes());
+            res.push(0);
+        }
+
+        // Then, add all variable information
+        let mut previous_data: Option<&VariableData> = None;
+        for data in &self.variable_data {
+            data.encode(&mut res, previous_data);
+            let _ = previous_data.insert(data);
+        }
+
+        // Finally place the `0` at the debug section end and return the
+        // result.
+        res.push(0);
+        res
+    }
 }
 
-/// This enumeration represents the two possible encodings of a bytecode
-/// instruction.
+/// This type represents an instruction in a bytecode prototype.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Instruction {
+    /// Operation code of this instruction.
+    pub op_code: u8,
+
+    /// Variant part of the instruction, whether it as the AD or the ABC
+    /// layout.
+    pub variant: InstructionVariant,
+
+    /// The source line this instruction is from.
+    pub source_line: usize,
+}
+
+/// This enum represents the variant part of an instruction.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Instruction {
-    ABC { a: u8, b: u8, c: u8, op: u8 },
-    AD { a: u8, d: u16, op: u8 },
+pub enum InstructionVariant {
+    ABC { a: u8, b: u8, c: u8 },
+    AD { a: u8, d: u16 },
 }
 
 impl Display for Instruction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Instruction::ABC { a, b, c, op } => write!(
+        match &self.variant {
+            InstructionVariant::ABC { a, b, c } => write!(
                 f,
                 "{: <6} | {: <3} | {: <3} | {: <3}",
-                op_codes::NAME_ARRAY[*op as usize],
+                op_codes::NAME_ARRAY[self.op_code as usize],
                 a,
                 b,
                 c,
             ),
-            Instruction::AD { a, d, op } => {
-                if *op == JMP {
+            InstructionVariant::AD { a, d } => {
+                if self.op_code == JMP {
                     write!(f, "JMP    | {: <3} | {:#06x}", a, d)
                 } else {
-                    write!(f, "{: <6} | {: <3} | {: <6}", op_codes::NAME_ARRAY[*op as usize], a, d,)
+                    write!(
+                        f,
+                        "{: <6} | {: <3} | {: <6}",
+                        op_codes::NAME_ARRAY[self.op_code as usize],
+                        a,
+                        d,
+                    )
                 }
             }
         }
@@ -514,13 +603,23 @@ impl Display for Instruction {
 }
 
 impl Instruction {
+    /// Shortcut function to create an instruction with the `ABC` variant.
+    pub fn abc(op_code: u8, a: u8, b: u8, c: u8, source_line: usize) -> Self {
+        Self { op_code, variant: InstructionVariant::ABC { a, b, c }, source_line }
+    }
+
+    /// Shortcut function to create an instruction with the `AD` variant.
+    pub fn ad(op_code: u8, a: u8, d: u16, source_line: usize) -> Self {
+        Self { op_code, variant: InstructionVariant::AD { a, d }, source_line }
+    }
+
     /// Encode the instruction as a byte vector, following the current system
     /// byte order.
     pub fn encode(&self, output_buffer: &mut Vec<u8>) {
-        let mut le_inst = match self {
-            Instruction::ABC { a, b, c, op } => vec![*op, *a, *c, *b],
-            Instruction::AD { a, d, op } => {
-                let mut res = vec![*op, *a];
+        let mut le_inst = match &self.variant {
+            InstructionVariant::ABC { a, b, c } => vec![self.op_code, *a, *c, *b],
+            InstructionVariant::AD { a, d } => {
+                let mut res = vec![self.op_code, *a];
                 res.append(&mut d.to_le_bytes().to_vec());
                 res
             }
@@ -540,10 +639,19 @@ impl Instruction {
     }
 }
 
-/// This enumeration represents an up-value constant in a LuaJIT bytecode
-/// buffer.
+/// This type represents an up-value in a bytecode prototype.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UpValue {
+    /// Name of the up-value.
+    pub name: String,
+
+    /// The variant part of the up-value.
+    pub variant: UpValueVariant,
+}
+
+/// This enumeration represents the variant part of an up-value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum UpValueConstant {
+pub enum UpValueVariant {
     /// Case where the up-value references a local slot in the parent
     /// prototype.
     ParentLocalSlot(u16),
@@ -553,22 +661,37 @@ pub enum UpValueConstant {
     ParentUpValue(u16),
 }
 
-impl Display for UpValueConstant {
+impl Display for UpValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self)
     }
 }
 
-impl UpValueConstant {
+impl UpValue {
+    /// Shortcut function to create an up-value to a local slot of the parent
+    /// frame.
+    pub fn parent_local(name: &str, local_slot: u16) -> Self {
+        UpValue {
+            name: String::from(name),
+            variant: UpValueVariant::ParentLocalSlot(local_slot),
+        }
+    }
+
+    /// Shortcut function to create an up-value to an up-value of the parent
+    /// frame.
+    pub fn parent_up_value(name: &str, up_value: u16) -> Self {
+        UpValue { name: String::from(name), variant: UpValueVariant::ParentUpValue(up_value) }
+    }
+
     /// Encode the up-value constant to the LuaJIT bytecode format and add the
     /// result to the provided output buffer.
     pub fn encode(&self, output_buffer: &mut Vec<u8>) {
-        match self {
-            UpValueConstant::ParentLocalSlot(s) => {
+        match &self.variant {
+            UpValueVariant::ParentLocalSlot(s) => {
                 let final_val = s | 0xC000;
                 output_buffer.write_all(&final_val.to_ne_bytes()).unwrap();
             }
-            UpValueConstant::ParentUpValue(s) => {
+            UpValueVariant::ParentUpValue(s) => {
                 output_buffer.write_all(&s.to_ne_bytes()).unwrap();
             }
         }
@@ -697,6 +820,42 @@ impl NumericConstant {
     }
 }
 
+/// This type represents debug information for a local variable.
+#[derive(Debug, Clone, PartialEq)]
+pub struct VariableData {
+    pub name: String,
+
+    /// Instruction index (0-based) from which this variable becomes available
+    /// to read.
+    pub birth_instruction: usize,
+
+    /// Instruction index (0-based) from which this variable is not readable
+    /// anymore.
+    pub death_instruction: usize,
+}
+
+impl VariableData {
+    /// Encode the variable data in the LuaJIT bytecode format and add the
+    /// result to the provided output buffer.
+    pub fn encode(
+        &self,
+        output_buffer: &mut Vec<u8>,
+        previous_variable_data: Option<&VariableData>,
+    ) {
+        // Push the `\0` terminated variable name
+        output_buffer.extend_from_slice(self.name.as_bytes());
+        output_buffer.push(0);
+
+        // Compute and write the compressed life range of the variable
+        write_uleb128(
+            output_buffer,
+            (self.birth_instruction + 1
+                - previous_variable_data.map_or(0, |v| v.birth_instruction + 1)) as u64,
+        );
+        write_uleb128(output_buffer, (self.death_instruction - self.birth_instruction) as u64);
+    }
+}
+
 /// Function to write an ULEB128 encoded value into the given output buffer.
 fn write_uleb128(output_buffer: &mut Vec<u8>, val: u64) {
     leb128::write::unsigned(output_buffer, val).unwrap();
@@ -725,17 +884,57 @@ mod tests {
             has_ffi: true,
             arg_count: 3,
             frame_size: 4,
-            instructions: vec![Instruction::AD { a: 1, d: 2, op: 3 }],
-            up_values: vec![UpValueConstant::ParentLocalSlot(0)],
+            instructions: vec![Instruction::ad(3, 1, 2, 1), Instruction::abc(4, 1, 2, 3, 2)],
+            up_values: vec![
+                UpValue::parent_local("uv1", 0),
+                UpValue::parent_up_value("uv2", 1),
+            ],
             complex_consts: vec![ComplexConstant::Child],
             numeric_consts: vec![NumericConstant::Integer(42)],
+            first_line: 0,
+            line_count: 2,
+            variable_data: vec![
+                VariableData {
+                    name: String::from("var1"),
+                    birth_instruction: 1,
+                    death_instruction: 3,
+                },
+                VariableData {
+                    name: String::from("var2"),
+                    birth_instruction: 2,
+                    death_instruction: 3,
+                },
+            ],
         }
         .encode(&mut bytes);
         assert_eq!(
             bytes,
             vec![
-                0x0F, 0x05, 0x03, 0x04, 0x01, 0x01, 0x01, 0x01, 0x03, 0x01, 0x02, 0x00, 0x00, 0xC0,
-                0x00, 0x54
+                0x31, // Prototype size
+                0x05, // Flags
+                0x03, // Arg count
+                0x04, // Frame size
+                0x02, // Up-value count
+                0x01, // Complex constant count
+                0x01, // Numeric constant count
+                0x02, // Instruction count
+                0x19, // Debug info size
+                0x00, // First line
+                0x02, // Line count
+                0x03, 0x01, 0x02, 0x00, // Instruction #1
+                0x04, 0x01, 0x03, 0x02, // Instruction #2
+                0x00, 0xC0, // Up-value #1
+                0x01, 0x00, // Up-value #2
+                0x00, // Child constant
+                0x54, // Integer constant
+                0x01, 0x02, // Line offsets
+                'u' as u8, 'v' as u8, '1' as u8, 0x00, // Up-value #1 name
+                'u' as u8, 'v' as u8, '2' as u8, 0x00, // Up-value #2 name
+                'v' as u8, 'a' as u8, 'r' as u8, '1' as u8, 0x00, // Variable #1 name
+                0x02, 0x02, // Variable #1 lifespan
+                'v' as u8, 'a' as u8, 'r' as u8, '2' as u8, 0x00, // Variable #2 name
+                0x01, 0x01, // Variable #1 lifespan
+                0x00, // Debug info end
             ]
         )
     }
@@ -745,12 +944,12 @@ mod tests {
         let mut bytes = Vec::<u8>::new();
 
         // Try encoding a parent slot referencing up-value
-        UpValueConstant::ParentLocalSlot(42).encode(&mut bytes);
+        UpValue::parent_local("dum", 42).encode(&mut bytes);
         assert_eq!(bytes, vec![0x2A, 0xC0]);
         bytes.clear();
 
         // Try encoding a parent up-value referencing up-value
-        UpValueConstant::ParentUpValue(42).encode(&mut bytes);
+        UpValue::parent_up_value("dum", 42).encode(&mut bytes);
         assert_eq!(bytes, vec![0x2A, 0x00]);
         bytes.clear();
     }

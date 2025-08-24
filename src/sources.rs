@@ -247,6 +247,12 @@ impl PartialOrd for Location {
     }
 }
 
+impl Ord for Location {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.line.cmp(&other.line).then(self.col.cmp(&other.col))
+    }
+}
+
 impl Location {
     /// Create a new location from a [`liblkqllang::SourceLocation`] object.
     pub fn from_lkql_location(location: SourceLocation) -> Self {
