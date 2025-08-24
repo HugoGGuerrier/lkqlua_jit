@@ -547,10 +547,11 @@ fn pretty_print_node_helper(
         let children_string = node_children
             .iter()
             .map(|(name, image)| {
-                let final_image = if image.contains('\n') {
+                let trimmed_image = image.trim_start_matches(INDENT_STR);
+                let final_image = if image.contains('\n') || trimmed_image.starts_with('|') {
                     format!("\n{image}")
                 } else {
-                    format!(" {}", image.trim_start_matches(INDENT_STR))
+                    format!(" {trimmed_image}")
                 };
                 format!("{indent}|{name}:{final_image}")
             })
