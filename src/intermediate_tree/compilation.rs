@@ -1493,7 +1493,7 @@ impl ExtendedInstructionBuffer {
 
 /// Util function to add a collection of symbols in the current frame as local
 /// bindings. This function also checks duplicated declarations and add
-/// corresponding diagnosis in the compilation context.
+/// corresponding diagnostics in the compilation context.
 fn declare_locals(ctx: &mut CompilationContext, symbols: &Vec<Identifier>) {
     for symbol in symbols {
         let maybe_local_slot = ctx.current_frame().is_conflicting(&symbol.text);
@@ -1733,8 +1733,8 @@ struct CompilationContext {
     /// the compilation of execution units (see [`ExecutionUnit::compile`]).
     prototypes: Vec<Prototype>,
 
-    /// A collection of diagnosis collected during the compilation process, if
-    /// it is not empty, it means that the result of the compilation may be
+    /// A collection of diagnostics collected during the compilation process,
+    /// if it is not empty, it means that the result of the compilation may be
     /// invalid.
     diagnostics: Vec<Report>,
 }

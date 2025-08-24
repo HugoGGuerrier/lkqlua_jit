@@ -40,8 +40,8 @@ impl<O: Write, E: Write> ExecutionContext<O, E> {
     }
 
     /// Just run the provided LKQL file, don't return anything and report all
-    /// diagnosis and messages in the [`EngineConfig::std_err`] of the related
-    /// configuration.
+    /// diagnostics and messages in the [`EngineConfig::std_err`] of the
+    /// related configuration.
     pub fn just_run_lkql_file(&mut self, file: &Path) {
         // Execute the file and get the result
         let exec_res = self.execute_lkql_file(file);
