@@ -610,8 +610,8 @@ impl Node {
             }
             NodeVariant::ReadSymbol(identifier) => {
                 // First try getting the symbol in the local frame
-                let maybe_local_slot = ctx.current_frame().get_local(&identifier.text);
-                if let Some(BoundSlot { slot, is_init: true, .. }) = maybe_local_slot {
+                let maybe_local_binding = ctx.current_frame().get_local(&identifier.text);
+                if let Some(BindingData { slot, is_init: true, .. }) = maybe_local_binding {
                     output.ad(&self.origin_location, MOV, result_slot, slot as u16);
                 } else {
                     // Then try to look in the up-values
@@ -809,8 +809,8 @@ impl Node {
             }
 
             NodeVariant::ReadSymbol(identifier) => {
-                let maybe_local_slot = ctx.current_frame().get_local(&identifier.text);
-                if let Some(BoundSlot { slot, is_init: true, .. }) = maybe_local_slot {
+                let maybe_local_binding = ctx.current_frame().get_local(&identifier.text);
+                if let Some(BindingData { slot, is_init: true, .. }) = maybe_local_binding {
                     ValueAccess::Direct(slot)
                 } else {
                     fallback(ctx, owning_unit, output, self)
@@ -1831,7 +1831,7 @@ struct ExecUnitCompilationData {
     identifier: String,
     has_child: bool,
     constants: ConstantRepository,
-    dead_bindings: HashMap<String, BoundSlot>,
+    dead_bindings: HashMap<String, BindingData>,
 }
 
 impl ExecUnitCompilationData {
@@ -1960,7 +1960,7 @@ struct Frame {
     parent_frame: Option<Rc<RefCell<Frame>>>,
 
     /// Slots of the frame, each one being associated with its name.
-    bindings: HashMap<String, BoundSlot>,
+    bindings: HashMap<String, BindingData>,
 
     /// Variant part of the frame, containing additional information.
     variant: FrameVariant,
@@ -2021,9 +2021,9 @@ impl Frame {
 
     // --- Locals
 
-    /// Get the slot associated to the provided name in the current semantic
+    /// Get the data associated to the provided name in the current semantic
     /// frame if any.
-    fn get_local(&self, name: &str) -> Option<BoundSlot> {
+    fn get_local(&self, name: &str) -> Option<BindingData> {
         match &self.variant {
             FrameVariant::Semantic { .. } => self.bindings.get(name).cloned(),
             FrameVariant::Lexical => self
@@ -2035,8 +2035,8 @@ impl Frame {
     }
 
     /// Get whether the provided name is conflicting with a local in the
-    /// current frame, returning the associated slot if so.
-    fn is_conflicting(&self, name: &str) -> Option<BoundSlot> {
+    /// current frame, returning the associated data if so.
+    fn is_conflicting(&self, name: &str) -> Option<BindingData> {
         self.bindings.get(name).cloned()
     }
 
@@ -2046,7 +2046,7 @@ impl Frame {
         let local_slot = self.reserve_contiguous_slots(1).start;
         self.bindings.insert(
             String::from(name),
-            BoundSlot::new(declaration_location.clone(), local_slot),
+            BindingData::new(declaration_location.clone(), local_slot),
         );
     }
 
@@ -2300,7 +2300,7 @@ impl Frame {
 
 /// This type represents a frame slot that is bound to a lexical symbol.
 #[derive(Debug, Clone)]
-struct BoundSlot {
+struct BindingData {
     /// Where in the source this binding has been declared
     declaration_location: SourceSection,
 
@@ -2327,7 +2327,7 @@ struct BoundSlot {
     closing_kind: ClosingKind,
 }
 
-impl BoundSlot {
+impl BindingData {
     fn new(declaration_location: SourceSection, slot: u8) -> Self {
         Self {
             declaration_location,
