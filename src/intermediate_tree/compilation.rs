@@ -43,6 +43,11 @@ impl ExecutionUnit {
         // Open the initial compilation context and create the prototypes vector
         let mut compile_context = CompilationContext::new();
 
+        // Create the initial execution unit compilation data holder
+        compile_context
+            .exec_unit_data_stack
+            .push(ExecUnitCompilationData::new(self.name.clone()));
+
         // Compile the current execution unit
         self.internal_compile(&mut compile_context);
 
@@ -63,10 +68,11 @@ impl ExecutionUnit {
         // Open a new semantic frame for this function, and push a new data
         // holder in the compilation context.
         let parent_frame = ctx.current_frame.clone();
+        let current_identifier = self.id(&ctx.current_data().identifier);
         let current_frame = Rc::new(RefCell::new(Frame::new(Some(parent_frame.clone()))));
         ctx.current_frame = current_frame;
         ctx.exec_unit_data_stack
-            .push(ExecUnitCompilationData::new());
+            .push(ExecUnitCompilationData::new(current_identifier));
 
         // Compile the execution unit
         self.internal_compile(ctx);
@@ -86,7 +92,7 @@ impl ExecutionUnit {
         let mut is_variadic = false;
 
         // Compile the execution unit
-        let locals_to_release = match &self.variant {
+        match &self.variant {
             ExecutionUnitVariant::Module { symbols, elements, .. } => {
                 // Set the emitted prototype as variadic
                 is_variadic = true;
@@ -132,9 +138,6 @@ impl ExecutionUnit {
                 // Emit returning of the module table
                 instructions.ad(&end_source_section, RET1, result_tmp, 2);
                 ctx.current_frame_mut().release_slot(result_tmp);
-
-                // Return locals to release
-                symbols.clone()
             }
             ExecutionUnitVariant::Function { params, body } => {
                 // Set the argument count
@@ -232,15 +235,12 @@ impl ExecutionUnit {
 
                 // The compile the body as a returning node
                 body.compile_as_return(ctx, self, &mut instructions);
-
-                // Return function parameters to release
-                param_identifiers
             }
         };
 
         // Release locals of the execution unit
         let death_label = instructions.new_label();
-        release_locals(ctx, &locals_to_release, death_label);
+        ctx.release_locals(death_label);
         instructions.label(death_label);
 
         // Emit additional instructions to initialize closed bindings
@@ -254,21 +254,19 @@ impl ExecutionUnit {
         let data = ctx.exec_unit_data_stack.last_mut().unwrap();
 
         // Now we collect variable information to create debug data
-        let mut sorted_dead_bindings = data.dead_bindings.iter().collect::<Vec<_>>();
-        sorted_dead_bindings.sort_by(|(_, lb), (_, rb)| {
-            lb.declaration_location
-                .start
-                .cmp(&rb.declaration_location.start)
-        });
         let label_map = instructions.label_map();
-        let variable_data = sorted_dead_bindings
-            .into_iter()
+        let mut variable_data = data
+            .dead_bindings
+            .iter()
             .map(|(n, b)| VariableData {
-                name: n.clone(),
+                name: b.debug_name.as_ref().unwrap_or(n).clone(),
                 birth_instruction: *label_map.get(&b.birth_label).expect("Unknown label"),
                 death_instruction: *label_map.get(&b.death_label).expect("Unknown label"),
             })
             .collect::<Vec<_>>();
+
+        // We sort variable data by birth label
+        variable_data.sort_by(|lvd, rvd| lvd.birth_instruction.cmp(&rvd.birth_instruction));
 
         // Add the prototype to the output buffer
         match &ctx.current_frame.borrow().variant {
@@ -458,7 +456,7 @@ impl Node {
 
                 // Release the block local bindings
                 let death_label = output.new_label();
-                release_locals(ctx, local_symbols, death_label);
+                ctx.release_locals(death_label);
                 output.label(death_label);
 
                 // Finally, restore the previous frame as the current one
@@ -586,20 +584,29 @@ impl Node {
 
             // --- Symbol accesses
             NodeVariant::InitLocal { symbol, val } => {
+                // Create the birth label of the local variable
                 let birth_label = output.new_label();
+
+                // Then compile the initialization value and place it into the
+                // reserved slot.
                 let binding_slot = ctx.current_frame().get_local(&symbol.text).unwrap();
                 val.compile_as_value(ctx, owning_unit, output, binding_slot.slot);
+
+                // Then label the next instruction as the birthing one and flag
+                // the slot as initialized in the current frame.
                 output.label(birth_label);
                 ctx.current_frame_mut()
                     .init_local(&symbol.text, birth_label);
             }
-            NodeVariant::InitRecLocal { symbol, val } => {
-                let birth_label = output.new_label();
-                let binding_slot = ctx.current_frame().get_local(&symbol.text).unwrap();
-                ctx.current_frame_mut()
-                    .init_local(&symbol.text, birth_label);
-                val.compile_as_value(ctx, owning_unit, output, binding_slot.slot);
-                output.label(birth_label);
+            NodeVariant::InitLocalFun { symbol, child_index } => {
+                Self::compile_child_unit(
+                    ctx,
+                    owning_unit,
+                    output,
+                    &self.origin_location,
+                    &symbol.text,
+                    *child_index as usize,
+                );
             }
             NodeVariant::ReadSymbol(identifier) => {
                 // First try getting the symbol in the local frame
@@ -647,18 +654,28 @@ impl Node {
                 }
             }
 
-            // --- Children function access
-            NodeVariant::ChildFunRef(index) => {
-                // Compile the required child
-                owning_unit.children_units[*index as usize]
+            // --- Lambda function access
+            NodeVariant::LambdaFun(child_index) => {
+                // Add the lambda symbol in the frame locals
+                let lambda_name = &owning_unit.children_units[*child_index as usize]
                     .borrow()
-                    .open_frame_and_compile(ctx);
+                    .name;
+                ctx.current_frame_mut()
+                    .bind_local(lambda_name, &self.origin_location);
 
-                // Add the child constant in the constant table
-                let child_cst = ctx.current_data().constants.get_child();
+                // Compile the child unit
+                Self::compile_child_unit(
+                    ctx,
+                    owning_unit,
+                    output,
+                    &self.origin_location,
+                    lambda_name,
+                    *child_index as usize,
+                );
 
-                // Then emit an instruction to load it locally
-                output.ad(&self.origin_location, FNEW, result_slot, child_cst);
+                // Finally move the lambda value in the result slot
+                let lambda_binding = ctx.current_frame().get_local(lambda_name).unwrap();
+                output.ad(&self.origin_location, MOV, result_slot, lambda_binding.slot as u16);
             }
 
             // --- Non-trivial literals
@@ -1126,7 +1143,7 @@ impl Node {
 
                 // Release the block local bindings
                 let death_label = output.new_label();
-                release_locals(ctx, local_symbols, death_label);
+                ctx.release_locals(death_label);
                 output.label(death_label);
 
                 // Finally, restore the previous frame as the current one
@@ -1141,6 +1158,45 @@ impl Node {
                 output.ad(&self.origin_location, RET1, value_access.slot(), 2);
             }
         }
+    }
+
+    /// Util function to compile a child execution unit. This function
+    /// initialize the local slot associated to the child at the provided index
+    /// with the child identifier as debug name.
+    fn compile_child_unit(
+        ctx: &mut CompilationContext,
+        owning_unit: &ExecutionUnit,
+        output: &mut ExtendedInstructionBuffer,
+        origin_location: &SourceSection,
+        child_symbol: &str,
+        child_index: usize,
+    ) {
+        // Create the birth label of the local variable
+        let birth_label = output.new_label();
+
+        // Get the slot to place the functional value in
+        let binding_slot = ctx.current_frame().get_local(child_symbol).unwrap();
+
+        // Create the child unit identifier
+        let child_unit = &owning_unit.children_units[child_index];
+        let child_unit_id = child_unit.borrow().id(&ctx.current_data().identifier);
+
+        // Flag the local slot as initialized before compiling the
+        // unit to allow the latter to be recursive.
+        ctx.current_frame_mut().init_local_with_debug_name(
+            child_symbol,
+            &child_unit_id,
+            birth_label,
+        );
+        child_unit.borrow().open_frame_and_compile(ctx);
+
+        // Add a child constant in the constant table
+        let child_cst = ctx.current_data().constants.get_child();
+
+        // Finally, emit instruction to set place the functional value
+        // in the local slot.
+        output.ad(origin_location, FNEW, binding_slot.slot, child_cst);
+        output.label(birth_label);
     }
 
     /// Util function used to compile a collection of nodes into a table value.
@@ -1510,19 +1566,6 @@ fn declare_locals(ctx: &mut CompilationContext, symbols: &Vec<Identifier>) {
     }
 }
 
-/// Util function to release a bunch of local symbols and add them to the
-/// current [`ExecUnitCompilationData`] as dead binding.
-fn release_locals(ctx: &mut CompilationContext, symbols: &Vec<Identifier>, death_label: Label) {
-    for local_symbol in symbols {
-        let old_binding = ctx
-            .current_frame_mut()
-            .release_local(&local_symbol.text, death_label);
-        ctx.current_data()
-            .dead_bindings
-            .insert(local_symbol.text.clone(), old_binding);
-    }
-}
-
 /// Emit required instructions to raise a runtime error during the program
 /// execution.
 /// For now this function call the `error` Lua built-in with a simple text
@@ -1546,7 +1589,7 @@ fn emit_runtime_error(
     ctx.current_frame_mut().release_slots(call_slots);
 }
 
-/// Util functio to get a table element by its index.
+/// Util function to get a table element by its index.
 fn emit_table_index_read(
     ctx: &mut CompilationContext,
     output: &mut ExtendedInstructionBuffer,
@@ -1744,7 +1787,7 @@ impl CompilationContext {
         Self {
             builtins: get_builtins().iter().map(|b| b.name).collect(),
             current_frame: Rc::new(RefCell::new(Frame::new(None))),
-            exec_unit_data_stack: vec![ExecUnitCompilationData::new()],
+            exec_unit_data_stack: Vec::new(),
             prototypes: Vec::new(),
             diagnostics: Vec::new(),
         }
@@ -1765,19 +1808,36 @@ impl CompilationContext {
     fn current_frame_mut(&self) -> RefMut<'_, Frame> {
         self.current_frame.borrow_mut()
     }
+
+    /// Util function to release all local bindings of the current frame and
+    /// store remaining data in the current [`ExecUnitCompilationData`]
+    /// instance.
+    fn release_locals(&mut self, death_label: Label) {
+        let old_bindings = self
+            .current_frame_mut()
+            .bindings
+            .drain()
+            .collect::<Vec<_>>();
+        for (name, mut old_binding) in old_bindings {
+            old_binding.death_label = death_label;
+            self.current_data().dead_bindings.insert(name, old_binding);
+        }
+    }
 }
 
 /// This type contains all data required to compile an [`ExecutionUnit`] object
 /// into a bytecode [`Prototype`].
 struct ExecUnitCompilationData {
+    identifier: String,
     has_child: bool,
     constants: ConstantRepository,
     dead_bindings: HashMap<String, BoundSlot>,
 }
 
 impl ExecUnitCompilationData {
-    fn new() -> Self {
+    fn new(identifier: String) -> Self {
         Self {
+            identifier,
             has_child: false,
             constants: ConstantRepository::new(),
             dead_bindings: HashMap::new(),
@@ -1985,20 +2045,17 @@ impl Frame {
 
     /// Mark a the local value designated by the provided name as initialized.
     fn init_local(&mut self, name: &str, birth_label: Label) {
-        let mut binding = self.bindings.get_mut(name).unwrap();
+        let binding = self.bindings.get_mut(name).unwrap();
         binding.is_init = true;
         binding.birth_label = birth_label;
     }
 
-    /// Unbind the slot associated to the provided symbol and place the now
-    /// removed [`BoundSlot`] instance in the provided
-    /// [`ExecUnitCompilationData`].
-    /// This function assumes that the provided symbol is already bound.
-    fn release_local(&mut self, name: &str, death_label: Label) -> BoundSlot {
-        let mut old_binding = self.bindings.remove(name).unwrap();
-        old_binding.death_label = death_label;
-        self.release_slot(old_binding.slot);
-        old_binding
+    /// Mark a the local value designated by the provided name as initialized.
+    fn init_local_with_debug_name(&mut self, name: &str, debug_name: &str, birth_label: Label) {
+        let binding = self.bindings.get_mut(name).unwrap();
+        let _ = binding.debug_name.insert(String::from(debug_name));
+        binding.birth_label = birth_label;
+        binding.is_init = true;
     }
 
     // --- Up-values
@@ -2240,6 +2297,11 @@ struct BoundSlot {
     /// Where in the source this binding has been declared
     declaration_location: SourceSection,
 
+    /// Some bindings may have a debug name. This is a name that is going to be
+    /// used when emitting debug information for this local variable, allowing
+    /// it to have different lexical and runtime names.
+    debug_name: Option<String>,
+
     /// The frame slot that is bound
     slot: u8,
 
@@ -2262,6 +2324,7 @@ impl BoundSlot {
     fn new(declaration_location: SourceSection, slot: u8) -> Self {
         Self {
             declaration_location,
+            debug_name: None,
             slot,
             birth_label: usize::MAX,
             death_label: usize::MAX,

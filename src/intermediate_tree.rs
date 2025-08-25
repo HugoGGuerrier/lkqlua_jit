@@ -36,6 +36,9 @@ pub struct ExecutionUnit {
     /// Source location that was used to create this function object.
     origin_location: SourceSection,
 
+    /// Name of the execution unit.
+    name: String,
+
     /// Execution unit owning (parenting) this one.
     parent_unit: Option<Weak<RefCell<ExecutionUnit>>>,
 
@@ -48,9 +51,6 @@ pub struct ExecutionUnit {
 
 pub enum ExecutionUnitVariant {
     Module {
-        /// The name of the module.
-        name: String,
-
         /// All symbols declared in this module, those are used to fill the
         /// result table and compute the frame size.
         symbols: Vec<Identifier>,
@@ -75,16 +75,19 @@ impl Display for ExecutionUnit {
 }
 
 impl ExecutionUnit {
+    pub fn id(&self, previous_part: &str) -> String {
+        format!("{previous_part}.{}", self.name)
+    }
+
     // --- Pretty printing
 
     fn pretty_print(&self, indent_level: usize) -> String {
         // Start by getting images of the specific children
         let child_level = indent_level + 1;
         let (name, mut pretty_children) = match &self.variant {
-            ExecutionUnitVariant::Module { name, symbols, elements } => (
-                "Module",
+            ExecutionUnitVariant::Module { symbols, elements } => (
+                format!("Module \"{}\"", self.name),
                 vec![
-                    ("name", format!("\"{name}\"")),
                     (
                         "symbols",
                         format!("{:?}", symbols.iter().map(|i| &i.text).collect::<Vec<_>>()),
@@ -93,7 +96,7 @@ impl ExecutionUnit {
                 ],
             ),
             ExecutionUnitVariant::Function { params, body } => (
-                "Function",
+                format!("Function \"{}\"", self.name),
                 vec![
                     (
                         "params",
@@ -132,7 +135,7 @@ impl ExecutionUnit {
         )]);
 
         // Finally pretty print all elements of the execution unit
-        pretty_print_node_helper(&(name, pretty_children), indent_level)
+        pretty_print_node_helper(&(&name, pretty_children), indent_level)
     }
 }
 
@@ -225,17 +228,16 @@ pub enum NodeVariant {
         symbol: Identifier,
         val: Box<Node>,
     },
-    /// Recursive local symbol initialization, meaning that the symbol is
-    /// accessible from the value initializing it (used for function-like
-    /// constructs).
-    InitRecLocal {
+    /// Special local symbol initialization for function-like values. This node
+    /// must be used for recursion and debug purposes.
+    InitLocalFun {
         symbol: Identifier,
-        val: Box<Node>,
+        child_index: u16,
     },
     ReadSymbol(Identifier),
 
-    // --- Children function access
-    ChildFunRef(u16),
+    // --- Lambda function access
+    LambdaFun(u16),
 
     // --- Literals
     NullLiteral,
@@ -359,21 +361,26 @@ impl Node {
                     ("operand", operand.pretty_print(child_level)),
                 ],
             ),
-            NodeVariant::InitLocal { symbol, val } | NodeVariant::InitRecLocal { symbol, val } => (
-                match &self.variant {
-                    NodeVariant::InitLocal { .. } => "InitLocal",
-                    NodeVariant::InitRecLocal { .. } => "InitRecLocal",
-                    _ => unreachable!(),
-                },
+            NodeVariant::InitLocal { symbol, val } => (
+                "InitLocal",
                 vec![
                     ("symbol", format!("\"{}\"", symbol.text)),
                     ("val", val.pretty_print(child_level)),
                 ],
             ),
+            NodeVariant::InitLocalFun { symbol, child_index } => (
+                "InitLocalFun",
+                vec![
+                    ("symbol", format!("\"{}\"", symbol.text)),
+                    ("child_index", child_index.to_string()),
+                ],
+            ),
             NodeVariant::ReadSymbol(symbol) => {
                 ("ReadSymbol", vec![("symbol", format!("\"{}\"", symbol.text))])
             }
-            NodeVariant::ChildFunRef(index) => ("ChildFunRef", vec![("index", index.to_string())]),
+            NodeVariant::LambdaFun(child_index) => {
+                ("ChildFunRef", vec![("child_index", child_index.to_string())])
+            }
             NodeVariant::NullLiteral => ("NullLiteral", vec![]),
             NodeVariant::UnitLiteral => ("UnitLiteral", vec![]),
             NodeVariant::BoolLiteral(value) => ("BoolLiteral", vec![("value", value.to_string())]),
