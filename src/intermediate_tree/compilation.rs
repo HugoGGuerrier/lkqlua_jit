@@ -1864,7 +1864,7 @@ impl ConstantRepository {
     /// Create a new [`ComplexConstant::Child`] and add it to the constant
     /// repository, returning its index.
     fn get_child(&mut self) -> u16 {
-        self.get_from_complex_constant(ComplexConstant::Child)
+        Self::add_constant(ComplexConstant::Child, &mut self.complex_constants)
     }
 
     /// Get the index in [`Self::numeric_constants`] corresponding to the
@@ -1891,12 +1891,12 @@ impl ConstantRepository {
 
     /// More generic function to get the index of a complex constant.
     fn get_from_complex_constant(&mut self, constant: ComplexConstant) -> u16 {
-        Self::add_constant(constant, &mut self.complex_constants)
+        Self::get_or_add_constant(constant, &mut self.complex_constants)
     }
 
     /// More generic function to get the index of a numeric constant.
     fn get_from_numeric_constant(&mut self, constant: NumericConstant) -> u16 {
-        Self::add_constant(constant, &mut self.numeric_constants)
+        Self::get_or_add_constant(constant, &mut self.numeric_constants)
     }
 
     /// Util function to get the index of the provided numeric constant as an
@@ -1910,14 +1910,21 @@ impl ConstantRepository {
     /// The function return the index of the constant in the vector.
     /// This function panics if the number of constant is too high (over
     /// [`u16::MAX`]).
-    fn add_constant<T: PartialEq>(constant: T, constant_vector: &mut Vec<T>) -> u16 {
+    fn get_or_add_constant<T: PartialEq>(constant: T, constant_vector: &mut Vec<T>) -> u16 {
         if let Some(index) = constant_vector.iter().position(|e| e == &constant) {
             index as u16
         } else {
-            constant_vector.push(constant);
-            assert!(constant_vector.len() <= u16::MAX as usize, "Too many constants");
-            (constant_vector.len() - 1) as u16
+            Self::add_constant(constant, constant_vector)
         }
+    }
+
+    /// Util function to add a constant value in the provided vector
+    /// unconditionally, assert that the new vector size doesn't exceed the
+    /// [`u16::MAX`] limit, and return the recently added constant index.
+    fn add_constant<T>(constant: T, constant_vector: &mut Vec<T>) -> u16 {
+        constant_vector.push(constant);
+        assert!(constant_vector.len() <= u16::MAX as usize, "Too many constants");
+        (constant_vector.len() - 1) as u16
     }
 
     /// Util internal function to try adding a constant element in the provided
