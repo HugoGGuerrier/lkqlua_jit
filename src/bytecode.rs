@@ -244,6 +244,7 @@
 
 pub mod extended_bytecode;
 pub mod op_codes;
+pub mod runtime_data;
 
 use std::{fmt::Display, io::Write};
 

@@ -87,7 +87,7 @@ impl<O: Write, E: Write> ExecutionContext<O, E> {
 
         // Compile the lowering tree and execute it
         time_point = Instant::now();
-        let bytecode_buffer = lowering_tree.borrow().compile()?;
+        let (bytecode_buffer, _) = lowering_tree.borrow().compile()?;
         timings.push((String::from("compilation"), time_point.elapsed()));
 
         // If required, display the compiled bytecode

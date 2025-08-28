@@ -123,30 +123,41 @@ impl ExtendedInstructionBuffer {
 
     // --- Information extraction methods
 
-    /// Generate the instruction vector from this buffer of instructions from
-    /// the extended set.
-    pub fn to_instructions(&self, owning_prototype_location: &SourceSection) -> Vec<Instruction> {
-        // Collect all labels in instructions
+    /// Consume the extended instruction buffer to return new vector containing
+    /// extracted and transformed data.
+    pub fn as_instructions_and_locations(
+        self,
+        owning_prototype_location: &SourceSection,
+    ) -> (Vec<Instruction>, Vec<Option<SourceSection>>) {
+        // Get the map associating each label to an instruction index
         let label_map = self.label_map();
 
-        // Translate extended instructions to LuaJIT instructions
-        let mut res = Vec::new();
+        // Split instructions and locations in separated vectors
+        let mut instructions = Vec::new();
+        let mut locations = Vec::new();
         let mut previous_source_line = owning_prototype_location.start.line;
-        self.foreach_with_index(|index, inst| {
+        let mut index = 0;
+        for inst in self.instructions {
+            // Get the instruction location by moving the memory, avoiding a
+            // useless copy.
+            let location = inst.origin_location;
+
             // Start by getting the source line of the instruction to be
             // emitted.
-            let inst_source_line = inst
-                .origin_location
+            let inst_source_line = location
                 .as_ref()
                 .map_or(previous_source_line, |l| l.start.line);
 
-            // Then, translate the extended instruction variant
+            // Then, translate the extended instruction variant to a pure
+            // LuaJIT instruction.
             match &inst.variant {
                 ExtendedInstructionVariant::ABC { op_code, a, b, c } => {
-                    res.push(Instruction::abc(*op_code, *a, *b, *c, inst_source_line))
+                    instructions.push(Instruction::abc(*op_code, *a, *b, *c, inst_source_line));
+                    index += 1;
                 }
                 ExtendedInstructionVariant::AD { op_code, a, d } => {
-                    res.push(Instruction::ad(*op_code, *a, *d, inst_source_line))
+                    instructions.push(Instruction::ad(*op_code, *a, *d, inst_source_line));
+                    index += 1;
                 }
                 ExtendedInstructionVariant::Goto { label, next_available_slot } => {
                     let target_index = *label_map.get(label).expect("Unknown label");
@@ -155,22 +166,31 @@ impl ExtendedInstructionBuffer {
                     } else {
                         Instruction::jump_forward((target_index - index) as u16)
                     };
-                    res.push(Instruction::ad(
+                    instructions.push(Instruction::ad(
                         JMP,
                         *next_available_slot,
                         jump_offset,
                         inst_source_line,
                     ));
+                    index += 1;
                 }
                 _ => (),
             }
 
+            // Add the location in the result only in some cases
+            match &inst.variant {
+                ExtendedInstructionVariant::Label(_) => (),
+                _ => {
+                    locations.push(location);
+                }
+            }
+
             // Finally, save the current source line
             previous_source_line = inst_source_line;
-        });
+        }
 
         // Then, return the result
-        res
+        (instructions, locations)
     }
 
     /// Get the map associating each label to the index of the instruction
@@ -247,7 +267,16 @@ mod tests {
         extended_instructions.ad_no_loc(1, 0, 0);
         extended_instructions.ad_no_loc(2, 0, 0);
         extended_instructions.goto(0, 0);
-        extended_instructions.ad_no_loc(3, 0, 0);
+        extended_instructions.ad(
+            &SourceSection {
+                source: String::from("test"),
+                start: Location { line: 1, col: 2 },
+                end: Location { line: 3, col: 4 },
+            },
+            3,
+            0,
+            0,
+        );
         extended_instructions.goto(1, 0);
         extended_instructions.ad_no_loc(4, 0, 0);
         extended_instructions.ad_no_loc(5, 0, 0);
@@ -256,23 +285,41 @@ mod tests {
         extended_instructions.ad_no_loc(7, 0, 0);
 
         assert_eq!(
-            extended_instructions.to_instructions(&SourceSection {
+            extended_instructions.as_instructions_and_locations(&SourceSection {
                 source: String::from(""),
                 start: Location { line: 42, col: 0 },
                 end: Location { line: 43, col: 0 }
             }),
-            vec![
-                Instruction::ad(0, 0, 0, 42),
-                Instruction::ad(1, 0, 0, 42),
-                Instruction::ad(2, 0, 0, 42),
-                Instruction::ad(JMP, 0, 0x7FFD, 42),
-                Instruction::ad(3, 0, 0, 42),
-                Instruction::ad(JMP, 0, 0x8003, 42),
-                Instruction::ad(4, 0, 0, 42),
-                Instruction::ad(5, 0, 0, 42),
-                Instruction::ad(6, 0, 0, 42),
-                Instruction::ad(7, 0, 0, 42),
-            ]
+            (
+                vec![
+                    Instruction::ad(0, 0, 0, 42),
+                    Instruction::ad(1, 0, 0, 42),
+                    Instruction::ad(2, 0, 0, 42),
+                    Instruction::ad(JMP, 0, 0x7FFD, 42),
+                    Instruction::ad(3, 0, 0, 1),
+                    Instruction::ad(JMP, 0, 0x8003, 1),
+                    Instruction::ad(4, 0, 0, 1),
+                    Instruction::ad(5, 0, 0, 1),
+                    Instruction::ad(6, 0, 0, 1),
+                    Instruction::ad(7, 0, 0, 1),
+                ],
+                vec![
+                    None,
+                    None,
+                    None,
+                    None,
+                    Some(SourceSection {
+                        source: String::from("test"),
+                        start: Location { line: 1, col: 2 },
+                        end: Location { line: 3, col: 4 },
+                    }),
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                ]
+            )
         )
     }
 }

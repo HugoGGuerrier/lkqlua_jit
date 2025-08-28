@@ -22,6 +22,7 @@ use crate::{
             ExtendedInstruction, ExtendedInstructionBuffer, ExtendedInstructionVariant, Label,
         },
         op_codes::*,
+        runtime_data::RuntimeData,
     },
     intermediate_tree::{
         ArithOperator, ArithOperatorVariant, CompOperator, CompOperatorVariant, ExecutionUnit,
@@ -42,24 +43,22 @@ impl ExecutionUnit {
     /// Compile this execution unit as a LuaJIT bytecode buffer. The result of
     /// this function can be used to execute the semantics described by the
     /// execution unit with the LuaJIT engine.
-    pub fn compile(&self) -> Result<BytecodeBuffer, Report> {
+    pub fn compile(&self) -> Result<(BytecodeBuffer, RuntimeData), Report> {
         // Open the initial compilation context and create the prototypes vector
         let mut compile_context = CompilationContext::new();
-
-        // Create the initial execution unit compilation data holder
-        compile_context
-            .exec_unit_data_stack
-            .push(ExecUnitCompilationData::new(self.name.clone()));
 
         // Compile the current execution unit
         self.internal_compile(&mut compile_context);
 
         // Then return the success result
         if compile_context.diagnostics.is_empty() {
-            Ok(BytecodeBuffer {
-                prototypes: compile_context.prototypes,
-                source_name: self.origin_location.source.clone(),
-            })
+            Ok((
+                BytecodeBuffer {
+                    prototypes: compile_context.prototypes,
+                    source_name: self.origin_location.source.clone(),
+                },
+                compile_context.runtime_data,
+            ))
         } else {
             Err(Report::Composed(compile_context.diagnostics))
         }
@@ -68,29 +67,32 @@ impl ExecutionUnit {
     /// Open a new frame in the compilation context and compile this execution
     /// unit using the [`Self::internal_compile`] method.
     fn open_frame_and_compile(&self, ctx: &mut CompilationContext) {
-        // Open a new semantic frame for this function, and push a new data
-        // holder in the compilation context.
+        // Open a new semantic frame for this function
         let parent_frame = ctx.current_frame.clone();
-        let current_identifier = self.id(&ctx.current_data().identifier);
         let current_frame = Rc::new(RefCell::new(Frame::new(Some(parent_frame.clone()))));
         ctx.current_frame = current_frame;
-        ctx.exec_unit_data_stack
-            .push(ExecUnitCompilationData::new(current_identifier));
 
         // Compile the execution unit
         self.internal_compile(ctx);
 
-        // Restore the parent frame and pop the unit data
+        // Restore the parent frame
         ctx.current_frame = parent_frame;
-        ctx.exec_unit_data_stack.pop();
         ctx.current_data().has_child = true;
     }
 
     /// Compile the execution unit and all its children (direct and indirect
     /// ones), and place the result in the provided  `output` buffer.
     fn internal_compile(&self, ctx: &mut CompilationContext) {
+        // Start by adding a new compilation data in the context
+        let new_id = ctx
+            .exec_unit_data_stack
+            .last()
+            .map_or(self.name.clone(), |d| self.id(&d.identifier));
+        ctx.exec_unit_data_stack
+            .push(ExecUnitCompilationData::new(new_id));
+
         // Create compilation working values
-        let mut instructions = ExtendedInstructionBuffer::new();
+        let mut extended_instructions = ExtendedInstructionBuffer::new();
         let mut arg_count = 0;
         let mut is_variadic = false;
 
@@ -105,7 +107,7 @@ impl ExecutionUnit {
 
                 // Compile module elements
                 for elem in elements {
-                    let elem_access = elem.compile_as_access(ctx, self, &mut instructions);
+                    let elem_access = elem.compile_as_access(ctx, self, &mut extended_instructions);
                     elem_access.release(ctx);
                 }
 
@@ -121,12 +123,12 @@ impl ExecutionUnit {
 
                 // Emit instructions to create the module table
                 let empty_table_cst = ctx.current_data().constants.get_empty_table();
-                instructions.ad(&end_source_section, TDUP, result_tmp, empty_table_cst);
+                extended_instructions.ad(&end_source_section, TDUP, result_tmp, empty_table_cst);
                 for symbol in symbols {
                     let local_slot = ctx.current_frame().get_local(&symbol.text).unwrap();
                     emit_table_member_write(
                         ctx,
-                        &mut instructions,
+                        &mut extended_instructions,
                         Some(&end_source_section),
                         local_slot.slot,
                         result_tmp,
@@ -135,10 +137,10 @@ impl ExecutionUnit {
                 }
 
                 // Emit local values closing
-                emit_closing_instruction(&ctx.current_frame(), &mut instructions);
+                emit_closing_instruction(&ctx.current_frame(), &mut extended_instructions);
 
                 // Emit returning of the module table
-                instructions.ad(&end_source_section, RET1, result_tmp, 2);
+                extended_instructions.ad(&end_source_section, RET1, result_tmp, 2);
                 ctx.current_frame_mut().release_slot(result_tmp);
             }
             ExecutionUnitVariant::Function { params, body } => {
@@ -161,42 +163,42 @@ impl ExecutionUnit {
                     let param_slot = ctx.current_frame().get_local(&param_id.text).unwrap();
 
                     // Create working labels
-                    let no_value_label = instructions.new_label();
-                    let test_both_label = instructions.new_label();
-                    let next_label = instructions.new_label();
+                    let no_value_label = extended_instructions.new_label();
+                    let test_both_label = extended_instructions.new_label();
+                    let next_label = extended_instructions.new_label();
 
                     // Test if the parameter has a positional value
-                    instructions.ad_no_loc(ISNEP, param_slot.slot, PRIM_NIL);
-                    instructions.cgoto(ctx, test_both_label);
+                    extended_instructions.ad_no_loc(ISNEP, param_slot.slot, PRIM_NIL);
+                    extended_instructions.cgoto(ctx, test_both_label);
 
                     // If there is no positional value, start by checking if
                     // there is a named value for the parameter.
-                    instructions.ad_no_loc(ISEQP, named_args_slot, PRIM_NIL);
-                    instructions.cgoto(ctx, no_value_label);
+                    extended_instructions.ad_no_loc(ISEQP, named_args_slot, PRIM_NIL);
+                    extended_instructions.cgoto(ctx, no_value_label);
                     emit_table_member_read(
                         ctx,
-                        &mut instructions,
+                        &mut extended_instructions,
                         None,
                         param_slot.slot,
                         named_args_slot,
                         &param_id.text,
                     );
-                    instructions.ad_no_loc(ISNEP, param_slot.slot, PRIM_NIL);
-                    instructions.cgoto(ctx, next_label);
+                    extended_instructions.ad_no_loc(ISNEP, param_slot.slot, PRIM_NIL);
+                    extended_instructions.cgoto(ctx, next_label);
 
                     // If parameter has no value, emit an error
-                    instructions.label(no_value_label);
+                    extended_instructions.label(no_value_label);
                     if let Some(default_value) = maybe_default_value {
                         default_value.compile_as_value(
                             ctx,
                             self,
-                            &mut instructions,
+                            &mut extended_instructions,
                             param_slot.slot,
                         );
                     } else {
                         emit_runtime_error(
                             ctx,
-                            &mut instructions,
+                            &mut extended_instructions,
                             None,
                             &format!("missing value for \"{}\" parameter", param_id.text),
                         );
@@ -204,22 +206,22 @@ impl ExecutionUnit {
 
                     // Test if the parameter have both positional and named
                     // values
-                    instructions.label(test_both_label);
-                    instructions.ad_no_loc(ISEQP, named_args_slot, PRIM_NIL);
-                    instructions.cgoto(ctx, next_label);
+                    extended_instructions.label(test_both_label);
+                    extended_instructions.ad_no_loc(ISEQP, named_args_slot, PRIM_NIL);
+                    extended_instructions.cgoto(ctx, next_label);
                     emit_table_member_read(
                         ctx,
-                        &mut instructions,
+                        &mut extended_instructions,
                         None,
                         param_slot.slot,
                         named_args_slot,
                         &param_id.text,
                     );
-                    instructions.ad_no_loc(ISEQP, param_slot.slot, PRIM_NIL);
-                    instructions.cgoto(ctx, next_label);
+                    extended_instructions.ad_no_loc(ISEQP, param_slot.slot, PRIM_NIL);
+                    extended_instructions.cgoto(ctx, next_label);
                     emit_runtime_error(
                         ctx,
-                        &mut instructions,
+                        &mut extended_instructions,
                         None,
                         &format!(
                             "parameter \"{}\" has both positional and named values",
@@ -228,7 +230,7 @@ impl ExecutionUnit {
                     );
 
                     // Label the next instruction
-                    instructions.label(next_label);
+                    extended_instructions.label(next_label);
 
                     // Finally, set the parameter slot as initialized
                     ctx.current_frame_mut()
@@ -236,26 +238,27 @@ impl ExecutionUnit {
                 }
 
                 // The compile the body as a returning node
-                body.compile_as_return(ctx, self, &mut instructions);
+                body.compile_as_return(ctx, self, &mut extended_instructions);
             }
         };
 
         // Release locals of the execution unit
-        let death_label = instructions.new_label();
+        let death_label = extended_instructions.new_label();
         ctx.release_locals(death_label);
-        instructions.label(death_label);
+        extended_instructions.label(death_label);
 
         // Emit additional instructions to initialize closed bindings
-        emit_closed_bindings_init(&ctx.current_frame(), &mut instructions);
+        emit_closed_bindings_init(&ctx.current_frame(), &mut extended_instructions);
 
         // Perform post compilation assertions
         assert!(arg_count <= u8::MAX as usize, "Too many arguments for prototype");
 
-        // Get the result index and data to create the new prototype
-        let data = ctx.exec_unit_data_stack.last_mut().unwrap();
+        // Get the data collected during the compilation process by moving the
+        // memory to avoid useless copy.
+        let data = ctx.exec_unit_data_stack.pop().unwrap();
 
         // Now we collect variable information to create debug data
-        let label_map = instructions.label_map();
+        let label_map = extended_instructions.label_map();
         let mut variable_data = data
             .dead_bindings
             .iter()
@@ -269,7 +272,12 @@ impl ExecutionUnit {
         // We sort variable data by birth label
         variable_data.sort_by(|lvd, rvd| lvd.birth_instruction.cmp(&rvd.birth_instruction));
 
-        // Add the prototype to the output buffer
+        // Now we get instructions and their locations
+        let (instructions, instruction_locations) =
+            extended_instructions.as_instructions_and_locations(&self.origin_location);
+
+        // Create the bytecode prototype and add it to the current context
+        // result.
         match &ctx.current_frame.borrow().variant {
             FrameVariant::Semantic { maximum_size, up_values, .. } => {
                 // Sort up-values from their index
@@ -286,7 +294,7 @@ impl ExecutionUnit {
                     has_ffi: true,
                     arg_count: arg_count as u8,
                     frame_size: *maximum_size,
-                    instructions: instructions.to_instructions(&self.origin_location),
+                    instructions,
                     up_values: sorted_up_values
                         .into_iter()
                         .map(|(name, uv)| match uv.target {
@@ -298,8 +306,8 @@ impl ExecutionUnit {
                             }
                         })
                         .collect(),
-                    complex_consts: data.constants.complex_constants.drain(..).collect(),
-                    numeric_consts: data.constants.numeric_constants.drain(..).collect(),
+                    complex_consts: data.constants.complex_constants,
+                    numeric_consts: data.constants.numeric_constants,
                     first_line,
                     line_count: self.origin_location.end.line - first_line,
                     variable_data,
@@ -307,6 +315,11 @@ impl ExecutionUnit {
             }
             _ => unreachable!(),
         };
+
+        // Finally, collect runtime data for the current prototype and add it
+        // to the current context.
+        ctx.runtime_data
+            .add_prototype_data(data.identifier, instruction_locations);
     }
 }
 
@@ -1812,6 +1825,9 @@ struct CompilationContext {
     /// the compilation of execution units (see [`ExecutionUnit::compile`]).
     prototypes: Vec<Prototype>,
 
+    /// Data required for the runtime and collected during the compilation.
+    runtime_data: RuntimeData,
+
     /// A collection of diagnostics collected during the compilation process,
     /// if it is not empty, it means that the result of the compilation may be
     /// invalid.
@@ -1825,6 +1841,7 @@ impl CompilationContext {
             current_frame: Rc::new(RefCell::new(Frame::new(None))),
             exec_unit_data_stack: Vec::new(),
             prototypes: Vec::new(),
+            runtime_data: RuntimeData::new(),
             diagnostics: Vec::new(),
         }
     }
