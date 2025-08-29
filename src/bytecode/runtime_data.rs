@@ -8,28 +8,39 @@
 
 use std::{collections::HashMap, fmt::Debug};
 
-use crate::sources::SourceSection;
+use crate::sources::{SourceId, SourceSection};
 
 /// This type contains all information that may be required during the runtime
 /// of the associated source file.
 #[derive(Debug)]
 pub struct RuntimeData {
-    /// A map associating each prototype identifier to its runtime data.
-    pub prototype_data_map: HashMap<String, PrototypeData>,
+    /// A map associating to each sources a collection of data for each
+    /// prototype defined in this source.
+    pub source_prototypes: HashMap<SourceId, HashMap<String, PrototypeData>>,
 }
 
 impl RuntimeData {
     pub fn new() -> Self {
-        Self { prototype_data_map: HashMap::new() }
+        Self { source_prototypes: HashMap::new() }
     }
 
     /// Map the provided prototype identifier to the specified data.
     pub fn add_prototype_data(
         &mut self,
+        source: &SourceId,
         prototype_id: String,
         instruction_locations: Vec<Option<SourceSection>>,
     ) {
-        self.prototype_data_map
+        // Ensure the source is associated to an existing map
+        if !self.source_prototypes.contains_key(source) {
+            self.source_prototypes
+                .insert(source.clone(), HashMap::new());
+        }
+
+        // Then store the provided prototype data
+        self.source_prototypes
+            .get_mut(source)
+            .unwrap()
             .insert(prototype_id, PrototypeData { instruction_locations });
     }
 }

@@ -318,8 +318,11 @@ impl ExecutionUnit {
 
         // Finally, collect runtime data for the current prototype and add it
         // to the current context.
-        ctx.runtime_data
-            .add_prototype_data(data.identifier, instruction_locations);
+        ctx.runtime_data.add_prototype_data(
+            &self.origin_location.source,
+            data.identifier,
+            instruction_locations,
+        );
     }
 }
 
