@@ -281,7 +281,10 @@ impl ExecutionUnit {
         match &ctx.current_frame.borrow().variant {
             FrameVariant::Semantic { maximum_size, up_values, .. } => {
                 // Sort up-values from their index
-                let mut sorted_up_values = up_values.into_iter().collect::<Vec<_>>();
+                let mut sorted_up_values = up_values
+                    .into_iter()
+                    .map(|(n, uv)| (uv.debug_name.as_ref().unwrap_or(n), uv))
+                    .collect::<Vec<_>>();
                 sorted_up_values.sort_by(|(_, uv_1), (_, uv_2)| uv_1.index.cmp(&uv_2.index));
 
                 // Get the prototype first line

@@ -147,19 +147,21 @@ impl Frame {
         let new_up_value_index = self.next_up_value_index();
         let maybe_new_up_value = self.parent_frame_mut().and_then(|mut parent_frame| {
             // First look in the parent's locals
-            if let Some(parent_slot) = parent_frame.get_local(name) {
+            if let Some(parent_local) = parent_frame.get_local(name) {
                 parent_frame.close_binding(name);
                 Some(UpValueData {
-                    declaration_location: parent_slot.declaration_location.clone(),
+                    declaration_location: parent_local.declaration_location.clone(),
+                    debug_name: parent_local.debug_name.clone(),
                     index: new_up_value_index,
-                    is_safe: parent_slot.is_init,
-                    target: UpValueTarget::ParentSlot(parent_slot.slot),
+                    is_safe: parent_local.is_init,
+                    target: UpValueTarget::ParentSlot(parent_local.slot),
                 })
             }
             // Then, recursively looks in the parent's up-values
             else if let Some(parent_up_value) = parent_frame.get_up_value(name) {
                 Some(UpValueData {
                     declaration_location: parent_up_value.declaration_location.clone(),
+                    debug_name: parent_up_value.debug_name.clone(),
                     index: new_up_value_index,
                     is_safe: parent_up_value.is_safe,
                     target: UpValueTarget::ParentUpValue(parent_up_value.index),
@@ -382,6 +384,11 @@ pub struct UpValueData {
     /// Location of the declaration of the value ultimately targeted by this
     /// up-value.
     pub declaration_location: SourceSection,
+
+    /// Some up-values may have a debug name. This is a name that is going to
+    /// be used when emitting debug information for this up-value, allowing it
+    /// to have different lexical and runtime names.
+    pub debug_name: Option<String>,
 
     /// Index of the up-value in the current frame.
     pub index: u8,
