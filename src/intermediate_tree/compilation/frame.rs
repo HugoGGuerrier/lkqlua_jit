@@ -37,7 +37,7 @@ pub enum FrameVariant {
         maximum_size: u8,
 
         /// Map of up-values available in this semantic frame.
-        up_values: HashMap<String, UpValue>,
+        up_values: HashMap<String, UpValueData>,
 
         /// The slot from which to close local values in this frame if this
         /// frame has to do it, [`None`] otherwise.
@@ -128,7 +128,7 @@ impl Frame {
 
     /// Get the up-value associate to the provided name in the current semantic
     /// frame if any.
-    pub fn get_up_value(&mut self, name: &str) -> Option<UpValue> where {
+    pub fn get_up_value(&mut self, name: &str) -> Option<UpValueData> where {
         // If we are a lexical frame, we delegate the request to our parent
         if matches!(self.variant, FrameVariant::Lexical) {
             return self.parent_frame_mut().unwrap().get_up_value(name);
@@ -149,7 +149,7 @@ impl Frame {
             // First look in the parent's locals
             if let Some(parent_slot) = parent_frame.get_local(name) {
                 parent_frame.close_binding(name);
-                Some(UpValue {
+                Some(UpValueData {
                     declaration_location: parent_slot.declaration_location.clone(),
                     index: new_up_value_index,
                     is_safe: parent_slot.is_init,
@@ -158,7 +158,7 @@ impl Frame {
             }
             // Then, recursively looks in the parent's up-values
             else if let Some(parent_up_value) = parent_frame.get_up_value(name) {
-                Some(UpValue {
+                Some(UpValueData {
                     declaration_location: parent_up_value.declaration_location.clone(),
                     index: new_up_value_index,
                     is_safe: parent_up_value.is_safe,
@@ -378,7 +378,7 @@ pub enum ClosingKind {
 
 /// This type holds information about an up-value in a frame.
 #[derive(Debug, Clone)]
-pub struct UpValue {
+pub struct UpValueData {
     /// Location of the declaration of the value ultimately targeted by this
     /// up-value.
     pub declaration_location: SourceSection,
