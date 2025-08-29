@@ -40,7 +40,7 @@ unsafe extern "C" fn lkql_print(l: LuaState) -> c_int {
             }
         }
         _ => {
-            if call_meta(l, None, "__tostring") {
+            if call_meta(l, -1, "__tostring") {
                 get_string(l, -1).unwrap()
             } else {
                 "<lkql_value>"

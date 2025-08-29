@@ -129,9 +129,9 @@ pub fn call(l: LuaState, arg_count: i32, res_count: Option<i32>) -> Result<(), S
 /// provided index is [`None`], the object on the top of the stack is used.
 /// This function returns whether the call succeeded, and if so, the result
 /// of the call is push on the top of the stack.
-pub fn call_meta(l: LuaState, index: Option<i32>, meta_method: &str) -> bool {
+pub fn call_meta(l: LuaState, index: i32, meta_method: &str) -> bool {
     let ext_meta_method = CString::from_str(meta_method).unwrap();
-    unsafe { luaL_callmeta(l, index.unwrap_or(-1), ext_meta_method.as_ptr()) == 1 }
+    unsafe { luaL_callmeta(l, index, ext_meta_method.as_ptr()) == 1 }
 }
 
 // ----- External functions -----
