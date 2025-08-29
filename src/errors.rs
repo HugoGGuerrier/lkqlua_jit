@@ -61,11 +61,21 @@ pub const UNKNOWN_MEMBER: ErrorTemplate = ErrorTemplate {
     message_template: "No member named \"{}\" on the value",
 };
 
+// --- Misc errors
+
+/// Error coming from the Lua engine and that cannot be mapped to a more
+/// precise error.
+pub const LUA_ENGINE_ERROR: ErrorTemplate = ErrorTemplate {
+    id: UNKNOWN_MEMBER.id + 1,
+    title: "Error from the Lua engine",
+    message_template: "{}",
+};
+
 // --- The error repository
 
 /// This vector contains all error templates stored at the index of their
 /// identifier.
-pub const ERROR_TEMPLATE_REPOSITORY: [&'static ErrorTemplate; 7] = [
+pub const ERROR_TEMPLATE_REPOSITORY: [&'static ErrorTemplate; 8] = [
     &UNKNOWN_SYMBOL,
     &DUPLICATED_SYMBOL,
     &NO_VALUE_FOR_PARAM,
@@ -73,6 +83,7 @@ pub const ERROR_TEMPLATE_REPOSITORY: [&'static ErrorTemplate; 7] = [
     &POS_AFTER_NAMED_ARGUMENT,
     &INDEX_OUT_OF_BOUNDS,
     &UNKNOWN_MEMBER,
+    &LUA_ENGINE_ERROR,
 ];
 
 // --- Hint message

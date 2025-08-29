@@ -5,6 +5,8 @@
 
 use std::collections::HashMap;
 
+use serde::{Deserialize, Serialize};
+
 use crate::sources::{SourceId, SourceSection};
 
 /// This type contains all information collected during the compilation and
@@ -40,6 +42,24 @@ impl RuntimeData {
             .unwrap()
             .insert(prototype_id, PrototypeData { instruction_locations });
     }
+
+    /// Get the source location associated to the provided program counter in
+    /// the prototype identified by the provided id.
+    pub fn location_in_prototype(
+        &self,
+        source: &SourceId,
+        prototype_id: &str,
+        program_counter: usize,
+    ) -> Option<&SourceSection> {
+        self.source_prototypes
+            .get(source)?
+            .get(prototype_id)
+            .and_then(|data| {
+                data.instruction_locations
+                    .get(program_counter)
+                    .map_or(None, |res| res.as_ref())
+            })
+    }
 }
 
 /// This type contains all information related to a prototype that are required
@@ -50,4 +70,23 @@ pub struct PrototypeData {
     /// vector corresponds to the instruction at the same index in the
     /// prototype.
     pub instruction_locations: Vec<Option<SourceSection>>,
+}
+
+/// This type is used to represent a runtime instantiation of an
+/// [`crate::errors::ErrorTemplate`]. It relies on the template identifier with
+/// arguments that can be static or runtime values.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RuntimeErrorInstance {
+    pub template_id: usize,
+    pub message_args: Vec<RuntimeErrorInstanceArg>,
+}
+
+/// This type represents a message template argument for a runtime error.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RuntimeErrorInstanceArg {
+    /// The argument is known at compile time.
+    Static(String),
+
+    /// The argument value is in a frame slot at execution time.
+    LocalValue(u8),
 }

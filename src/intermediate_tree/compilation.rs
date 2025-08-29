@@ -23,8 +23,11 @@ use crate::{
         },
         op_codes::*,
     },
-    engine::runtime::RuntimeData,
-    errors::{DUPLICATED_SYMBOL, PREVIOUS_SYMBOL_HINT, UNKNOWN_SYMBOL},
+    engine::runtime::{RuntimeData, RuntimeErrorInstance, RuntimeErrorInstanceArg},
+    errors::{
+        DUPLICATED_SYMBOL, ErrorTemplate, INDEX_OUT_OF_BOUNDS, NO_VALUE_FOR_PARAM,
+        POS_AND_NAMED_VALUE_FOR_PARAM, PREVIOUS_SYMBOL_HINT, UNKNOWN_MEMBER, UNKNOWN_SYMBOL,
+    },
     intermediate_tree::{
         ArithOperator, ArithOperatorVariant, CompOperator, CompOperatorVariant, ExecutionUnit,
         ExecutionUnitVariant, Identifier, LogicOperatorVariant, MiscOperatorVariant, Node,
@@ -201,7 +204,8 @@ impl ExecutionUnit {
                             ctx,
                             &mut extended_instructions,
                             None,
-                            &format!("missing value for \"{}\" parameter", param_id.text),
+                            &NO_VALUE_FOR_PARAM,
+                            &vec![RuntimeErrorInstanceArg::Static(param_id.text.clone())],
                         );
                     }
 
@@ -224,10 +228,8 @@ impl ExecutionUnit {
                         ctx,
                         &mut extended_instructions,
                         None,
-                        &format!(
-                            "parameter \"{}\" has both positional and named values",
-                            param_id.text
-                        ),
+                        &POS_AND_NAMED_VALUE_FOR_PARAM,
+                        &vec![RuntimeErrorInstanceArg::Static(param_id.text.clone())],
                     );
 
                     // Label the next instruction
@@ -402,7 +404,8 @@ impl Node {
                         ctx,
                         output,
                         Some(&suffix.origin_location),
-                        &format!("No member named \"{}\" in this value", &suffix.text),
+                        &UNKNOWN_MEMBER,
+                        &vec![RuntimeErrorInstanceArg::Static(suffix.text.clone())],
                     );
                 }
 
@@ -440,7 +443,8 @@ impl Node {
                         ctx,
                         output,
                         Some(&index.origin_location),
-                        "Index out of bounds",
+                        &INDEX_OUT_OF_BOUNDS,
+                        &vec![RuntimeErrorInstanceArg::LocalValue(index_access.slot())],
                     );
                 }
 
@@ -647,7 +651,8 @@ impl Node {
                                 ctx,
                                 output,
                                 Some(&identifier.origin_location),
-                                &format!("Unknown symbol: \"{}\"", identifier.text),
+                                &UNKNOWN_SYMBOL,
+                                &vec![RuntimeErrorInstanceArg::Static(identifier.text.clone())],
                             );
                             output.label(next_label);
                         }
@@ -1600,10 +1605,18 @@ fn emit_runtime_error(
     ctx: &mut CompilationContext,
     output: &mut ExtendedInstructionBuffer,
     maybe_error_location: Option<&SourceSection>,
-    message: &str,
+    error_template: &ErrorTemplate,
+    message_args: &Vec<RuntimeErrorInstanceArg>,
 ) {
+    // Create the runtime error instance object
+    let runtime_error_instance =
+        RuntimeErrorInstance { template_id: error_template.id, message_args: message_args.clone() };
+
     // Add constants in the current repository
-    let message_cst = ctx.current_data().constants.get_from_string(message);
+    let message_cst = ctx
+        .current_data()
+        .constants
+        .get_from_string(&serde_json::to_string(&runtime_error_instance).unwrap());
 
     // Reserve temporary slots, fill them and call the function
     let call_slots = ctx.current_frame_mut().reserve_contiguous_slots(3);

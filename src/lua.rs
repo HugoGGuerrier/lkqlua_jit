@@ -6,7 +6,7 @@
 //! offers specialized endpoints to tune the JIT compilation part.
 
 use std::{
-    ffi::{CStr, CString, c_char, c_int, c_void},
+    ffi::{CStr, CString, c_char, c_int, c_uint, c_void},
     ptr,
     str::FromStr,
 };
@@ -19,6 +19,9 @@ const GLOBAL_INDEX: i32 = -10002;
 /// Result count to pass to get all results.
 const MUTRET: i32 = -1;
 
+/// Size of short source representation in debug data.
+const SHORT_SRC_SIZE: usize = 60;
+
 // ----- Public types -----
 
 /// This type represents the state object for the LuaJIT engine.
@@ -29,6 +32,7 @@ pub type LuaCFunction = unsafe extern "C" fn(LuaState) -> c_int;
 
 /// This type represents type tags for Lua values.
 #[repr(C)]
+#[derive(Debug)]
 pub enum LuaType {
     None = -1,
     Nil = 0,
@@ -40,6 +44,42 @@ pub enum LuaType {
     Function = 6,
     UserData = 7,
     Thread = 8,
+}
+
+/// This type maps the `Lua_Debug` C type. It contains debugging information
+/// about a frame.
+#[repr(C)]
+#[derive(Debug)]
+pub struct LuaDebug {
+    pub event: c_int,
+    pub name: *const c_char,
+    pub name_what: *const c_char,
+    pub what: *const c_char,
+    pub source: *const c_char,
+    pub current_line: c_int,
+    pub up_value_count: c_int,
+    pub line_defined: c_int,
+    pub last_line_defined: c_int,
+    pub short_src: [c_char; SHORT_SRC_SIZE],
+    pub i_ci: c_int,
+}
+
+impl LuaDebug {
+    fn new() -> Self {
+        Self {
+            event: 0,
+            name: ptr::null(),
+            name_what: ptr::null(),
+            what: ptr::null(),
+            source: ptr::null(),
+            current_line: 0,
+            up_value_count: 0,
+            line_defined: 0,
+            last_line_defined: 0,
+            short_src: [0; SHORT_SRC_SIZE],
+            i_ci: 0,
+        }
+    }
 }
 
 // ----- Public API -----
@@ -93,6 +133,31 @@ pub fn get_string(l: LuaState, index: i32) -> Option<&'static str> {
     }
 }
 
+/// Get the index of the top of the stack. Since the stack is 1-indexed, this
+/// function also returns the number of values in the stack.
+pub fn get_top(l: LuaState) -> i32 {
+    unsafe { lua_gettop(l) }
+}
+
+/// Move the value at the top of the stack to the provided index, shifting all
+/// values at this index and above upward.
+pub fn move_top_value(l: LuaState, index: i32) {
+    unsafe { lua_insert(l, index) }
+}
+
+/// Remove the value at the provided index, shifting all values above downward.
+pub fn remove_value(l: LuaState, index: i32) {
+    unsafe { lua_remove(l, index) }
+}
+
+/// Push a new string to the top of the Lua stack.
+pub fn push_string(l: LuaState, s: &str) {
+    unsafe {
+        let ext_s = CString::from_str(s).unwrap();
+        lua_pushstring(l, ext_s.as_ptr());
+    }
+}
+
 /// Push a new C function value to the top of the Lua stack.
 pub fn push_c_function(l: LuaState, function: LuaCFunction) {
     unsafe { lua_pushcclosure(l, function, 0) }
@@ -109,14 +174,24 @@ pub fn set_global(l: LuaState, name: &str) {
 }
 
 /// Considering that the stack is filled with `arg_count` arguments and a
-/// callable value: pop all of those and call it. Place on the stack the
-/// specified count of result if any, otherwise, place them all.
+/// callable value: pop all of those and call the value with following
+/// arguments. Place on the stack the specified count of result if any,
+/// otherwise, place them all.
 /// This function returns an [`Err`] containing the error message if an error
 /// has been raised during the call.
-pub fn call(l: LuaState, arg_count: i32, res_count: Option<i32>) -> Result<(), String> {
+pub fn call(
+    l: LuaState,
+    arg_count: i32,
+    res_count: Option<i32>,
+    err_func: Option<i32>,
+) -> Result<(), String> {
     unsafe {
-        let call_res = lua_pcall(l, arg_count, res_count.unwrap_or(MUTRET), 0);
-        if call_res == 0 { Ok(()) } else { Err(get_string(l, -1).unwrap().to_string()) }
+        let call_res = lua_pcall(l, arg_count, res_count.unwrap_or(MUTRET), err_func.unwrap_or(0));
+        if call_res == 0 {
+            Ok(())
+        } else {
+            Err(String::from(get_string(l, lua_gettop(l)).unwrap()))
+        }
     }
 }
 
@@ -127,6 +202,69 @@ pub fn call(l: LuaState, arg_count: i32, res_count: Option<i32>) -> Result<(), S
 pub fn call_meta(l: LuaState, index: i32, meta_method: &str) -> bool {
     let ext_meta_method = CString::from_str(meta_method).unwrap();
     unsafe { luaL_callmeta(l, index, ext_meta_method.as_ptr()) == 1 }
+}
+
+/// Get debug information about the frame at the specified level. This function
+/// returns [`None`] if the specified level is higher that the current stack
+/// depth.
+pub fn debug_frame(l: LuaState, level: i32) -> Option<LuaDebug> {
+    unsafe {
+        let mut maybe_res = LuaDebug::new();
+        if lua_getstack(l, level, &mut maybe_res) != 0 { Some(maybe_res) } else { None }
+    }
+}
+
+/// Fill the provided debug data structure with required information in the
+/// `what` parameter. See do of `lua_getinfo` for more information.
+pub fn debug_info(l: LuaState, ar: &mut LuaDebug, what: &str) -> bool {
+    unsafe {
+        let ext_what = CString::from_str(what).unwrap();
+        lua_getinfo(l, ext_what.as_ptr(), ar) != 0
+    }
+}
+
+/// Get the name of the source from which the provided debug frame is coming.
+pub fn debug_get_source(ar: &LuaDebug) -> Option<String> {
+    unsafe {
+        if !ar.source.is_null() {
+            let source = CStr::from_ptr(ar.source);
+            Some(String::from(source.to_str().unwrap()))
+        } else {
+            None
+        }
+    }
+}
+
+/// Get the name of the prototype currently being executed and the program
+/// counter inside this prototype. This function return [`None`] if such
+/// information doesn't exists for the current frame.
+pub fn debug_proto_and_pc(l: LuaState, ar: &mut LuaDebug) -> Option<(&'static str, usize)> {
+    unsafe {
+        let mut ext_pc: c_uint = 0;
+        let pc_get_res = lua_getpc(l, ar, &mut ext_pc);
+        let ext_proto_name = lua_getprotoname(l, ar);
+        if pc_get_res != 0 && !ext_proto_name.is_null() {
+            let proto_name = CStr::from_ptr(ext_proto_name);
+            Some((proto_name.to_str().unwrap(), ext_pc as usize))
+        } else {
+            None
+        }
+    }
+}
+
+/// Get the local value at the provide index in the provided debug frame, push
+/// its value on the current stack. This function returns the local value name
+/// if it has been found, [`None`] otherwise.
+pub fn debug_get_local(l: LuaState, ar: &LuaDebug, index: i32) -> Option<&'static str> {
+    unsafe {
+        let ext_var_name = lua_getlocal(l, ar, index);
+        if ext_var_name.is_null() {
+            None
+        } else {
+            let var_name = CStr::from_ptr(ext_var_name);
+            Some(var_name.to_str().unwrap())
+        }
+    }
 }
 
 // ----- Utils -----
@@ -156,6 +294,42 @@ pub fn to_string(l: LuaState, index: i32, default: &'static str) -> &'static str
     }
 }
 
+/// Create a string representation of the current state of the stack.
+pub fn dump_stack(l: LuaState) -> String {
+    unsafe {
+        let mut res = String::new();
+        let stack_top = lua_gettop(l);
+        if stack_top > 0 {
+            res.push_str("--- Stack start\n");
+            for i in 1..=stack_top {
+                let value_type = get_type(l, i);
+                let value_repr = match value_type {
+                    LuaType::None => "none".to_string(),
+                    LuaType::Nil => "nil".to_string(),
+                    LuaType::Boolean => {
+                        if get_boolean(l, i) { "bool(true)" } else { "bool(false)" }.to_string()
+                    }
+                    LuaType::Number => format!("number({})", get_string(l, i).unwrap()),
+                    LuaType::String => format!("string({})", get_string(l, i).unwrap()),
+                    LuaType::LightUserData => "<light_user_data>".to_string(),
+                    LuaType::Table => "<table>".to_string(),
+                    LuaType::Function => "<function>".to_string(),
+                    LuaType::UserData => "<user_data>".to_string(),
+                    LuaType::Thread => "<thread>".to_string(),
+                };
+                res.push_str(&i.to_string());
+                res.push_str(" - ");
+                res.push_str(value_repr.as_str());
+                res.push('\n');
+            }
+            res.push_str("--- Stack end");
+        } else {
+            res.push_str("Empty stack");
+        }
+        res
+    }
+}
+
 // ----- External functions -----
 
 unsafe extern "C" {
@@ -174,9 +348,20 @@ unsafe extern "C" {
     fn lua_toboolean(l: LuaState, index: c_int) -> c_int;
     fn lua_tolstring(l: LuaState, index: c_int, result_size: *mut usize) -> *const c_char;
 
+    fn lua_pushstring(l: LuaState, s: *const c_char);
     fn lua_pushcclosure(l: LuaState, function: LuaCFunction, n: c_int);
     fn lua_setfield(l: LuaState, index: c_int, field: *const c_char);
 
+    fn lua_gettop(l: LuaState) -> c_int;
+    fn lua_insert(l: LuaState, index: c_int);
+    fn lua_remove(l: LuaState, index: c_int);
+
     fn lua_pcall(l: LuaState, nargs: c_int, nres: c_int, errfunc: c_int) -> i32;
     fn luaL_callmeta(l: LuaState, obj: c_int, meta_method: *const c_char) -> c_int;
+
+    fn lua_getstack(l: LuaState, level: c_int, ar: *mut LuaDebug) -> c_int;
+    fn lua_getinfo(l: LuaState, what: *const c_char, ar: *mut LuaDebug) -> c_int;
+    fn lua_getpc(l: LuaState, ar: *const LuaDebug, pc: *mut c_uint) -> c_int;
+    fn lua_getprotoname(l: LuaState, ar: *mut LuaDebug) -> *const c_char;
+    fn lua_getlocal(l: LuaState, ar: *const LuaDebug, n: c_int) -> *const c_char;
 }
