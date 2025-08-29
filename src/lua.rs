@@ -93,12 +93,9 @@ pub fn get_string(l: LuaState, index: i32) -> Option<&'static str> {
     }
 }
 
-/// Push a new C function value to the Lua stack at the given index. If the
-/// provided index is [`None`], the value is pushed at the top of the stack.
-pub fn push_c_function(l: LuaState, function: LuaCFunction, index: Option<i32>) {
-    unsafe {
-        lua_pushcclosure(l, function, index.unwrap_or(0));
-    }
+/// Push a new C function value to the top of the Lua stack.
+pub fn push_c_function(l: LuaState, function: LuaCFunction) {
+    unsafe { lua_pushcclosure(l, function, 0) }
 }
 
 /// Place the value currently on the top of the stack in the field of the
@@ -150,7 +147,7 @@ unsafe extern "C" {
     fn lua_toboolean(l: LuaState, index: c_int) -> c_int;
     fn lua_tolstring(l: LuaState, index: c_int, result_size: *mut usize) -> *const c_char;
 
-    fn lua_pushcclosure(l: LuaState, function: LuaCFunction, index: c_int);
+    fn lua_pushcclosure(l: LuaState, function: LuaCFunction, n: c_int);
     fn lua_setfield(l: LuaState, index: c_int, field: *const c_char);
 
     fn lua_pcall(l: LuaState, nargs: c_int, nres: c_int, errfunc: c_int) -> i32;

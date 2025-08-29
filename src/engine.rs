@@ -35,7 +35,7 @@ impl Engine {
 
         // Set all built-in functions in the environment
         for builtin in get_builtins() {
-            push_c_function(lua_state, builtin.c_function, None);
+            push_c_function(lua_state, builtin.c_function);
             set_global(lua_state, builtin.name);
         }
 
