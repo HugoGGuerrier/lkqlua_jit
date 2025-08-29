@@ -51,24 +51,22 @@ pub fn new_lua_state() -> LuaState {
 
 /// Close the provided Lua state.
 pub fn close_lua_state(l: LuaState) {
-    unsafe {
-        lua_close(l);
-    }
+    unsafe { lua_close(l) }
 }
 
 /// Open all Lua base libraries in the given state.
 pub fn open_lua_libs(l: LuaState) {
-    unsafe {
-        luaL_openlibs(l);
-    }
+    unsafe { luaL_openlibs(l) }
 }
 
 /// Load the given buffer to the Lua stack as a callable value, returning
 /// whether the function succeeded.
 pub fn load_buffer(l: LuaState, buffer: &Vec<u8>, buffer_name: &str) -> bool {
-    let ext_buffer = buffer.as_ptr() as *const c_char;
-    let ext_buffer_name = CString::from_str(buffer_name).unwrap();
-    unsafe { luaL_loadbuffer(l, ext_buffer, buffer.len(), ext_buffer_name.as_ptr()) == 0 }
+    unsafe {
+        let ext_buffer = buffer.as_ptr() as *const c_char;
+        let ext_buffer_name = CString::from_str(buffer_name).unwrap();
+        luaL_loadbuffer(l, ext_buffer, buffer.len(), ext_buffer_name.as_ptr()) == 0
+    }
 }
 
 /// Get the type of the value on the stack at the given index.
