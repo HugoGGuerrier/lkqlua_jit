@@ -1,21 +1,18 @@
-//! # Runtime Data module
+//! # The runtime module
 //!
-//! This module contains all entities required to store additional data
-//! produced during the compilation process and used during the runtime.
-//! All information are collected in a
-//! [`crate::bytecode::extended_bytecode::ExtendedInstructionBuffer`] instance
-//! and you can use it to create a new [`RuntimeData`] instance.
+//! This module host all data structures that are required to store information
+//! during runtime and communicate with the LuaJIT engine.
 
-use std::{collections::HashMap, fmt::Debug};
+use std::collections::HashMap;
 
 use crate::sources::{SourceId, SourceSection};
 
-/// This type contains all information that may be required during the runtime
-/// of the associated source file.
+/// This type contains all information collected during the compilation and
+/// that may be required during the execution phase.
 #[derive(Debug)]
 pub struct RuntimeData {
-    /// A map associating to each sources a collection of data for each
-    /// prototype defined in this source.
+    /// A map associating to each sources a set of prototype identifiers, each
+    /// one being associated to a data storage.
     pub source_prototypes: HashMap<SourceId, HashMap<String, PrototypeData>>,
 }
 

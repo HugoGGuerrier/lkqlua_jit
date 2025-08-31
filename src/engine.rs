@@ -12,6 +12,8 @@ use crate::{
     report::Report,
 };
 
+pub mod runtime;
+
 /// This type represents an engine to execute the bytecode generate by the
 /// [`crate::intermediate_tree::compilation`] module.
 pub struct Engine {

@@ -22,8 +22,8 @@ use crate::{
             ExtendedInstruction, ExtendedInstructionBuffer, ExtendedInstructionVariant, Label,
         },
         op_codes::*,
-        runtime_data::RuntimeData,
     },
+    engine::runtime::RuntimeData,
     errors::{DUPLICATED_SYMBOL, PREVIOUS_SYMBOL_HINT, UNKNOWN_SYMBOL},
     intermediate_tree::{
         ArithOperator, ArithOperatorVariant, CompOperator, CompOperatorVariant, ExecutionUnit,
