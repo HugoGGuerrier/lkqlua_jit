@@ -24,6 +24,7 @@ use crate::{
         op_codes::*,
         runtime_data::RuntimeData,
     },
+    errors::{DUPLICATED_SYMBOL, PREVIOUS_SYMBOL_HINT, UNKNOWN_SYMBOL},
     intermediate_tree::{
         ArithOperator, ArithOperatorVariant, CompOperator, CompOperatorVariant, ExecutionUnit,
         ExecutionUnitVariant, Identifier, LogicOperatorVariant, MiscOperatorVariant, Node,
@@ -31,7 +32,7 @@ use crate::{
         compilation::frame::{BindingData, ClosingKind, Frame, FrameVariant, UpValueTarget},
         constant_eval::{ConstantValue, ConstantValueVariant},
     },
-    report::Report,
+    report::{Hint, Report},
     sources::SourceSection,
 };
 
@@ -665,9 +666,10 @@ impl Node {
                         // If all previous step failed, the symbol doesn't
                         // exists, so we emit an error about it.
                         else {
-                            ctx.diagnostics.push(Report::unknown_symbol(
-                                self.origin_location.clone(),
-                                &identifier.text,
+                            ctx.diagnostics.push(Report::from_error_template(
+                                &self.origin_location,
+                                &UNKNOWN_SYMBOL,
+                                &vec![&identifier.text],
                             ));
                         }
                     }
@@ -1574,10 +1576,14 @@ fn declare_locals(ctx: &mut CompilationContext, symbols: &Vec<Identifier>) {
     for symbol in symbols {
         let maybe_local_slot = ctx.current_frame().is_conflicting(&symbol.text);
         if let Some(previous_binding) = maybe_local_slot {
-            ctx.diagnostics.push(Report::duplicated_symbols(
-                previous_binding.declaration_location,
-                symbol.origin_location.clone(),
-                &symbol.text,
+            ctx.diagnostics.push(Report::from_error_template_with_hints(
+                &symbol.origin_location,
+                &DUPLICATED_SYMBOL,
+                &vec![&symbol.text],
+                vec![Hint::new(
+                    PREVIOUS_SYMBOL_HINT,
+                    &previous_binding.declaration_location,
+                )],
             ));
         } else {
             ctx.current_frame_mut()

@@ -5,7 +5,7 @@
 
 use std::io::Write;
 
-use crate::sources::SourceSection;
+use crate::{errors::ErrorTemplate, sources::SourceSection};
 use ariadne::{self, Label, StdoutFmt};
 use liblkqllang::{AnalysisUnit, Diagnostic};
 
@@ -75,14 +75,37 @@ impl Report {
         Self::single_diag(ReportKind::Error, location, title, message, vec![])
     }
 
-    /// Create a new error report with a located message and additional hints.
-    pub fn error_diag_and_hints(
-        title: String,
-        message: String,
-        location: SourceSection,
+    /// Create a new error report from an error template with message
+    /// arguments.
+    pub fn from_error_template(
+        location: &SourceSection,
+        error_template: &ErrorTemplate,
+        message_args: &Vec<&str>,
+    ) -> Self {
+        Self::single_diag(
+            ReportKind::Error,
+            location.clone(),
+            String::from(error_template.title),
+            error_template.render_message(message_args),
+            vec![],
+        )
+    }
+
+    /// Create a new error report from an error template with message
+    /// arguments with hints.
+    pub fn from_error_template_with_hints(
+        location: &SourceSection,
+        error_template: &ErrorTemplate,
+        message_args: &Vec<&str>,
         hints: Vec<Hint>,
     ) -> Self {
-        Self::single_diag(ReportKind::Error, location, title, message, hints)
+        Self::single_diag(
+            ReportKind::Error,
+            location.clone(),
+            String::from(error_template.title),
+            error_template.render_message(message_args),
+            hints,
+        )
     }
 
     // --- Bug reports
@@ -95,46 +118,6 @@ impl Report {
     /// Create a new bug report with a located message.
     pub fn bug_diag(title: String, message: String, location: SourceSection) -> Self {
         Self::single_diag(ReportKind::Bug, location, title, message, vec![])
-    }
-
-    // --- Lowering diagnostics
-
-    /// Report a positional argument after a named one in a function call.
-    pub fn pos_arg_after_named(pos_arg: SourceSection, named_arg: SourceSection) -> Self {
-        Self::error_diag_and_hints(
-            String::from("Positional argument after a named one"),
-            String::from("This positional argument is after a named one"),
-            pos_arg,
-            vec![Hint {
-                location: named_arg,
-                message: String::from("Previous named argument is here"),
-            }],
-        )
-    }
-
-    // --- Compilation diagnostics
-
-    /// Report a duplicated symbol declaration.
-    pub fn duplicated_symbols(
-        first_decl: SourceSection,
-        clashing_decl: SourceSection,
-        duplicated_symbol: &str,
-    ) -> Self {
-        Self::error_diag_and_hints(
-            String::from("Symbol declared multiple times"),
-            format!("The symbol \"{duplicated_symbol}\" already exists in the current scope"),
-            clashing_decl,
-            vec![Hint { location: first_decl, message: String::from("Previously declared here") }],
-        )
-    }
-
-    /// Report an access to an non-existing symbol.
-    pub fn unknown_symbol(access_location: SourceSection, accessed_symbol: &str) -> Self {
-        Self::error_diag(
-            String::from("Unknown symbol"),
-            format!("The symbol \"{accessed_symbol}\" cannot be resolved in the current scope"),
-            access_location,
-        )
     }
 
     // --- Creation helpers
@@ -176,8 +159,6 @@ impl Report {
         }
     }
 
-    // --- Other methods
-
     /// Combine two report in a [`Report::Composed`] one.
     pub fn combine(self, other: Report) -> Self {
         match (self, other) {
@@ -199,6 +180,8 @@ impl Report {
             }
         }
     }
+
+    // --- Other methods
 
     /// Format this report and output the result in provided writable object.
     /// If the result is going to be printed on `stdout`, please set the
@@ -304,4 +287,11 @@ pub enum ReportVariant {
 pub struct Hint {
     message: String,
     location: SourceSection,
+}
+
+impl Hint {
+    /// Create a new hint.
+    pub fn new(message: &str, location: &SourceSection) -> Self {
+        Self { message: String::from(message), location: location.clone() }
+    }
 }

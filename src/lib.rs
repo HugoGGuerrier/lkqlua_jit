@@ -20,6 +20,7 @@ use crate::{
 pub mod builtins;
 pub mod bytecode;
 pub mod engine;
+pub mod errors;
 pub mod intermediate_tree;
 pub mod lua;
 pub mod report;
