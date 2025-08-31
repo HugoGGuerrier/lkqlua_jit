@@ -216,8 +216,7 @@ impl Report {
             Report::Single { kind, variant } => match variant {
                 ReportVariant::Message(msg) => {
                     let line_prefix = format!("{}:", kind.label()).fg(kind.color());
-                    output
-                        .write(format!("{line_prefix} {msg}").as_bytes())
+                    writeln!(output, "{line_prefix} {msg}")
                         .expect(format!("Error while printing report \"{msg}\"").as_str());
                 }
                 ReportVariant::Diagnostic { location, title, message, hints } => {
