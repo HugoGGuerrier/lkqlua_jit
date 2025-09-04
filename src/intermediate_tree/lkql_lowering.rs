@@ -195,18 +195,19 @@ impl Node {
                                         .push(Self::lower_lkql_node(&ea.f_value_expr()?, ctx)?);
                                 } else {
                                     let (last_id, last_node) = named_args.last().unwrap();
-                                    ctx.diagnostics.push(Report::from_error_template_with_hints(
-                                        &SourceSection::from_lkql_node(arg)?,
-                                        &POS_AFTER_NAMED_ARGUMENT,
-                                        &vec![],
-                                        vec![Hint::new(
-                                            PREVIOUS_NAMED_ARG_HINT,
-                                            &SourceSection::range(
-                                                &last_id.origin_location,
-                                                &last_node.origin_location,
-                                            )?,
-                                        )],
-                                    ));
+                                    ctx.diagnostics
+                                        .push(Report::from_error_template_with_hints::<&str>(
+                                            &SourceSection::from_lkql_node(arg)?,
+                                            &POS_AFTER_NAMED_ARGUMENT,
+                                            &vec![],
+                                            vec![Hint::new(
+                                                PREVIOUS_NAMED_ARG_HINT,
+                                                &SourceSection::range(
+                                                    &last_id.origin_location,
+                                                    &last_node.origin_location,
+                                                )?,
+                                            )],
+                                        ));
                                 }
                             }
                             LkqlNode::NamedArg(na) => named_args.push((

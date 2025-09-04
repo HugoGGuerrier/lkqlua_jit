@@ -96,7 +96,10 @@ impl ErrorTemplate {
     /// Render the message template with the provided arguments. This function
     /// panics if the provided argument count is not the same as the expected
     /// one.
-    pub fn render_message(&self, args: &Vec<&str>) -> String {
+    pub fn render_message<T>(&self, args: &Vec<T>) -> String
+    where
+        T: AsRef<str>,
+    {
         // Create working variables and result
         let mut split_template = self.message_template.split("{}");
         let mut res = String::from(split_template.next().unwrap());
@@ -113,7 +116,7 @@ impl ErrorTemplate {
 
         // Fill the result string
         args.iter().zip(message_parts).for_each(|(arg, next_part)| {
-            res.push_str(arg);
+            res.push_str(arg.as_ref());
             res.push_str(next_part);
         });
 
@@ -146,7 +149,7 @@ mod test {
     #[test]
     fn test_valid_template_rendering() {
         // Now ensure valid rendering
-        assert_eq!(&NO_ARGS.render_message(&vec![]), "No arguments");
+        assert_eq!(&NO_ARGS.render_message::<&str>(&vec![]), "No arguments");
         assert_eq!(&ONE_ARGS.render_message(&vec!["a"]), "Argument is \"a\"");
         assert_eq!(
             &THREE_ARGS.render_message(&vec!["a", "b", "c"]),
@@ -173,7 +176,7 @@ mod test {
     #[test]
     #[should_panic(expected = "Invalid argument count: expected 1, got 0")]
     fn test_too_few_args_for_one_args() {
-        ONE_ARGS.render_message(&vec![]);
+        ONE_ARGS.render_message::<&str>(&vec![]);
     }
 
     #[test]

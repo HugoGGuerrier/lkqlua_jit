@@ -77,11 +77,14 @@ impl Report {
 
     /// Create a new error report from an error template with message
     /// arguments.
-    pub fn from_error_template(
+    pub fn from_error_template<T>(
         location: &SourceSection,
         error_template: &ErrorTemplate,
-        message_args: &Vec<&str>,
-    ) -> Self {
+        message_args: &Vec<T>,
+    ) -> Self
+    where
+        T: AsRef<str>,
+    {
         Self::single_diag(
             ReportKind::Error,
             location.clone(),
@@ -93,12 +96,15 @@ impl Report {
 
     /// Create a new error report from an error template with message
     /// arguments with hints.
-    pub fn from_error_template_with_hints(
+    pub fn from_error_template_with_hints<T>(
         location: &SourceSection,
         error_template: &ErrorTemplate,
-        message_args: &Vec<&str>,
+        message_args: &Vec<&T>,
         hints: Vec<Hint>,
-    ) -> Self {
+    ) -> Self
+    where
+        T: AsRef<str>,
+    {
         Self::single_diag(
             ReportKind::Error,
             location.clone(),
