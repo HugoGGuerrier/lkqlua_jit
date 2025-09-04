@@ -129,6 +129,33 @@ pub fn call_meta(l: LuaState, index: i32, meta_method: &str) -> bool {
     unsafe { luaL_callmeta(l, index, ext_meta_method.as_ptr()) == 1 }
 }
 
+// ----- Utils -----
+
+/// Transform the value in the stack at the provided index as a string and
+/// return it. This function use the `__tostring` Lua meta-method if the
+/// type of the value requires it. If the call to this method fails, the
+/// provided default value is returned.
+pub fn to_string(l: LuaState, index: i32, default: &'static str) -> &'static str {
+    let value_type = get_type(l, index);
+    match value_type {
+        LuaType::Number | LuaType::String => get_string(l, -1).unwrap(),
+        LuaType::Boolean => {
+            if get_boolean(l, -1) {
+                "true"
+            } else {
+                "false"
+            }
+        }
+        _ => {
+            if call_meta(l, -1, "__tostring") {
+                get_string(l, -1).unwrap()
+            } else {
+                default
+            }
+        }
+    }
+}
+
 // ----- External functions -----
 
 unsafe extern "C" {
