@@ -1,12 +1,7 @@
 //! This module contains all required operations to lower an LKQL parse source
 //! to an intermediate representation.
 
-use std::{
-    cell::RefCell,
-    collections::HashMap,
-    path::PathBuf,
-    rc::{Rc, Weak},
-};
+use std::{collections::HashMap, path::PathBuf};
 
 use crate::{
     errors::{POS_AFTER_NAMED_ARGUMENT, PREVIOUS_NAMED_ARG_HINT},
@@ -30,7 +25,7 @@ impl ExecutionUnit {
     ///
     /// If there is errors during the lowering of LKQL source, this function
     /// returns a [`Result::Err`] which contains all diagnostics.
-    pub fn lower_lkql_node(node: &LkqlNode) -> Result<Rc<RefCell<Self>>, Report> {
+    pub fn lower_lkql_node(node: &LkqlNode) -> Result<Self, Report> {
         let mut lowering_context = LoweringContext::new();
         let res = Self::internal_lower_lkql_node(node, &mut lowering_context)?;
         if lowering_context.diagnostics.is_empty() {
@@ -44,17 +39,19 @@ impl ExecutionUnit {
     fn internal_lower_lkql_node(
         node: &LkqlNode,
         ctx: &mut LoweringContext,
-    ) -> Result<Rc<RefCell<Self>>, Report> {
-        // Iterate over all children execution units to associate each one to
-        // an index in the (not yet created) children units vector.
+    ) -> Result<Self, Report> {
+        // Iterate over all children execution units to lower them and to
+        // associate each one to an index in the children units vector.
         // This needs to be done before node lowering.
         let mut local_units = Vec::new();
         let mut local_unit_counter = 0;
+        let mut children_units = Vec::new();
         all_local_execution_units(node, &mut local_units)?;
         for unit in &local_units {
             ctx.child_index_map.insert(unit.clone(), local_unit_counter);
             local_unit_counter += 1;
             assert!(local_unit_counter < u16::MAX, "Too many children execution units");
+            children_units.push(Self::internal_lower_lkql_node(&unit, ctx)?);
         }
 
         // Create the variant part of the result
@@ -81,6 +78,7 @@ impl ExecutionUnit {
                 )
             }
             LkqlNode::FunDecl(_) | LkqlNode::AnonymousFunction(_) => {
+                // Get the function name, parameters and body nodes
                 let (name, params_node, body_node) = match &node {
                     LkqlNode::FunDecl(fd) => match fd.f_fun_expr()? {
                         LkqlNode::NamedFunction(nf) => {
@@ -93,8 +91,25 @@ impl ExecutionUnit {
                     }
                     _ => unreachable!(),
                 };
+
+                // Then lower the function parameters
                 let mut params = Vec::new();
-                Self::lower_parameters(&params_node, ctx, &mut params)?;
+                for maybe_param_decl in &params_node {
+                    match maybe_param_decl? {
+                        Some(LkqlNode::ParameterDecl(pd)) => {
+                            let name = Identifier::from_node(&pd.f_param_identifier()?)?;
+                            let default_expr = if let Some(n) = pd.f_default_expr()? {
+                                Some(Node::lower_lkql_node(&n, ctx)?)
+                            } else {
+                                None
+                            };
+                            params.push((name, default_expr))
+                        }
+                        _ => unreachable!(),
+                    }
+                }
+
+                // Then create the function execution unit variant
                 (
                     ExecutionUnitVariant::Function {
                         params,
@@ -106,53 +121,13 @@ impl ExecutionUnit {
             _ => unreachable!(),
         };
 
-        // Create the execution unit
-        let result = Rc::new(RefCell::new(ExecutionUnit {
+        // Finally return the new execution unit
+        Ok(ExecutionUnit {
             origin_location: SourceSection::from_lkql_node(node)?,
             name,
-            parent_unit: ctx.current_execution_unit.clone(),
-            children_units: Vec::new(),
+            children_units,
             variant,
-        }));
-
-        // Lower the children units
-        {
-            let mut current_unit = result.borrow_mut();
-            ctx.current_execution_unit = Some(Rc::downgrade(&result));
-            for unit in &local_units {
-                current_unit
-                    .children_units
-                    .push(Self::internal_lower_lkql_node(&unit, ctx)?);
-            }
-            ctx.current_execution_unit = current_unit.parent_unit.clone();
-        }
-
-        // Finally return the result
-        Ok(result)
-    }
-
-    /// Util function to lower a node list of parameter declarations an place
-    /// each result in an output vector.
-    fn lower_parameters(
-        parameters: &LkqlNode,
-        ctx: &mut LoweringContext,
-        output_vec: &mut Vec<(Identifier, Option<Node>)>,
-    ) -> Result<(), Report> {
-        for maybe_param_decl in parameters {
-            match maybe_param_decl? {
-                Some(LkqlNode::ParameterDecl(pd)) => {
-                    let name = Identifier::from_node(&pd.f_param_identifier()?)?;
-                    let default_expr = if let Some(n) = pd.f_default_expr()? {
-                        Some(Node::lower_lkql_node(&n, ctx)?)
-                    } else {
-                        None
-                    };
-                    output_vec.push((name, default_expr))
-                }
-                _ => unreachable!(),
-            }
-        }
-        Ok(())
+        })
     }
 }
 
@@ -482,9 +457,6 @@ struct LoweringContext {
     /// [`Function`] object.
     child_index_map: HashMap<LkqlNode, u16>,
 
-    /// The execution unit that is currently being lowered.
-    current_execution_unit: Option<Weak<RefCell<ExecutionUnit>>>,
-
     /// Each lambda (anonymous) function is associated to a unique name.
     lambda_name_map: HashMap<LkqlNode, String>,
     lambda_counter: usize,
@@ -497,7 +469,6 @@ impl LoweringContext {
     pub fn new() -> Self {
         Self {
             child_index_map: HashMap::new(),
-            current_execution_unit: None,
             lambda_name_map: HashMap::new(),
             lambda_counter: 0,
             diagnostics: Vec::new(),

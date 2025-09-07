@@ -684,9 +684,7 @@ impl Node {
             // --- Lambda function access
             NodeVariant::LambdaFun(child_index) => {
                 // Add the lambda symbol in the frame locals
-                let lambda_name = &owning_unit.children_units[*child_index as usize]
-                    .borrow()
-                    .name;
+                let lambda_name = &owning_unit.children_units[*child_index as usize].name;
                 ctx.current_frame_mut()
                     .bind_local(lambda_name, &self.origin_location);
 
@@ -1206,7 +1204,7 @@ impl Node {
 
         // Create the child unit identifier
         let child_unit = &owning_unit.children_units[child_index];
-        let child_unit_id = child_unit.borrow().id(&ctx.current_data().identifier);
+        let child_unit_id = child_unit.id(&ctx.current_data().identifier);
 
         // Flag the local slot as initialized before compiling the
         // unit to allow the latter to be recursive.
@@ -1215,7 +1213,7 @@ impl Node {
             &child_unit_id,
             birth_label,
         );
-        child_unit.borrow().open_frame_and_compile(ctx);
+        child_unit.open_frame_and_compile(ctx);
 
         // Add a child constant in the constant table
         let child_cst = ctx.current_data().constants.get_child();

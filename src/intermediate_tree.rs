@@ -14,10 +14,8 @@
 //!     declared.
 
 use std::{
-    cell::RefCell,
     fmt::{Debug, Display},
     hash::Hash,
-    rc::{Rc, Weak},
 };
 
 use crate::sources::SourceSection;
@@ -39,11 +37,8 @@ pub struct ExecutionUnit {
     /// Name of the execution unit.
     name: String,
 
-    /// Execution unit owning (parenting) this one.
-    parent_unit: Option<Weak<RefCell<ExecutionUnit>>>,
-
     /// List of children execution units.
-    children_units: Vec<Rc<RefCell<ExecutionUnit>>>,
+    children_units: Vec<ExecutionUnit>,
 
     /// Variant part, containing specific data.
     variant: ExecutionUnitVariant,
@@ -128,7 +123,7 @@ impl ExecutionUnit {
                     .children_units
                     .iter()
                     .enumerate()
-                    .map(|(i, c)| (i.to_string(), c.borrow().pretty_print(child_level)))
+                    .map(|(i, c)| (i.to_string(), c.pretty_print(child_level)))
                     .collect(),
                 indent_level,
             ),

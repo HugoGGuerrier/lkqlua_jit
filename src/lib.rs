@@ -83,12 +83,12 @@ impl<O: Write, E: Write> ExecutionContext<O, E> {
         // If required, display the lowered tree
         if self.config.is_verbose(VerboseElement::LoweringTree) {
             writeln!(self.config.std_out, "===== Lowering tree =====\n")?;
-            writeln!(self.config.std_out, "{}\n", lowering_tree.borrow())?;
+            writeln!(self.config.std_out, "{}\n", lowering_tree)?;
         }
 
         // Compile the lowering tree and execute it
         time_point = Instant::now();
-        let (bytecode_buffer, runtime_data) = lowering_tree.borrow().compile()?;
+        let (bytecode_buffer, runtime_data) = lowering_tree.compile()?;
         timings.push((String::from("compilation"), time_point.elapsed()));
 
         // If required, display the compiled bytecode
