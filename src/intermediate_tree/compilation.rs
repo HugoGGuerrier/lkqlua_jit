@@ -36,7 +36,7 @@ use crate::{
         constant_eval::{ConstantValue, ConstantValueVariant},
     },
     report::{Hint, Report},
-    sources::SourceSection,
+    sources::{SourceRepository, SourceSection},
 };
 
 pub mod frame;
@@ -47,7 +47,10 @@ impl ExecutionUnit {
     /// Compile this execution unit as a LuaJIT bytecode buffer. The result of
     /// this function can be used to execute the semantics described by the
     /// execution unit with the LuaJIT engine.
-    pub fn compile(&self) -> Result<(BytecodeBuffer, RuntimeData), Report> {
+    pub fn compile(
+        &self,
+        source_repo: &SourceRepository,
+    ) -> Result<(BytecodeBuffer, RuntimeData), Report> {
         // Open the initial compilation context and create the prototypes vector
         let mut compile_context = CompilationContext::new();
 
@@ -59,7 +62,11 @@ impl ExecutionUnit {
             Ok((
                 BytecodeBuffer {
                     prototypes: compile_context.prototypes,
-                    source_name: self.origin_location.source.clone(),
+                    source_name: source_repo
+                        .get_source_by_id(self.origin_location.source)
+                        .unwrap()
+                        .name
+                        .clone(),
                 },
                 compile_context.runtime_data,
             ))
@@ -325,7 +332,7 @@ impl ExecutionUnit {
         // Finally, collect runtime data for the current prototype and add it
         // to the current context.
         ctx.runtime_data.add_prototype_data(
-            &self.origin_location.source,
+            self.origin_location.source,
             data.identifier,
             instruction_locations,
         );

@@ -11,7 +11,7 @@ use crate::{
         MiscOperatorVariant, Node, NodeVariant,
     },
     report::{Hint, Report},
-    sources::SourceSection,
+    sources::{SourceId, SourceSection},
 };
 
 use liblkqllang::{BaseFunction, LkqlNode};
@@ -25,8 +25,8 @@ impl ExecutionUnit {
     ///
     /// If there is errors during the lowering of LKQL source, this function
     /// returns a [`Result::Err`] which contains all diagnostics.
-    pub fn lower_lkql_node(node: &LkqlNode) -> Result<Self, Report> {
-        let mut lowering_context = LoweringContext::new();
+    pub fn lower_lkql_node(source: SourceId, node: &LkqlNode) -> Result<Self, Report> {
+        let mut lowering_context = LoweringContext::new(source);
         let res = Self::internal_lower_lkql_node(node, &mut lowering_context)?;
         if lowering_context.diagnostics.is_empty() {
             Ok(res)
@@ -71,7 +71,7 @@ impl ExecutionUnit {
                 // Create the resulting module
                 (
                     ExecutionUnitVariant::Module {
-                        symbols: all_local_symbols(node)?,
+                        symbols: all_local_symbols(node, ctx)?,
                         elements: module_elements,
                     },
                     unit_path.file_stem().unwrap().to_string_lossy().to_string(),
@@ -97,7 +97,7 @@ impl ExecutionUnit {
                 for maybe_param_decl in &params_node {
                     match maybe_param_decl? {
                         Some(LkqlNode::ParameterDecl(pd)) => {
-                            let name = Identifier::from_node(&pd.f_param_identifier()?)?;
+                            let name = Identifier::from_node(&pd.f_param_identifier()?, ctx)?;
                             let default_expr = if let Some(n) = pd.f_default_expr()? {
                                 Some(Node::lower_lkql_node(&n, ctx)?)
                             } else {
@@ -123,7 +123,7 @@ impl ExecutionUnit {
 
         // Finally return the new execution unit
         Ok(ExecutionUnit {
-            origin_location: SourceSection::from_lkql_node(node)?,
+            origin_location: SourceSection::from_lkql_node(ctx.lowered_source, node)?,
             name,
             children_units,
             variant,
@@ -139,7 +139,7 @@ impl Node {
         let variant = match node {
             // --- Declarations
             LkqlNode::ValDecl(vd) => NodeVariant::InitLocal {
-                symbol: Identifier::from_node(&vd.f_identifier()?)?,
+                symbol: Identifier::from_node(&vd.f_identifier()?, ctx)?,
                 val: Box::new(Self::lower_lkql_node(&vd.f_value()?, ctx)?),
             },
             LkqlNode::FunDecl(_) | LkqlNode::SelectorDecl(_) => {
@@ -149,7 +149,7 @@ impl Node {
                     _ => unreachable!(),
                 };
                 NodeVariant::InitLocalFun {
-                    symbol: Identifier::from_node(&id_node)?,
+                    symbol: Identifier::from_node(&id_node, ctx)?,
                     child_index: *ctx.child_index_map.get(node).unwrap(),
                 }
             }
@@ -172,7 +172,10 @@ impl Node {
                                     let (last_id, last_node) = named_args.last().unwrap();
                                     ctx.diagnostics
                                         .push(Report::from_error_template_with_hints::<&str>(
-                                            &SourceSection::from_lkql_node(arg)?,
+                                            &SourceSection::from_lkql_node(
+                                                ctx.lowered_source,
+                                                arg,
+                                            )?,
                                             &POS_AFTER_NAMED_ARGUMENT,
                                             &vec![],
                                             vec![Hint::new(
@@ -186,7 +189,7 @@ impl Node {
                                 }
                             }
                             LkqlNode::NamedArg(na) => named_args.push((
-                                Identifier::from_node(&na.f_arg_name()?)?,
+                                Identifier::from_node(&na.f_arg_name()?, ctx)?,
                                 Self::lower_lkql_node(&na.f_value_expr()?, ctx)?,
                             )),
                             _ => unreachable!(),
@@ -211,7 +214,7 @@ impl Node {
                 };
                 NodeVariant::DottedExpr {
                     prefix: Box::new(Self::lower_lkql_node(&receiver?, ctx)?),
-                    suffix: Identifier::from_node(&member?)?,
+                    suffix: Identifier::from_node(&member?, ctx)?,
                     is_safe,
                 }
             }
@@ -246,7 +249,10 @@ impl Node {
                     .transpose()?
                     .map_or(
                         Box::new(Node {
-                            origin_location: SourceSection::from_lkql_node(node)?,
+                            origin_location: SourceSection::from_lkql_node(
+                                ctx.lowered_source,
+                                node,
+                            )?,
                             variant: NodeVariant::BoolLiteral(true),
                         }),
                         |n| Box::new(n),
@@ -263,7 +269,7 @@ impl Node {
                     }
                 }
                 NodeVariant::BlockExpr {
-                    local_symbols: all_local_symbols(node)?,
+                    local_symbols: all_local_symbols(node, ctx)?,
                     body,
                     val: Box::new(Self::lower_lkql_node(&be.f_expr()?, ctx)?),
                 }
@@ -274,12 +280,12 @@ impl Node {
             // --- Binary operation
             LkqlNode::ArithBinOp(bo) => NodeVariant::ArithBinOp {
                 left: Box::new(Self::lower_lkql_node(&bo.f_left()?, ctx)?),
-                operator: ArithOperator::lower_lkql_node(&bo.f_op()?)?,
+                operator: ArithOperator::lower_lkql_node(&bo.f_op()?, ctx)?,
                 right: Box::new(Self::lower_lkql_node(&bo.f_right()?, ctx)?),
             },
             LkqlNode::RelBinOp(bo) => NodeVariant::CompBinOp {
                 left: Box::new(Self::lower_lkql_node(&bo.f_left()?, ctx)?),
-                operator: CompOperator::lower_lkql_node(&bo.f_op()?)?,
+                operator: CompOperator::lower_lkql_node(&bo.f_op()?, ctx)?,
                 right: Box::new(Self::lower_lkql_node(&bo.f_right()?, ctx)?),
             },
             LkqlNode::BinOp(bo) => {
@@ -290,13 +296,13 @@ impl Node {
                     LkqlNode::OpAnd(_) | LkqlNode::OpOr(_) | LkqlNode::OpNot(_) => {
                         NodeVariant::LogicBinOp {
                             left,
-                            operator: LogicOperator::lower_lkql_node(&operator_node)?,
+                            operator: LogicOperator::lower_lkql_node(&operator_node, ctx)?,
                             right,
                         }
                     }
                     LkqlNode::OpConcat(_) => NodeVariant::MiscBinOp {
                         left,
-                        operator: MiscOperator::lower_lkql_node(&operator_node)?,
+                        operator: MiscOperator::lower_lkql_node(&operator_node, ctx)?,
                         right,
                     },
                     _ => unreachable!(),
@@ -309,11 +315,11 @@ impl Node {
                 let operator_node = uo.f_op()?;
                 match &operator_node {
                     LkqlNode::OpPlus(_) | LkqlNode::OpMinus(_) => NodeVariant::ArithUnOp {
-                        operator: ArithOperator::lower_lkql_node(&operator_node)?,
+                        operator: ArithOperator::lower_lkql_node(&operator_node, ctx)?,
                         operand,
                     },
                     LkqlNode::OpNot(_) => NodeVariant::LogicUnOp {
-                        operator: LogicOperator::lower_lkql_node(&operator_node)?,
+                        operator: LogicOperator::lower_lkql_node(&operator_node, ctx)?,
                         operand,
                     },
                     _ => unreachable!(),
@@ -366,14 +372,14 @@ impl Node {
                 for maybe_assoc_node in &assocs_node {
                     if let Some(LkqlNode::ObjectAssoc(ref assoc_node)) = maybe_assoc_node? {
                         assocs.push((
-                            Identifier::from_node(&assoc_node.f_name()?)?,
+                            Identifier::from_node(&assoc_node.f_name()?, ctx)?,
                             Self::lower_lkql_node(&assoc_node.f_expr()?, ctx)?,
                         ));
                     }
                 }
                 NodeVariant::ObjectLiteral(assocs)
             }
-            LkqlNode::Identifier(_) => NodeVariant::ReadSymbol(Identifier::from_node(node)?),
+            LkqlNode::Identifier(_) => NodeVariant::ReadSymbol(Identifier::from_node(node, ctx)?),
             LkqlNode::AnonymousFunction(_) => {
                 NodeVariant::LambdaFun(*ctx.child_index_map.get(node).unwrap())
             }
@@ -383,14 +389,17 @@ impl Node {
         };
 
         // Finally return the resulting node
-        Ok(Node { origin_location: SourceSection::from_lkql_node(node)?, variant })
+        Ok(Node {
+            origin_location: SourceSection::from_lkql_node(ctx.lowered_source, node)?,
+            variant,
+        })
     }
 }
 
 impl ArithOperator {
-    fn lower_lkql_node(node: &LkqlNode) -> Result<Self, Report> {
+    fn lower_lkql_node(node: &LkqlNode, ctx: &LoweringContext) -> Result<Self, Report> {
         Ok(ArithOperator {
-            origin_location: SourceSection::from_lkql_node(node)?,
+            origin_location: SourceSection::from_lkql_node(ctx.lowered_source, node)?,
             variant: match node {
                 LkqlNode::OpPlus(_) => ArithOperatorVariant::Plus,
                 LkqlNode::OpMinus(_) => ArithOperatorVariant::Minus,
@@ -403,9 +412,9 @@ impl ArithOperator {
 }
 
 impl LogicOperator {
-    fn lower_lkql_node(node: &LkqlNode) -> Result<Self, Report> {
+    fn lower_lkql_node(node: &LkqlNode, ctx: &LoweringContext) -> Result<Self, Report> {
         Ok(LogicOperator {
-            origin_location: SourceSection::from_lkql_node(node)?,
+            origin_location: SourceSection::from_lkql_node(ctx.lowered_source, node)?,
             variant: match node {
                 LkqlNode::OpAnd(_) => LogicOperatorVariant::And,
                 LkqlNode::OpOr(_) => LogicOperatorVariant::Or,
@@ -417,9 +426,9 @@ impl LogicOperator {
 }
 
 impl CompOperator {
-    fn lower_lkql_node(node: &LkqlNode) -> Result<Self, Report> {
+    fn lower_lkql_node(node: &LkqlNode, ctx: &LoweringContext) -> Result<Self, Report> {
         Ok(CompOperator {
-            origin_location: SourceSection::from_lkql_node(node)?,
+            origin_location: SourceSection::from_lkql_node(ctx.lowered_source, node)?,
             variant: match node {
                 LkqlNode::OpEq(_) => CompOperatorVariant::Equals,
                 LkqlNode::OpNeq(_) => CompOperatorVariant::NotEquals,
@@ -434,9 +443,9 @@ impl CompOperator {
 }
 
 impl MiscOperator {
-    fn lower_lkql_node(node: &LkqlNode) -> Result<Self, Report> {
+    fn lower_lkql_node(node: &LkqlNode, ctx: &LoweringContext) -> Result<Self, Report> {
         Ok(MiscOperator {
-            origin_location: SourceSection::from_lkql_node(node)?,
+            origin_location: SourceSection::from_lkql_node(ctx.lowered_source, node)?,
             variant: match node {
                 LkqlNode::OpConcat(_) => MiscOperatorVariant::Concat,
                 _ => unreachable!(),
@@ -447,12 +456,18 @@ impl MiscOperator {
 
 impl Identifier {
     /// Util function to easily create an identifier from an LKQL node.
-    fn from_node(node: &LkqlNode) -> Result<Self, Report> {
-        Ok(Self { origin_location: SourceSection::from_lkql_node(node)?, text: node.text()? })
+    fn from_node(node: &LkqlNode, ctx: &LoweringContext) -> Result<Self, Report> {
+        Ok(Self {
+            origin_location: SourceSection::from_lkql_node(ctx.lowered_source, node)?,
+            text: node.text()?,
+        })
     }
 }
 
 struct LoweringContext {
+    /// The source that is currently being lowered.
+    lowered_source: SourceId,
+
     /// Map each function declaration node to the "child index" of its produced
     /// [`Function`] object.
     child_index_map: HashMap<LkqlNode, u16>,
@@ -466,8 +481,9 @@ struct LoweringContext {
 }
 
 impl LoweringContext {
-    pub fn new() -> Self {
+    pub fn new(lowered_source: SourceId) -> Self {
         Self {
+            lowered_source,
             child_index_map: HashMap::new(),
             lambda_name_map: HashMap::new(),
             lambda_counter: 0,
@@ -524,7 +540,7 @@ fn all_local_decls(node: &LkqlNode, output: &mut Vec<LkqlNode>) -> Result<(), Re
 /// the declaration location.
 /// This function relies on [`all_local_decls`] to compute its result, meaning
 /// that all concepts described in the latter's doc are true for this function.
-fn all_local_symbols(node: &LkqlNode) -> Result<Vec<Identifier>, Report> {
+fn all_local_symbols(node: &LkqlNode, ctx: &LoweringContext) -> Result<Vec<Identifier>, Report> {
     let mut local_decls = Vec::new();
     all_local_decls(node, &mut local_decls)?;
     Ok(local_decls
@@ -536,7 +552,10 @@ fn all_local_symbols(node: &LkqlNode) -> Result<Vec<Identifier>, Report> {
                 LkqlNode::SelectorDecl(sd) => sd.f_name()?.text()?,
                 _ => unreachable!(),
             };
-            Ok(Identifier { origin_location: SourceSection::from_lkql_node(n)?, text })
+            Ok(Identifier {
+                origin_location: SourceSection::from_lkql_node(ctx.lowered_source, n)?,
+                text,
+            })
         })
         .collect::<Result<_, _>>()?)
 }

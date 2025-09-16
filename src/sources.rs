@@ -19,7 +19,8 @@ use crate::report::Report;
 #[derive(Debug)]
 pub struct SourceRepository {
     lkql_context: AnalysisContext,
-    source_map: HashMap<SourceId, Source>,
+    sources: Vec<Source>,
+    source_name_map: HashMap<String, SourceId>,
 }
 
 impl Cache<SourceId> for &SourceRepository {
@@ -29,12 +30,12 @@ impl Cache<SourceId> for &SourceRepository {
         &mut self,
         source_id: &SourceId,
     ) -> Result<&ariadne::Source<Self::Storage>, impl std::fmt::Debug> {
-        self.get_source_by_id(source_id)
+        self.get_source_by_id(*source_id)
             .map_or(Err(format!("No sources with id {source_id}")), |s| Ok(&s.buffer))
     }
 
     fn display<'a>(&self, source_id: &'a SourceId) -> Option<impl std::fmt::Display + 'a> {
-        self.get_source_by_id(source_id).map(|s| s.name.clone())
+        self.get_source_by_id(*source_id).map(|s| s.name.clone())
     }
 }
 
@@ -44,7 +45,8 @@ impl SourceRepository {
     pub fn new() -> Self {
         Self {
             lkql_context: AnalysisContext::create_default().unwrap(),
-            source_map: HashMap::new(),
+            sources: Vec::new(),
+            source_name_map: HashMap::new(),
         }
     }
 
@@ -61,8 +63,8 @@ impl SourceRepository {
     ///     (see https://github.com/HugoGGuerrier/lkqlua_jit/issues/1)
     pub fn add_source_file(&mut self, file_path: &Path, update: bool) -> Result<SourceId, Report> {
         let canonical_path = file_path.canonicalize()?;
-        let source_id = canonical_path.to_string_lossy().to_string();
-        self.add_source(source_id, || fs::read_to_string(&canonical_path), update)
+        let source_name = canonical_path.to_string_lossy().to_string();
+        self.add_source(source_name, || fs::read_to_string(&canonical_path), update)
     }
 
     /// Register the provided buffer in the source repository, returning the
@@ -82,14 +84,14 @@ impl SourceRepository {
         // to be compatible with Langkit unit naming convention.
         let mut canonical_path = current_dir()?.canonicalize()?;
         canonical_path.push(name);
-        let source_id = canonical_path.to_string_lossy().to_string();
-        self.add_source(source_id, || Ok::<String, Report>(String::from(content)), update)
+        let source_name = canonical_path.to_string_lossy().to_string();
+        self.add_source(source_name, || Ok::<String, Report>(String::from(content)), update)
     }
 
     /// Internal function for adding sources.
     fn add_source<F, E>(
         &mut self,
-        source_id: SourceId,
+        source_name: String,
         content_provider: F,
         update: bool,
     ) -> Result<SourceId, Report>
@@ -97,22 +99,35 @@ impl SourceRepository {
         F: Fn() -> Result<String, E>,
         Report: From<E>,
     {
-        if self.source_map.contains_key(&source_id) && !update {
+        // Start by checking if a source with the same name already exists
+        if self.source_name_map.contains_key(&source_name) && !update {
             return Err(Report::bug_msg(format!(
-                "Source \"{source_id}\" is already in the source repository"
+                "A source named \"{source_name}\" is already in the repository"
             )));
         }
-        self.source_map.insert(
-            source_id.clone(),
-            Source { name: source_id.clone(), buffer: ariadne::Source::from(content_provider()?) },
-        );
+
+        // If we get here, we have to create the new source object and save it
+        // in the repository.
+        let source_id = self.sources.len();
+        self.source_name_map.insert(source_name.clone(), source_id);
+        let source_object =
+            Source { name: source_name, buffer: ariadne::Source::from(content_provider()?) };
+        self.sources.push(source_object);
+
+        // Finally return the identifier of the new source
         Ok(source_id)
     }
 
     /// Get a reference to the source object associated to the provided
     /// identifier, if any.
-    pub fn get_source_by_id(&self, source_id: &SourceId) -> Option<&Source> {
-        self.source_map.get(source_id)
+    pub fn get_source_by_id(&self, source_id: SourceId) -> Option<&Source> {
+        self.sources.get(source_id)
+    }
+
+    /// Get a reference to the source in this repo that has the provided name,
+    /// if any.
+    pub fn get_id_by_name(&self, source_name: &str) -> Option<SourceId> {
+        self.source_name_map.get(source_name).cloned()
     }
 
     /// Parse the source designated by the provided identifier using the LKQL
@@ -123,7 +138,7 @@ impl SourceRepository {
     ///   * There is no source corresponding to the provided identifier
     ///   * The source designated by the provided identifier is not a valid
     ///     LKQL source
-    pub fn parse_as_lkql(&mut self, source_id: &SourceId) -> Result<AnalysisUnit, Report> {
+    pub fn parse_as_lkql(&mut self, source_id: SourceId) -> Result<AnalysisUnit, Report> {
         // Parse the source as LKQL
         let source = self
             .get_source_by_id(source_id)
@@ -140,7 +155,7 @@ impl SourceRepository {
         if !parsing_diags.is_empty() {
             let mut parsing_reports: Vec<Report> = Vec::with_capacity(parsing_diags.len());
             for diag in &parsing_diags {
-                parsing_reports.push(Report::from_lkql_diagnostic(&unit, diag)?);
+                parsing_reports.push(Report::from_lkql_diagnostic(source_id, diag)?);
             }
             Err(Report::Composed(parsing_reports))
         } else {
@@ -150,7 +165,7 @@ impl SourceRepository {
 }
 
 /// A source identifier is just a string.
-pub type SourceId = String;
+pub type SourceId = usize;
 
 /// This type represents the abstract concept of a source, this can be any
 /// buffer.
@@ -179,11 +194,12 @@ impl Display for SourceSection {
 }
 
 impl SourceSection {
-    /// Create a new source section from a [`liblkqllang::LkqlNode`] object.
-    pub fn from_lkql_node(node: &LkqlNode) -> Result<Self, Report> {
+    /// Create a new section corresponding to the provided node location range
+    /// in the provided source.
+    pub fn from_lkql_node(source: SourceId, node: &LkqlNode) -> Result<Self, Report> {
         let sloc_range = node.sloc_range()?;
         Ok(Self {
-            source: node.unit()?.unwrap().filename()?,
+            source,
             start: Location::from_lkql_location(sloc_range.start),
             end: Location::from_lkql_location(sloc_range.end),
         })
@@ -213,7 +229,7 @@ impl SourceSection {
 
     /// Create an [`ariadne::Span`] value from this source section.
     pub fn to_span(&self, source_repo: &SourceRepository) -> (SourceId, Range<usize>) {
-        let source = source_repo.get_source_by_id(&self.source).unwrap();
+        let source = source_repo.get_source_by_id(self.source).unwrap();
 
         // Here, we ensure the start offset is included in the source
         let maybe_start_offset = source

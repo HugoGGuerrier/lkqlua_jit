@@ -398,7 +398,7 @@ mod tests {
 
     fn _dummy_loc() -> SourceSection {
         SourceSection {
-            source: String::new(),
+            source: 0,
             start: Location { line: 0, col: 0 },
             end: Location { line: 0, col: 0 },
         }

@@ -269,7 +269,7 @@ mod tests {
         extended_instructions.goto(0, 0);
         extended_instructions.ad(
             &SourceSection {
-                source: String::from("test"),
+                source: 42,
                 start: Location { line: 1, col: 2 },
                 end: Location { line: 3, col: 4 },
             },
@@ -286,7 +286,7 @@ mod tests {
 
         assert_eq!(
             extended_instructions.as_instructions_and_locations(&SourceSection {
-                source: String::from(""),
+                source: 0,
                 start: Location { line: 42, col: 0 },
                 end: Location { line: 43, col: 0 }
             }),
@@ -309,7 +309,7 @@ mod tests {
                     None,
                     None,
                     Some(SourceSection {
-                        source: String::from("test"),
+                        source: 42,
                         start: Location { line: 1, col: 2 },
                         end: Location { line: 3, col: 4 },
                     }),

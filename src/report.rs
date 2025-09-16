@@ -5,7 +5,10 @@
 
 use std::io::Write;
 
-use crate::{errors::ErrorTemplate, sources::SourceSection};
+use crate::{
+    errors::ErrorTemplate,
+    sources::{SourceId, SourceSection},
+};
 use ariadne::{self, Label, StdoutFmt};
 use liblkqllang::{AnalysisUnit, Diagnostic};
 
@@ -134,15 +137,13 @@ impl Report {
 
     // --- Creation helpers
 
-    /// Create a new report from an LKQL parsing diagnostic.
-    pub fn from_lkql_diagnostic(
-        unit: &AnalysisUnit,
-        diagnostic: &Diagnostic,
-    ) -> Result<Self, Report> {
+    /// Create a new report from an LKQL parsing diagnostic in the provided
+    /// source.
+    pub fn from_lkql_diagnostic(source: SourceId, diagnostic: &Diagnostic) -> Result<Self, Report> {
         Ok(Self::single_diag(
             ReportKind::Error,
             SourceSection {
-                source: unit.filename()?,
+                source,
                 start: Location::from_lkql_location(diagnostic.sloc_range.start),
                 end: Location::from_lkql_location(diagnostic.sloc_range.end),
             },

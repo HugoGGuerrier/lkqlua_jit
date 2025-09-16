@@ -65,7 +65,7 @@ impl<O: Write, E: Write> ExecutionContext<O, E> {
 
         // Parse the source file
         time_point = Instant::now();
-        let unit = self.source_repo.parse_as_lkql(&source)?;
+        let unit = self.source_repo.parse_as_lkql(source)?;
         let root = unit.root()?.unwrap();
         timings.push((String::from("parsing"), time_point.elapsed()));
 
@@ -77,7 +77,7 @@ impl<O: Write, E: Write> ExecutionContext<O, E> {
 
         // Lower the parsing tree
         time_point = Instant::now();
-        let lowering_tree = ExecutionUnit::lower_lkql_node(&root)?;
+        let lowering_tree = ExecutionUnit::lower_lkql_node(source, &root)?;
         timings.push((String::from("lowering"), time_point.elapsed()));
 
         // If required, display the lowered tree
@@ -88,7 +88,7 @@ impl<O: Write, E: Write> ExecutionContext<O, E> {
 
         // Compile the lowering tree and execute it
         time_point = Instant::now();
-        let (bytecode_buffer, runtime_data) = lowering_tree.compile()?;
+        let (bytecode_buffer, runtime_data) = lowering_tree.compile(&self.source_repo)?;
         timings.push((String::from("compilation"), time_point.elapsed()));
 
         // If required, display the compiled bytecode
@@ -110,7 +110,8 @@ impl<O: Write, E: Write> ExecutionContext<O, E> {
         // Use the engine to run the bytecode
         time_point = Instant::now();
         let res = self.engine.run_bytecode(
-            &bytecode_buffer.source_name,
+            source,
+            &self.source_repo,
             &encoded_bytecode_buffer,
             &runtime_data,
         );

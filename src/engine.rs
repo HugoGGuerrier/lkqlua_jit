@@ -18,6 +18,7 @@ use crate::{
         open_lua_libs, push_c_function, push_string, remove_value, set_global, to_string,
     },
     report::Report,
+    sources::{SourceId, SourceRepository},
 };
 
 pub mod runtime;
@@ -57,7 +58,8 @@ impl Engine {
     /// report in case of a runtime error.
     pub fn run_bytecode(
         &self,
-        buffer_name: &str,
+        source_id: SourceId,
+        source_repo: &SourceRepository,
         bytecode_buffer: &Vec<u8>,
         runtime_data: &RuntimeData,
     ) -> Result<(), Report> {
@@ -66,7 +68,11 @@ impl Engine {
         let error_handler = get_top(self.lua_state);
 
         // Load the bytecode buffer in the Lua state
-        if !load_buffer(self.lua_state, bytecode_buffer, buffer_name) {
+        if !load_buffer(
+            self.lua_state,
+            bytecode_buffer,
+            &source_repo.get_source_by_id(source_id).unwrap().name,
+        ) {
             panic!(
                 "Cannot load the provided bytecode buffer, error message: {}",
                 get_string(self.lua_state, -1).unwrap_or("None")
@@ -87,11 +93,15 @@ impl Engine {
                 .stack_trace
                 .iter()
                 .find_map(|e| {
-                    runtime_data.location_in_prototype(
-                        &e.source,
-                        &e.prototype_identifier,
-                        e.program_counter,
-                    )
+                    source_repo
+                        .get_id_by_name(&e.source_name)
+                        .and_then(|source| {
+                            runtime_data.location_in_prototype(
+                                source,
+                                &e.prototype_identifier,
+                                e.program_counter,
+                            )
+                        })
                 })
                 .unwrap();
             Err(Report::from_error_template(
@@ -122,15 +132,15 @@ unsafe extern "C" fn handle_error(l: LuaState) -> c_int {
         if let Some(mut frame) = maybe_frame {
             if debug_info(l, &mut frame, "S") {
                 if let Some((prototype_name, pc)) = debug_proto_and_pc(l, &mut frame) {
-                    let source = debug_get_source(&frame).unwrap();
-                    let prototype_identifier = if source == prototype_name {
-                        let source_path = PathBuf::from_str(source.as_str()).unwrap();
+                    let source_name = debug_get_source(&frame).unwrap();
+                    let prototype_identifier = if source_name == prototype_name {
+                        let source_path = PathBuf::from_str(source_name.as_str()).unwrap();
                         String::from(source_path.file_stem().unwrap().to_str().unwrap())
                     } else {
                         String::from(prototype_name)
                     };
                     stack_trace.push(StackTraceElement {
-                        source,
+                        source_name,
                         prototype_identifier,
                         // We subtract 1 to the PC because Lua index
                         // instructions from 1.
@@ -215,7 +225,7 @@ struct RuntimeError {
 /// This type represents an element of a runtime stack trace.
 #[derive(Debug, Serialize, Deserialize)]
 struct StackTraceElement {
-    source: String,
+    source_name: String,
     prototype_identifier: String,
     program_counter: usize,
 }

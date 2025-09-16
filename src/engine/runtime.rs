@@ -26,19 +26,18 @@ impl RuntimeData {
     /// Map the provided prototype identifier to the specified data.
     pub fn add_prototype_data(
         &mut self,
-        source: &SourceId,
+        source: SourceId,
         prototype_id: String,
         instruction_locations: Vec<Option<SourceSection>>,
     ) {
         // Ensure the source is associated to an existing map
-        if !self.source_prototypes.contains_key(source) {
-            self.source_prototypes
-                .insert(source.clone(), HashMap::new());
+        if !self.source_prototypes.contains_key(&source) {
+            self.source_prototypes.insert(source, HashMap::new());
         }
 
         // Then store the provided prototype data
         self.source_prototypes
-            .get_mut(source)
+            .get_mut(&source)
             .unwrap()
             .insert(prototype_id, PrototypeData { instruction_locations });
     }
@@ -47,12 +46,12 @@ impl RuntimeData {
     /// the prototype identified by the provided id.
     pub fn location_in_prototype(
         &self,
-        source: &SourceId,
+        source: SourceId,
         prototype_id: &str,
         program_counter: usize,
     ) -> Option<&SourceSection> {
         self.source_prototypes
-            .get(source)?
+            .get(&source)?
             .get(prototype_id)
             .and_then(|data| {
                 data.instruction_locations
