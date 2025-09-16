@@ -26,6 +26,12 @@ pub enum Report {
     Composed(Vec<Report>),
 }
 
+impl From<String> for Report {
+    fn from(value: String) -> Self {
+        Self::error_msg(value)
+    }
+}
+
 impl From<std::io::Error> for Report {
     fn from(value: std::io::Error) -> Self {
         Self::error_msg(format!("{value}"))

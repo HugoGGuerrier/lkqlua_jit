@@ -9,7 +9,7 @@
 
 use std::{collections::HashMap, env::current_dir, fmt::Display, fs, ops::Range, path::Path};
 
-use ariadne::{Cache, Source};
+use ariadne::Cache;
 use liblkqllang::{AnalysisContext, AnalysisUnit, LkqlNode, SourceLocation};
 
 use crate::report::Report;
@@ -28,12 +28,13 @@ impl Cache<SourceId> for &SourceRepository {
     fn fetch(
         &mut self,
         source_id: &SourceId,
-    ) -> Result<&Source<Self::Storage>, impl std::fmt::Debug> {
-        self.get_source(source_id)
+    ) -> Result<&ariadne::Source<Self::Storage>, impl std::fmt::Debug> {
+        self.get_source_by_id(source_id)
+            .map_or(Err(format!("No sources with id {source_id}")), |s| Ok(&s.buffer))
     }
 
-    fn display<'a>(&self, id: &'a SourceId) -> Option<impl std::fmt::Display + 'a> {
-        Some(id)
+    fn display<'a>(&self, source_id: &'a SourceId) -> Option<impl std::fmt::Display + 'a> {
+        self.get_source_by_id(source_id).map(|s| s.name.clone())
     }
 }
 
@@ -78,7 +79,7 @@ impl SourceRepository {
         update: bool,
     ) -> Result<SourceId, Report> {
         // We add the current working directory before the buffer name in order
-        // to be compatible with Langkit unit's `filename`.
+        // to be compatible with Langkit unit naming convention.
         let mut canonical_path = current_dir()?.canonicalize()?;
         canonical_path.push(name);
         let source_id = canonical_path.to_string_lossy().to_string();
@@ -88,7 +89,7 @@ impl SourceRepository {
     /// Internal function for adding sources.
     fn add_source<F, E>(
         &mut self,
-        id: SourceId,
+        source_id: SourceId,
         content_provider: F,
         update: bool,
     ) -> Result<SourceId, Report>
@@ -96,30 +97,22 @@ impl SourceRepository {
         F: Fn() -> Result<String, E>,
         Report: From<E>,
     {
-        if self.source_map.contains_key(&id) && !update {
+        if self.source_map.contains_key(&source_id) && !update {
             return Err(Report::bug_msg(format!(
-                "Source \"{id}\" is already in the source repository"
+                "Source \"{source_id}\" is already in the source repository"
             )));
         }
-        self.source_map
-            .insert(id.clone(), Source::from(content_provider()?));
-        Ok(id)
+        self.source_map.insert(
+            source_id.clone(),
+            Source { name: source_id.clone(), buffer: ariadne::Source::from(content_provider()?) },
+        );
+        Ok(source_id)
     }
 
-    /// Get the source designated by the provided identifier, if there is no
-    /// sources associated to it, return an [`Result::Err`].
-    pub fn get_source(&self, source_id: &SourceId) -> Result<&Source, Report> {
-        if let Some(source) = self.source_map.get(source_id) {
-            Ok(source)
-        } else {
-            Err(Report::bug_msg(format!("Unknown source \"{source_id}\"")))
-        }
-    }
-
-    /// Get the source designated by the provided identifier, panicking if
-    /// there is no source related to it.
-    pub fn get_source_unsafe(&self, source_id: &SourceId) -> &Source {
-        self.get_source(source_id).expect("Unknown source")
+    /// Get a reference to the source object associated to the provided
+    /// identifier, if any.
+    pub fn get_source_by_id(&self, source_id: &SourceId) -> Option<&Source> {
+        self.source_map.get(source_id)
     }
 
     /// Parse the source designated by the provided identifier using the LKQL
@@ -132,10 +125,15 @@ impl SourceRepository {
     ///     LKQL source
     pub fn parse_as_lkql(&mut self, source_id: &SourceId) -> Result<AnalysisUnit, Report> {
         // Parse the source as LKQL
-        let source = self.get_source_unsafe(source_id);
-        let unit = self
-            .lkql_context
-            .get_unit_from_buffer(source_id, source.text(), None, None)?;
+        let source = self
+            .get_source_by_id(source_id)
+            .ok_or(format!("No sources with id {source_id}"))?;
+        let unit = self.lkql_context.get_unit_from_buffer(
+            &source.name,
+            source.buffer.text(),
+            None,
+            None,
+        )?;
 
         // Check parsing diagnostics
         let parsing_diags = unit.diagnostics()?;
@@ -153,6 +151,18 @@ impl SourceRepository {
 
 /// A source identifier is just a string.
 pub type SourceId = String;
+
+/// This type represents the abstract concept of a source, this can be any
+/// buffer.
+#[derive(Debug)]
+pub struct Source {
+    /// Name of the source, either the absolute path of the file, or the
+    /// provided buffer name, preceded by the current directory absolute path.
+    pub name: String,
+
+    /// Content of the source.
+    pub buffer: ariadne::Source<String>,
+}
 
 /// This structure represents an extract from a source object.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -203,24 +213,26 @@ impl SourceSection {
 
     /// Create an [`ariadne::Span`] value from this source section.
     pub fn to_span(&self, source_repo: &SourceRepository) -> (SourceId, Range<usize>) {
-        let source = source_repo.get_source_unsafe(&self.source);
+        let source = source_repo.get_source_by_id(&self.source).unwrap();
 
         // Here, we ensure the start offset is included in the source
         let maybe_start_offset = source
+            .buffer
             .line(self.start.line - 1)
             .map(|l| l.offset() + self.start.col - 1);
         let start_offset = maybe_start_offset.unwrap_or(if self.start.line > 1 {
-            source.lines().last().unwrap().span().end
+            source.buffer.lines().last().unwrap().span().end
         } else {
             0
         });
 
         // Doing the same thing for the end offset
         let maybe_end_offset = source
+            .buffer
             .line(self.end.line - 1)
             .map(|l| l.offset() + self.end.col - 1);
         let end_offset = maybe_end_offset.unwrap_or(if self.end.line > 1 {
-            source.lines().last().unwrap().span().end
+            source.buffer.lines().last().unwrap().span().end
         } else {
             0
         });
