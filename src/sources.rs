@@ -234,8 +234,8 @@ impl SourceSection {
         // Here, we ensure the start offset is included in the source
         let maybe_start_offset = source
             .buffer
-            .line(self.start.line - 1)
-            .map(|l| l.offset() + self.start.col - 1);
+            .line(self.start.line as usize - 1)
+            .map(|l| l.offset() + self.start.col as usize - 1);
         let start_offset = maybe_start_offset.unwrap_or(if self.start.line > 1 {
             source.buffer.lines().last().unwrap().span().end
         } else {
@@ -245,8 +245,8 @@ impl SourceSection {
         // Doing the same thing for the end offset
         let maybe_end_offset = source
             .buffer
-            .line(self.end.line - 1)
-            .map(|l| l.offset() + self.end.col - 1);
+            .line(self.end.line as usize - 1)
+            .map(|l| l.offset() + self.end.col as usize - 1);
         let end_offset = maybe_end_offset.unwrap_or(if self.end.line > 1 {
             source.buffer.lines().last().unwrap().span().end
         } else {
@@ -262,8 +262,8 @@ impl SourceSection {
 /// a colon.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Location {
-    pub line: usize,
-    pub col: usize,
+    pub line: u32,
+    pub col: u16,
 }
 
 impl PartialOrd for Location {
@@ -284,6 +284,6 @@ impl Ord for Location {
 impl Location {
     /// Create a new location from a [`liblkqllang::SourceLocation`] object.
     pub fn from_lkql_location(location: SourceLocation) -> Self {
-        Self { line: location.line as usize, col: location.column as usize }
+        Self { line: location.line, col: location.column }
     }
 }

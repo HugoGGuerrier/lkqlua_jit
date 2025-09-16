@@ -374,11 +374,11 @@ pub struct Prototype {
     // --- Debug information
     /// The index first line of the prototype, first line of the source being
     /// indexed as `1`.
-    pub first_line: usize,
+    pub first_line: u32,
 
     /// Number of lines bellow the starting line that belongs to this
     /// prototype.
-    pub line_count: usize,
+    pub line_count: u32,
     pub variable_data: Vec<VariableData>,
 }
 
@@ -564,7 +564,7 @@ pub struct Instruction {
     pub variant: InstructionVariant,
 
     /// The source line this instruction is from.
-    pub source_line: usize,
+    pub source_line: u32,
 }
 
 /// This enum represents the variant part of an instruction.
@@ -604,12 +604,12 @@ impl Display for Instruction {
 
 impl Instruction {
     /// Shortcut function to create an instruction with the `ABC` variant.
-    pub fn abc(op_code: u8, a: u8, b: u8, c: u8, source_line: usize) -> Self {
+    pub fn abc(op_code: u8, a: u8, b: u8, c: u8, source_line: u32) -> Self {
         Self { op_code, variant: InstructionVariant::ABC { a, b, c }, source_line }
     }
 
     /// Shortcut function to create an instruction with the `AD` variant.
-    pub fn ad(op_code: u8, a: u8, d: u16, source_line: usize) -> Self {
+    pub fn ad(op_code: u8, a: u8, d: u16, source_line: u32) -> Self {
         Self { op_code, variant: InstructionVariant::AD { a, d }, source_line }
     }
 
