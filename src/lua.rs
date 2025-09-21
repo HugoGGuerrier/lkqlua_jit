@@ -169,9 +169,25 @@ pub fn push_string(l: LuaState, s: &str) {
     }
 }
 
+/// Create a new table value and push it on the top of the stack. You can
+/// provide initial size for the table array and hash parts to avoid later
+/// memory allocation.
+pub fn push_table(l: LuaState, array_part_size: Option<i32>, hash_part_size: Option<i32>) {
+    unsafe { lua_createtable(l, array_part_size.unwrap_or(0), hash_part_size.unwrap_or(0)) }
+}
+
 /// Push a new C function value to the top of the Lua stack.
 pub fn push_c_function(l: LuaState, function: LuaCFunction) {
     unsafe { lua_pushcclosure(l, function, 0) }
+}
+
+/// Get the global value that has the provided `name` and push it on the top of
+/// the stack. If this value doesn't exists, the `nil` value is pushed instead.
+pub fn get_global(l: LuaState, name: &str) {
+    unsafe {
+        let c_name = CString::from_str(name).unwrap();
+        lua_getfield(l, GLOBAL_INDEX, c_name.as_ptr());
+    }
 }
 
 /// Place the value currently on the top of the stack in the field of the
@@ -181,6 +197,38 @@ pub fn set_global(l: LuaState, name: &str) {
     unsafe {
         let c_name = CString::from_str(name).unwrap();
         lua_setfield(l, GLOBAL_INDEX, c_name.as_ptr());
+    }
+}
+
+/// Get the meta-table of the value at the provided `index` and push it on the
+/// top of the stack. If the index is invalid or the value hasn't any
+/// meta-table, this function returns `false` and doesn't push anything.
+pub fn get_metatable(l: LuaState, index: i32) -> bool {
+    unsafe { lua_getmetatable(l, index) != 0 }
+}
+
+/// Pop the table at the top of the stack and set it as meta-table of the
+/// value at the provided `index`. This function returns whether the operation
+/// was a success.
+pub fn set_metatable(l: LuaState, index: i32) -> bool {
+    unsafe { lua_setmetatable(l, index) != 0 }
+}
+
+/// Get the field of the provided `name` in the table at the provided `index`
+/// and place it on the top of the stack.
+pub fn get_field(l: LuaState, index: i32, name: &str) {
+    unsafe {
+        let c_name = CString::from_str(name).unwrap();
+        lua_getfield(l, index, c_name.as_ptr());
+    }
+}
+
+/// Pop the value on the top of the stack and place it in the field of the
+/// provided `name` in the table at the provided `index`.
+pub fn set_field(l: LuaState, index: i32, name: &str) {
+    unsafe {
+        let c_name = CString::from_str(name).unwrap();
+        lua_setfield(l, index, c_name.as_ptr());
     }
 }
 
@@ -361,7 +409,11 @@ unsafe extern "C" {
 
     fn lua_pushstring(l: LuaState, s: *const c_char);
     fn lua_pushcclosure(l: LuaState, function: LuaCFunction, n: c_int);
+    fn lua_getfield(l: LuaState, index: c_int, field: *const c_char);
     fn lua_setfield(l: LuaState, index: c_int, field: *const c_char);
+    fn lua_createtable(l: LuaState, narr: c_int, nrec: c_int);
+    fn lua_getmetatable(l: LuaState, index: c_int) -> c_int;
+    fn lua_setmetatable(l: LuaState, index: c_int) -> c_int;
 
     fn lua_gettop(l: LuaState) -> c_int;
     fn lua_settop(l: LuaState, index: c_int);
