@@ -133,34 +133,6 @@ pub fn get_string(l: LuaState, index: i32) -> Option<&'static str> {
     }
 }
 
-/// Get the index of the top of the stack. Since the stack is 1-indexed, this
-/// function also returns the number of values in the stack.
-pub fn get_top(l: LuaState) -> i32 {
-    unsafe { lua_gettop(l) }
-}
-
-/// Set the top of the lua stack, removing all values that are higher than the
-/// new top index.
-pub fn set_top(l: LuaState, index: i32) {
-    unsafe { lua_settop(l, index) }
-}
-
-/// Pop the provided number of elements from the top of the stack.
-pub fn pop(l: LuaState, count: i32) {
-    set_top(l, count - 1);
-}
-
-/// Move the value at the top of the stack to the provided index, shifting all
-/// values at this index and above upward.
-pub fn move_top_value(l: LuaState, index: i32) {
-    unsafe { lua_insert(l, index) }
-}
-
-/// Remove the value at the provided index, shifting all values above downward.
-pub fn remove_value(l: LuaState, index: i32) {
-    unsafe { lua_remove(l, index) }
-}
-
 /// Push a new string to the top of the Lua stack.
 pub fn push_string(l: LuaState, s: &str) {
     unsafe {
@@ -230,6 +202,34 @@ pub fn set_field(l: LuaState, index: i32, name: &str) {
         let c_name = CString::from_str(name).unwrap();
         lua_setfield(l, index, c_name.as_ptr());
     }
+}
+
+/// Get the index of the top of the stack. Since the stack is 1-indexed, this
+/// function also returns the number of values in the stack.
+pub fn get_top(l: LuaState) -> i32 {
+    unsafe { lua_gettop(l) }
+}
+
+/// Set the top of the lua stack, removing all values that are higher than the
+/// new top index.
+pub fn set_top(l: LuaState, index: i32) {
+    unsafe { lua_settop(l, index) }
+}
+
+/// Pop the provided number of elements from the top of the stack.
+pub fn pop(l: LuaState, count: i32) {
+    set_top(l, count - 1);
+}
+
+/// Move the value at the top of the stack to the provided index, shifting all
+/// values at this index and above upward.
+pub fn move_top_value(l: LuaState, index: i32) {
+    unsafe { lua_insert(l, index) }
+}
+
+/// Remove the value at the provided index, shifting all values above downward.
+pub fn remove_value(l: LuaState, index: i32) {
+    unsafe { lua_remove(l, index) }
 }
 
 /// Considering that the stack is filled with `arg_count` arguments and a
