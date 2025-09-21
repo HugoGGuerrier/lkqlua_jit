@@ -10,7 +10,7 @@ use crate::{
     sources::{SourceId, SourceSection},
 };
 use ariadne::{self, Label, StdoutFmt};
-use liblkqllang::{AnalysisUnit, Diagnostic};
+use liblkqllang::Diagnostic;
 
 use crate::sources::{Location, SourceRepository};
 
