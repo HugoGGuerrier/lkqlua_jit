@@ -6,11 +6,10 @@
 use std::{ffi::c_int, path::PathBuf, str::FromStr};
 
 use regex::Regex;
-use serde::{Deserialize, Serialize};
 
 use crate::{
     builtins::get_builtins,
-    engine::runtime::{RuntimeData, RuntimeErrorInstance},
+    engine::runtime::{DynamicError, RuntimeData, RuntimeError, StackTraceElement},
     errors::{ERROR_TEMPLATE_REPOSITORY, LUA_ENGINE_ERROR},
     lua::{
         LuaState, call, close_lua_state, debug_frame, debug_get_local, debug_get_source,
@@ -88,7 +87,7 @@ impl Engine {
         // If there was an error during the execution, parse the error message
         // as JSON to extract all information.
         if let Err(encoded_error) = call_res {
-            let runtime_error = serde_json::from_str::<RuntimeError>(&encoded_error).unwrap();
+            let runtime_error = RuntimeError::from_json(&encoded_error).unwrap();
             let error_location = runtime_error
                 .stack_trace
                 .iter()
@@ -169,8 +168,7 @@ unsafe extern "C" fn handle_error(l: LuaState) -> c_int {
     }
 
     // Then process the message part to get the runtime error instance
-    let runtime_error = if let Ok(runtime_error_instance) =
-        serde_json::from_str::<RuntimeErrorInstance>(error_message)
+    let runtime_error = if let Some(runtime_error_instance) = DynamicError::from_json(error_message)
     {
         // If the message can be parsed as an error instance, we have to fetch
         // message arguments.
@@ -178,8 +176,8 @@ unsafe extern "C" fn handle_error(l: LuaState) -> c_int {
             .message_args
             .into_iter()
             .map(|a| match a {
-                runtime::RuntimeErrorInstanceArg::Static(s) => s,
-                runtime::RuntimeErrorInstanceArg::LocalValue(index) => {
+                runtime::DynamicErrorArg::Static(s) => s,
+                runtime::DynamicErrorArg::LocalValue(index) => {
                     let _ =
                         debug_get_local(l, current_frame.as_ref().unwrap(), index as i32).unwrap();
                     String::from(to_string(l, -1, "<lkql_value>"))
@@ -200,7 +198,7 @@ unsafe extern "C" fn handle_error(l: LuaState) -> c_int {
 
     // Finally, place the encoded runtime error on the stack as the function
     // result.
-    push_string(l, &serde_json::to_string(&runtime_error).unwrap());
+    push_string(l, &runtime_error.to_json_string());
     1
 }
 
@@ -210,22 +208,4 @@ fn parse_lua_error(error_message: &str) -> (usize, Vec<String>) {
     let mut final_message = error_message[..1].to_uppercase();
     final_message.push_str(&error_message[1..]);
     (LUA_ENGINE_ERROR.id, vec![final_message])
-}
-
-/// This type represents an error that happened during the runtime. It contains
-/// the error template and arguments for it, alongside the stack trace of the
-/// error.
-#[derive(Debug, Serialize, Deserialize)]
-struct RuntimeError {
-    template_id: usize,
-    message_args: Vec<String>,
-    stack_trace: Vec<StackTraceElement>,
-}
-
-/// This type represents an element of a runtime stack trace.
-#[derive(Debug, Serialize, Deserialize)]
-struct StackTraceElement {
-    source_name: String,
-    prototype_identifier: String,
-    program_counter: usize,
 }

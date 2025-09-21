@@ -23,7 +23,7 @@ use crate::{
         },
         op_codes::*,
     },
-    engine::runtime::{RuntimeData, RuntimeErrorInstance, RuntimeErrorInstanceArg},
+    engine::runtime::{DynamicError, DynamicErrorArg, RuntimeData},
     errors::{
         DUPLICATED_SYMBOL, ErrorTemplate, INDEX_OUT_OF_BOUNDS, NO_VALUE_FOR_PARAM,
         POS_AND_NAMED_VALUE_FOR_PARAM, PREVIOUS_SYMBOL_HINT, UNKNOWN_MEMBER, UNKNOWN_SYMBOL,
@@ -212,7 +212,7 @@ impl ExecutionUnit {
                             &mut extended_instructions,
                             None,
                             &NO_VALUE_FOR_PARAM,
-                            &vec![RuntimeErrorInstanceArg::Static(param_id.text.clone())],
+                            &vec![DynamicErrorArg::Static(param_id.text.clone())],
                         );
                     }
 
@@ -236,7 +236,7 @@ impl ExecutionUnit {
                         &mut extended_instructions,
                         None,
                         &POS_AND_NAMED_VALUE_FOR_PARAM,
-                        &vec![RuntimeErrorInstanceArg::Static(param_id.text.clone())],
+                        &vec![DynamicErrorArg::Static(param_id.text.clone())],
                     );
 
                     // Label the next instruction
@@ -412,7 +412,7 @@ impl Node {
                         output,
                         Some(&suffix.origin_location),
                         &UNKNOWN_MEMBER,
-                        &vec![RuntimeErrorInstanceArg::Static(suffix.text.clone())],
+                        &vec![DynamicErrorArg::Static(suffix.text.clone())],
                     );
                 }
 
@@ -451,7 +451,7 @@ impl Node {
                         output,
                         Some(&index.origin_location),
                         &INDEX_OUT_OF_BOUNDS,
-                        &vec![RuntimeErrorInstanceArg::LocalValue(index_access.slot())],
+                        &vec![DynamicErrorArg::LocalValue(index_access.slot())],
                     );
                 }
 
@@ -659,7 +659,7 @@ impl Node {
                                 output,
                                 Some(&identifier.origin_location),
                                 &UNKNOWN_SYMBOL,
-                                &vec![RuntimeErrorInstanceArg::Static(identifier.text.clone())],
+                                &vec![DynamicErrorArg::Static(identifier.text.clone())],
                             );
                             output.label(next_label);
                         }
@@ -1611,17 +1611,17 @@ fn emit_runtime_error(
     output: &mut ExtendedInstructionBuffer,
     maybe_error_location: Option<&SourceSection>,
     error_template: &ErrorTemplate,
-    message_args: &Vec<RuntimeErrorInstanceArg>,
+    message_args: &Vec<DynamicErrorArg>,
 ) {
     // Create the runtime error instance object
     let runtime_error_instance =
-        RuntimeErrorInstance { template_id: error_template.id, message_args: message_args.clone() };
+        DynamicError { template_id: error_template.id, message_args: message_args.clone() };
 
     // Add constants in the current repository
     let message_cst = ctx
         .current_data()
         .constants
-        .get_from_string(&serde_json::to_string(&runtime_error_instance).unwrap());
+        .get_from_string(&runtime_error_instance.to_json_string());
 
     // Reserve temporary slots, fill them and call the function
     let call_slots = ctx.current_frame_mut().reserve_contiguous_slots(3);
