@@ -335,16 +335,16 @@ pub fn debug_get_local(l: LuaState, ar: &LuaDebug, index: i32) -> Option<&'stati
 pub fn to_string(l: LuaState, index: i32, default: &'static str) -> &'static str {
     let value_type = get_type(l, index);
     match value_type {
-        LuaType::Number | LuaType::String => get_string(l, -1).unwrap(),
+        LuaType::Number | LuaType::String => get_string(l, index).unwrap(),
         LuaType::Boolean => {
-            if get_boolean(l, -1) {
+            if get_boolean(l, index) {
                 "true"
             } else {
                 "false"
             }
         }
         _ => {
-            if call_meta(l, -1, "__tostring") {
+            if call_meta(l, index, "__tostring") {
                 get_string(l, -1).unwrap()
             } else {
                 default
