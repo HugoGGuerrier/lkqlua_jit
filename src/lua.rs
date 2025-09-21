@@ -139,6 +139,17 @@ pub fn get_top(l: LuaState) -> i32 {
     unsafe { lua_gettop(l) }
 }
 
+/// Set the top of the lua stack, removing all values that are higher than the
+/// new top index.
+pub fn set_top(l: LuaState, index: i32) {
+    unsafe { lua_settop(l, index) }
+}
+
+/// Pop the provided number of elements from the top of the stack.
+pub fn pop(l: LuaState, count: i32) {
+    set_top(l, count - 1);
+}
+
 /// Move the value at the top of the stack to the provided index, shifting all
 /// values at this index and above upward.
 pub fn move_top_value(l: LuaState, index: i32) {
@@ -353,6 +364,7 @@ unsafe extern "C" {
     fn lua_setfield(l: LuaState, index: c_int, field: *const c_char);
 
     fn lua_gettop(l: LuaState) -> c_int;
+    fn lua_settop(l: LuaState, index: c_int);
     fn lua_insert(l: LuaState, index: c_int);
     fn lua_remove(l: LuaState, index: c_int);
 
