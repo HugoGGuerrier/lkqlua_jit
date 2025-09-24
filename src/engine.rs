@@ -158,14 +158,13 @@ unsafe extern "C" fn handle_error(l: LuaState) -> c_int {
 
     // Then fetch the raw error message and start by extracting different parts
     // from it.
-    let raw_error_parser = Regex::new(r"^\[.*\]:\d+: (.*)$").unwrap();
-    let raw_error_message = to_string(l, get_top(l), "[]:0: No error message");
-    let error_message;
-    if let Some(groups) = raw_error_parser.captures(raw_error_message) {
-        error_message = groups.get(1).unwrap().as_str();
+    let location_header_matcher = Regex::new(r"^\[.*\]:\d+: (.*)$").unwrap();
+    let raw_error_message = to_string(l, get_top(l), "No error message");
+    let error_message = if let Some(groups) = location_header_matcher.captures(raw_error_message) {
+        groups.get(1).unwrap().as_str()
     } else {
-        panic!("Unexpected Lua error message: {}", raw_error_message);
-    }
+        raw_error_message
+    };
 
     // Then process the message part to get the runtime error instance
     let runtime_error = if let Some(runtime_error_instance) = DynamicError::from_json(error_message)

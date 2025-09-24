@@ -32,7 +32,7 @@ pub type LuaCFunction = unsafe extern "C" fn(LuaState) -> c_int;
 
 /// This type represents type tags for Lua values.
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum LuaType {
     None = -1,
     Nil = 0,
@@ -263,6 +263,16 @@ pub fn call_meta(l: LuaState, index: i32, meta_method: &str) -> bool {
     unsafe { luaL_callmeta(l, index, ext_meta_method.as_ptr()) == 1 }
 }
 
+/// Raise an error in the Lua context. This function never returns.
+#[unsafe(no_mangle)]
+#[allow(improper_ctypes_definitions)]
+pub extern "C" fn raise_error(l: LuaState, message: &str) {
+    unsafe {
+        let c_message = CString::from_str(message).unwrap();
+        luaL_error(l, c_message.as_ptr());
+    }
+}
+
 /// Get debug information about the frame at the specified level. This function
 /// returns [`None`] if the specified level is higher that the current stack
 /// depth.
@@ -422,6 +432,7 @@ unsafe extern "C" {
 
     fn lua_pcall(l: LuaState, nargs: c_int, nres: c_int, errfunc: c_int) -> i32;
     fn luaL_callmeta(l: LuaState, obj: c_int, meta_method: *const c_char) -> c_int;
+    fn luaL_error(l: LuaState, fmt: *const c_char, ...) -> c_int;
 
     fn lua_getstack(l: LuaState, level: c_int, ar: *mut LuaDebug) -> c_int;
     fn lua_getinfo(l: LuaState, what: *const c_char, ar: *mut LuaDebug) -> c_int;
