@@ -102,7 +102,7 @@ impl Frame {
     /// Add a new local value to this frame, updating the already registered
     /// one if any.
     pub fn bind_local(&mut self, name: &str, declaration_location: &SourceSection) {
-        let local_slot = self.reserve_contiguous_slots(1).start;
+        let local_slot = self.reserve_contiguous_slots(1).first;
         self.bindings.insert(
             String::from(name),
             BindingData::new(declaration_location.clone(), local_slot),
@@ -231,25 +231,27 @@ impl Frame {
 
     /// Get an unnamed temporary slot to store working values.
     pub fn get_tmp(&mut self) -> u8 {
-        self.reserve_contiguous_slots(1).start
+        self.reserve_contiguous_slots(1).first
     }
 
     /// Get a range of contiguous available slots, reserving all of them. This
     /// function panics if there are not enough available slots.
-    pub fn reserve_contiguous_slots(&mut self, count: usize) -> Range<u8> {
+    pub fn reserve_contiguous_slots(&mut self, count: usize) -> SlotRange {
         self.get_slots(count, true, true)
     }
 
     /// Release the provided slot, making it free to use.
     pub fn release_slot(&mut self, slot: u8) {
-        self.release_slots(slot..slot + 1);
+        self.release_slots(SlotRange { first: slot, last: slot });
     }
 
     /// Release all slots in the provided range, making them free to use.
-    pub fn release_slots(&mut self, slots: Range<u8>) {
+    pub fn release_slots(&mut self, slots: SlotRange) {
         match &mut self.variant {
             FrameVariant::Semantic { available_slots, .. } => {
-                slots.for_each(|i| available_slots[i as usize] = false)
+                for slot in slots.range() {
+                    available_slots[slot as usize] = false;
+                }
             }
             FrameVariant::Lexical => self.parent_frame_mut().unwrap().release_slots(slots),
         }
@@ -287,7 +289,7 @@ impl Frame {
     /// according to the function arguments.
     /// The returned range's end is exclusive, meaning that it is not reserved
     /// for use.
-    fn get_slots(&mut self, count: usize, reserve: bool, update_size: bool) -> Range<u8> {
+    fn get_slots(&mut self, count: usize, reserve: bool, update_size: bool) -> SlotRange {
         match &mut self.variant {
             FrameVariant::Semantic { available_slots, maximum_size, .. } => {
                 let mut start_bound = 0;
@@ -303,7 +305,7 @@ impl Frame {
                         if update_size && i as u8 > *maximum_size {
                             *maximum_size = i as u8;
                         }
-                        return start_bound as u8..i as u8;
+                        return SlotRange { first: start_bound as u8, last: i as u8 - 1 };
                     }
 
                     // If the `i`th slot is occupied, we move the cursor on it
@@ -409,4 +411,19 @@ pub enum UpValueTarget {
 
     /// When the up-value to read is an up-value of the parent frame.
     ParentUpValue(u8),
+}
+
+/// This type represents a range of slots, bounds included.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SlotRange {
+    pub first: u8,
+    pub last: u8,
+}
+
+impl SlotRange {
+    /// Get a standard range from this slot range to iterate over all slots in
+    /// the range.
+    fn range(&self) -> Range<u8> {
+        self.first..self.last + 1
+    }
 }

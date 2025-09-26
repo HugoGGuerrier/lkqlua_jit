@@ -6,7 +6,6 @@
 use std::{
     cell::{Ref, RefCell, RefMut},
     collections::{HashMap, HashSet},
-    ops::Range,
     rc::Rc,
     u8, usize,
 };
@@ -30,7 +29,9 @@ use crate::{
         ArithOperator, ArithOperatorVariant, CompOperator, CompOperatorVariant, ExecutionUnit,
         ExecutionUnitVariant, Identifier, LogicOperatorVariant, MiscOperatorVariant, Node,
         NodeVariant,
-        compilation::frame::{BindingData, ClosingKind, Frame, FrameVariant, UpValueTarget},
+        compilation::frame::{
+            BindingData, ClosingKind, Frame, FrameVariant, SlotRange, UpValueTarget,
+        },
         constant_eval::{ConstantValue, ConstantValueVariant},
     },
     report::{Hint, Report},
@@ -373,7 +374,7 @@ impl Node {
                     positional_args,
                     named_args,
                 );
-                output.ad(&self.origin_location, MOV, result_slot, call_slots.start as u16);
+                output.ad(&self.origin_location, MOV, result_slot, call_slots.first as u16);
                 ctx.current_frame_mut().release_slots(call_slots);
             }
 
@@ -581,11 +582,11 @@ impl Node {
                     // stored in contiguous slots.
                     MiscOperatorVariant::Concat => {
                         let operand_slots = ctx.current_frame_mut().reserve_contiguous_slots(2);
-                        left.compile_as_value(ctx, owning_unit, output, operand_slots.start);
-                        right.compile_as_value(ctx, owning_unit, output, operand_slots.end - 1);
+                        left.compile_as_value(ctx, owning_unit, output, operand_slots.first);
+                        right.compile_as_value(ctx, owning_unit, output, operand_slots.last);
                         (
-                            ValueAccess::Tmp(operand_slots.start),
-                            ValueAccess::Tmp(operand_slots.end - 1),
+                            ValueAccess::Tmp(operand_slots.first),
+                            ValueAccess::Tmp(operand_slots.last),
                         )
                     }
                 };
@@ -845,9 +846,11 @@ impl Node {
                     positional_args,
                     named_args,
                 );
-                ctx.current_frame_mut()
-                    .release_slots((call_slots.start + 1)..call_slots.end);
-                ValueAccess::Tmp(call_slots.start)
+                ctx.current_frame_mut().release_slots(SlotRange {
+                    first: call_slots.first + 1,
+                    last: call_slots.last,
+                });
+                ValueAccess::Tmp(call_slots.first)
             }
 
             NodeVariant::ReadSymbol(identifier) => {
@@ -1152,7 +1155,7 @@ impl Node {
                 output.ad(
                     &self.origin_location,
                     CALLT,
-                    call_slots.start,
+                    call_slots.first,
                     positional_args.len() as u16 + 2,
                 );
             }
@@ -1327,7 +1330,7 @@ impl Node {
         callee: &Node,
         positional_args: &Vec<Node>,
         named_args: &Vec<(Identifier, Node)>,
-    ) -> Range<u8> {
+    ) -> SlotRange {
         // Prepare the call
         let call_slots =
             Self::prepare_call(ctx, owning_unit, output, call, callee, positional_args, named_args);
@@ -1336,7 +1339,7 @@ impl Node {
         output.abc(
             &call.origin_location,
             CALL,
-            call_slots.start,
+            call_slots.first,
             2,
             positional_args.len() as u8 + 2,
         );
@@ -1353,7 +1356,7 @@ impl Node {
         callee: &Node,
         positional_args: &Vec<Node>,
         named_args: &Vec<(Identifier, Node)>,
-    ) -> Range<u8> {
+    ) -> SlotRange {
         // Reserve slots for the call
         let arg_count = positional_args.len() + 2;
         let call_slots = ctx
@@ -1361,18 +1364,18 @@ impl Node {
             .reserve_contiguous_slots(arg_count + 1);
 
         // Evaluate the callee and place it in the first of the call slots.
-        callee.compile_as_value(ctx, owning_unit, output, call_slots.start);
+        callee.compile_as_value(ctx, owning_unit, output, call_slots.first);
 
         // Compile named arguments to a table (or nil if there is no named
         // arguments).
         if named_args.is_empty() {
-            output.ad(&call.origin_location, KPRI, call_slots.start + 2, PRIM_NIL);
+            output.ad(&call.origin_location, KPRI, call_slots.first + 2, PRIM_NIL);
         } else {
             Self::compile_table(
                 ctx,
                 owning_unit,
                 output,
-                call_slots.start + 2,
+                call_slots.first + 2,
                 &call.origin_location,
                 &Vec::new(),
                 named_args,
@@ -1385,7 +1388,7 @@ impl Node {
                 ctx,
                 owning_unit,
                 output,
-                call_slots.start + 3 + i as u8,
+                call_slots.first + 3 + i as u8,
             );
         }
         call_slots
@@ -1635,9 +1638,9 @@ fn emit_runtime_error(
 
     // Reserve temporary slots, fill them and call the function
     let call_slots = ctx.current_frame_mut().reserve_contiguous_slots(3);
-    emit_global_read(ctx, output, maybe_error_location, call_slots.start, "error");
-    output.ad_maybe_loc(maybe_error_location, KSTR, call_slots.end - 1, message_cst);
-    output.abc_maybe_loc(maybe_error_location, CALL, call_slots.start, 1, 2);
+    emit_global_read(ctx, output, maybe_error_location, call_slots.first, "error");
+    output.ad_maybe_loc(maybe_error_location, KSTR, call_slots.last, message_cst);
+    output.abc_maybe_loc(maybe_error_location, CALL, call_slots.first, 1, 2);
 
     // Free slots allocated for the call
     ctx.current_frame_mut().release_slots(call_slots);
