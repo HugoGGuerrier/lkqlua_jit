@@ -576,8 +576,19 @@ impl Node {
                 output.label(next_label);
             }
             NodeVariant::MiscBinOp { left, operator, right } => {
-                let left_access = left.compile_as_access(ctx, owning_unit, output);
-                let right_access = right.compile_as_access(ctx, owning_unit, output);
+                let (left_access, right_access) = match operator.variant {
+                    // The concatenation operation requires that values are
+                    // stored in contiguous slots.
+                    MiscOperatorVariant::Concat => {
+                        let operand_slots = ctx.current_frame_mut().reserve_contiguous_slots(2);
+                        left.compile_as_value(ctx, owning_unit, output, operand_slots.start);
+                        right.compile_as_value(ctx, owning_unit, output, operand_slots.end - 1);
+                        (
+                            ValueAccess::Tmp(operand_slots.start),
+                            ValueAccess::Tmp(operand_slots.end - 1),
+                        )
+                    }
+                };
                 let op = match operator.variant {
                     MiscOperatorVariant::Concat => CAT,
                 };
