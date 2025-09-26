@@ -5,7 +5,9 @@
 
 use std::{
     collections::HashSet,
+    fs::File,
     io::Write,
+    os::fd::FromRawFd,
     path::Path,
     time::{Duration, Instant},
 };
@@ -28,15 +30,15 @@ pub mod sources;
 
 /// This type holds all required data to run LKQL sources using LuaJIT as a
 /// backend. This is what you have to use.
-pub struct ExecutionContext<O: Write, E: Write> {
-    config: EngineConfig<O, E>,
-    source_repo: SourceRepository,
-    engine: Engine,
+pub struct ExecutionContext {
+    pub config: EngineConfig,
+    pub source_repo: SourceRepository,
+    pub engine: Engine,
 }
 
-impl<O: Write, E: Write> ExecutionContext<O, E> {
+impl ExecutionContext {
     /// Create an initialize a new execution context.
-    pub fn new(config: EngineConfig<O, E>) -> Self {
+    pub fn new(config: EngineConfig) -> Self {
         Self { source_repo: SourceRepository::new(), config, engine: Engine::new() }
     }
 
@@ -109,12 +111,9 @@ impl<O: Write, E: Write> ExecutionContext<O, E> {
 
         // Use the engine to run the bytecode
         time_point = Instant::now();
-        let res = self.engine.run_bytecode(
-            source,
-            &self.source_repo,
-            &encoded_bytecode_buffer,
-            &runtime_data,
-        );
+        let res = self
+            .engine
+            .run_bytecode(self, source, &encoded_bytecode_buffer, &runtime_data);
         timings.push((String::from("execution"), time_point.elapsed()));
 
         // If required, display timing information
@@ -145,17 +144,55 @@ impl<O: Write, E: Write> ExecutionContext<O, E> {
 }
 
 #[derive(Debug)]
-pub struct EngineConfig<O: Write, E: Write> {
-    pub std_out: O,
-    pub std_err: E,
+pub struct EngineConfig {
+    pub std_out: Writable,
+    pub std_err: Writable,
     pub verbose_elements: HashSet<VerboseElement>,
     pub perform_timings: bool,
 }
 
-impl<O: Write, E: Write> EngineConfig<O, E> {
+impl EngineConfig {
     pub fn is_verbose(&self, element: VerboseElement) -> bool {
         self.verbose_elements.contains(&element)
             || self.verbose_elements.contains(&VerboseElement::All)
+    }
+}
+
+/// This type represents different elements that can be written bytes to.
+#[derive(Debug)]
+pub enum Writable {
+    File(File),
+    ByteBuffer(Vec<u8>),
+}
+
+impl Write for Writable {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        match self {
+            Writable::File(file) => file.write(buf),
+            Writable::ByteBuffer(buffer) => {
+                buffer.extend_from_slice(buf);
+                Ok(buf.len())
+            }
+        }
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        match self {
+            Writable::File(file) => file.flush(),
+            Writable::ByteBuffer(_) => Ok(()),
+        }
+    }
+}
+
+impl Writable {
+    /// Get a writable object for the current process standard output.
+    pub fn stdout() -> Self {
+        unsafe { Self::File(File::from_raw_fd(1)) }
+    }
+
+    /// Get a writable object for the current process standard error output.
+    pub fn stderr() -> Self {
+        unsafe { Self::File(File::from_raw_fd(2)) }
     }
 }
 

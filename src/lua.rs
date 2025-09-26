@@ -6,6 +6,7 @@
 //! offers specialized endpoints to tune the JIT compilation part.
 
 use std::{
+    any::Any,
     ffi::{CStr, CString, c_char, c_int, c_uint, c_void},
     ptr,
     str::FromStr,
@@ -133,6 +134,15 @@ pub fn get_string(l: LuaState, index: i32) -> Option<&'static str> {
     }
 }
 
+/// Try to get user data on the stack at the provided `index`, if this is not
+/// possible, return [`None`].
+pub fn get_user_data<'a, T: Any>(l: LuaState, index: i32) -> Option<&'a mut T> {
+    unsafe {
+        let c_data = lua_topointer(l, index);
+        if c_data.is_null() { None } else { Some(&mut *(c_data as *mut T)) }
+    }
+}
+
 /// Push a new string to the top of the Lua stack.
 pub fn push_string(l: LuaState, s: &str) {
     unsafe {
@@ -146,6 +156,11 @@ pub fn push_string(l: LuaState, s: &str) {
 /// memory allocation.
 pub fn push_table(l: LuaState, array_part_size: Option<i32>, hash_part_size: Option<i32>) {
     unsafe { lua_createtable(l, array_part_size.unwrap_or(0), hash_part_size.unwrap_or(0)) }
+}
+
+/// Push arbitrary data on the Lua stack as a value.
+pub fn push_user_data<T: Any>(l: LuaState, data: &T) {
+    unsafe { lua_pushlightuserdata(l, data as *const T as *mut c_void) }
 }
 
 /// Push a new C function value to the top of the Lua stack.
@@ -162,9 +177,8 @@ pub fn get_global(l: LuaState, name: &str) {
     }
 }
 
-/// Place the value currently on the top of the stack in the field of the
-/// provided name in the global table.
-/// This function pops the value at the top of the stack.
+/// Pop the value at the top of the stack and place it in the field of the
+/// provided `name` in the global table.
 pub fn set_global(l: LuaState, name: &str) {
     unsafe {
         let c_name = CString::from_str(name).unwrap();
@@ -218,7 +232,7 @@ pub fn set_top(l: LuaState, index: i32) {
 
 /// Pop the provided number of elements from the top of the stack.
 pub fn pop(l: LuaState, count: i32) {
-    set_top(l, count - 1);
+    set_top(l, -count - 1);
 }
 
 /// Move the value at the top of the stack to the provided index, shifting all
@@ -419,9 +433,11 @@ unsafe extern "C" {
     fn lua_type(l: LuaState, index: c_int) -> LuaType;
     fn lua_toboolean(l: LuaState, index: c_int) -> c_int;
     fn lua_tolstring(l: LuaState, index: c_int, result_size: *mut usize) -> *const c_char;
+    fn lua_topointer(l: LuaState, index: c_int) -> *const c_void;
 
     fn lua_pushstring(l: LuaState, s: *const c_char);
     fn lua_pushcclosure(l: LuaState, function: LuaCFunction, n: c_int);
+    fn lua_pushlightuserdata(l: LuaState, p: *mut c_void);
     fn lua_getfield(l: LuaState, index: c_int, field: *const c_char);
     fn lua_setfield(l: LuaState, index: c_int, field: *const c_char);
     fn lua_createtable(l: LuaState, narr: c_int, nrec: c_int);

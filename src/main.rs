@@ -1,10 +1,7 @@
-use std::{
-    io::{stderr, stdout},
-    path::PathBuf,
-};
+use std::path::PathBuf;
 
 use clap::Parser;
-use lkqlua_jit::{EngineConfig, ExecutionContext, VerboseElement};
+use lkqlua_jit::{EngineConfig, ExecutionContext, VerboseElement, Writable};
 
 #[derive(Parser, Debug)]
 #[command(about)]
@@ -29,8 +26,8 @@ fn main() {
 
     // Turn CLI arguments into an engine configuration
     let config = EngineConfig {
-        std_out: stdout(),
-        std_err: stderr(),
+        std_out: Writable::stdout(),
+        std_err: Writable::stderr(),
         verbose_elements: args.verbose.into_iter().collect(),
         perform_timings: args.timing,
     };

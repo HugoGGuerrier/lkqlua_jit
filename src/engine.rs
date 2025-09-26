@@ -8,19 +8,24 @@ use std::{ffi::c_int, path::PathBuf, str::FromStr};
 use regex::Regex;
 
 use crate::{
+    ExecutionContext,
     builtins::get_builtins,
     engine::runtime::{DynamicError, RuntimeData, RuntimeError, StackTraceElement},
     errors::{ERROR_TEMPLATE_REPOSITORY, LUA_ENGINE_ERROR},
     lua::{
         LuaState, call, close_lua_state, debug_frame, debug_get_local, debug_get_source,
         debug_info, debug_proto_and_pc, get_string, get_top, load_buffer, new_lua_state,
-        open_lua_libs, push_c_function, push_string, remove_value, set_global, to_string,
+        open_lua_libs, push_c_function, push_string, push_user_data, remove_value, set_global,
+        to_string,
     },
     report::Report,
-    sources::{SourceId, SourceRepository},
+    sources::SourceId,
 };
 
 pub mod runtime;
+
+/// Name of the global value where the execution context is stored.
+pub const CONTEXT_GLOBAL_NAME: &str = "<execution_context>";
 
 /// This type represents an engine to execute the bytecode generate by the
 /// [`crate::intermediate_tree::compilation`] module.
@@ -57,11 +62,15 @@ impl Engine {
     /// report in case of a runtime error.
     pub fn run_bytecode(
         &self,
+        ctx: &ExecutionContext,
         source_id: SourceId,
-        source_repo: &SourceRepository,
         bytecode_buffer: &Vec<u8>,
         runtime_data: &RuntimeData,
     ) -> Result<(), Report> {
+        // Place the execution context in the global Lua table
+        push_user_data(self.lua_state, ctx);
+        set_global(self.lua_state, CONTEXT_GLOBAL_NAME);
+
         // Set the error handler
         push_c_function(self.lua_state, handle_error);
         let error_handler = get_top(self.lua_state);
@@ -70,7 +79,7 @@ impl Engine {
         if !load_buffer(
             self.lua_state,
             bytecode_buffer,
-            &source_repo.get_source_by_id(source_id).unwrap().name,
+            &ctx.source_repo.get_source_by_id(source_id).unwrap().name,
         ) {
             panic!(
                 "Cannot load the provided bytecode buffer, error message: {}",
@@ -92,7 +101,7 @@ impl Engine {
                 .stack_trace
                 .iter()
                 .find_map(|e| {
-                    source_repo
+                    ctx.source_repo
                         .get_id_by_name(&e.source_name)
                         .and_then(|source| {
                             runtime_data.location_in_prototype(

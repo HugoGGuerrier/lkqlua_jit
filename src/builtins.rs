@@ -3,14 +3,18 @@
 //! This module contains information and implementation for every built-in
 //! element of the LKQL language (functions and types).
 
-use std::ffi::c_int;
+use std::{ffi::c_int, io::Write};
 
 use crate::{
-    engine::runtime::{DynamicError, DynamicErrorArg},
+    ExecutionContext,
+    engine::{
+        CONTEXT_GLOBAL_NAME,
+        runtime::{DynamicError, DynamicErrorArg},
+    },
     errors::{NO_VALUE_FOR_PARAM, POS_AND_NAMED_VALUE_FOR_PARAM},
     lua::{
-        LuaCFunction, LuaState, LuaType, get_boolean, get_field, get_top, get_type, push_string,
-        raise_error, to_string,
+        LuaCFunction, LuaState, LuaType, get_boolean, get_field, get_global, get_top, get_type,
+        get_user_data, pop, push_string, raise_error, to_string,
     },
 };
 
@@ -36,13 +40,21 @@ pub fn get_builtins() -> Vec<BuiltinFunction> {
 /// The "print" function
 #[unsafe(no_mangle)]
 unsafe extern "C" fn lkql_print(l: LuaState) -> c_int {
+    // Get the function parameter values
     let param_count = get_top(l) - 1;
     let to_print_index = get_param(l, param_count, 1, "to_print");
     let new_line = get_bool_param(l, param_count, 2, "new_line", Some(true));
+
+    // Get the current execution context
+    get_global(l, CONTEXT_GLOBAL_NAME);
+    let ctx = get_user_data::<ExecutionContext>(l, get_top(l)).unwrap();
+    pop(l, 1);
+
+    // Then display the value on the configured standard output
     if new_line {
-        println!("{}", to_string(l, to_print_index, DEFAULT_IMG));
+        writeln!(ctx.config.std_out, "{}", to_string(l, to_print_index, DEFAULT_IMG)).unwrap();
     } else {
-        print!("{}", to_string(l, to_print_index, DEFAULT_IMG));
+        write!(ctx.config.std_out, "{}", to_string(l, to_print_index, DEFAULT_IMG)).unwrap();
     }
     0
 }
