@@ -19,7 +19,7 @@ use crate::{
     report::Report,
     runtime::{
         CONTEXT_GLOBAL_NAME, DynamicError, DynamicErrorArg, RuntimeData, RuntimeError,
-        StackTraceElement, builtins::get_builtins,
+        StackTraceElement, builtins::get_builtin_functions,
     },
     sources::SourceId,
 };
@@ -46,9 +46,9 @@ impl Engine {
         open_lua_libs(lua_state);
 
         // Set all built-in functions in the environment
-        for builtin in get_builtins() {
-            push_c_function(lua_state, builtin.c_function);
-            set_global(lua_state, builtin.name);
+        for builtin_function in get_builtin_functions() {
+            push_c_function(lua_state, builtin_function.c_function);
+            set_global(lua_state, builtin_function.name);
         }
 
         // Finally create the engine type and return it

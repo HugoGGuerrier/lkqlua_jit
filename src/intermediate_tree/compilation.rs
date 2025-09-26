@@ -34,7 +34,7 @@ use crate::{
         constant_eval::{ConstantValue, ConstantValueVariant},
     },
     report::{Hint, Report},
-    runtime::{DynamicError, DynamicErrorArg, RuntimeData, builtins::get_builtins},
+    runtime::{DynamicError, DynamicErrorArg, RuntimeData, builtins::get_builtin_functions},
     sources::{SourceRepository, SourceSection},
 };
 
@@ -1866,7 +1866,7 @@ struct CompilationContext {
 impl CompilationContext {
     fn new() -> Self {
         Self {
-            builtins: get_builtins().iter().map(|b| b.name).collect(),
+            builtins: get_builtin_functions().iter().map(|b| b.name).collect(),
             current_frame: Rc::new(RefCell::new(Frame::new(None))),
             exec_unit_data_stack: Vec::new(),
             prototypes: Vec::new(),
