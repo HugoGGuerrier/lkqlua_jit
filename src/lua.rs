@@ -363,40 +363,43 @@ pub fn to_string(l: LuaState, index: i32, default: &'static str) -> &'static str
     }
 }
 
-/// Create a string representation of the current state of the stack.
-pub fn dump_stack(l: LuaState) -> String {
-    unsafe {
-        let mut res = String::new();
-        let stack_top = lua_gettop(l);
-        if stack_top > 0 {
-            res.push_str("--- Stack start\n");
-            for i in 1..=stack_top {
-                let value_type = get_type(l, i);
-                let value_repr = match value_type {
-                    LuaType::None => "none".to_string(),
-                    LuaType::Nil => "nil".to_string(),
-                    LuaType::Boolean => {
-                        if get_boolean(l, i) { "bool(true)" } else { "bool(false)" }.to_string()
-                    }
-                    LuaType::Number => format!("number({})", get_string(l, i).unwrap()),
-                    LuaType::String => format!("string({})", get_string(l, i).unwrap()),
-                    LuaType::LightUserData => "<light_user_data>".to_string(),
-                    LuaType::Table => "<table>".to_string(),
-                    LuaType::Function => "<function>".to_string(),
-                    LuaType::UserData => "<user_data>".to_string(),
-                    LuaType::Thread => "<thread>".to_string(),
-                };
-                res.push_str(&i.to_string());
-                res.push_str(" - ");
-                res.push_str(value_repr.as_str());
-                res.push('\n');
-            }
-            res.push_str("--- Stack end");
-        } else {
-            res.push_str("Empty stack");
+/// Dump the string representation of the Lua stack on the standard output.
+pub fn dump_stack(l: LuaState) -> () {
+    println!("{}", stack_image(l));
+}
+
+/// Get a string representation of the Lua stack.
+pub fn stack_image(l: LuaState) -> String {
+    let stack_top = unsafe { lua_gettop(l) };
+    let mut res = String::new();
+    if stack_top > 0 {
+        res.push_str("--- Stack start\n");
+        for i in 1..=stack_top {
+            let value_type = get_type(l, i);
+            let value_repr = match value_type {
+                LuaType::None => "none".to_string(),
+                LuaType::Nil => "nil".to_string(),
+                LuaType::Boolean => {
+                    if get_boolean(l, i) { "bool(true)" } else { "bool(false)" }.to_string()
+                }
+                LuaType::Number => format!("number({})", get_string(l, i).unwrap()),
+                LuaType::String => format!("string({})", get_string(l, i).unwrap()),
+                LuaType::LightUserData => "<light_user_data>".to_string(),
+                LuaType::Table => "<table>".to_string(),
+                LuaType::Function => "<function>".to_string(),
+                LuaType::UserData => "<user_data>".to_string(),
+                LuaType::Thread => "<thread>".to_string(),
+            };
+            res.push_str(&i.to_string());
+            res.push_str(" - ");
+            res.push_str(value_repr.as_str());
+            res.push('\n');
         }
-        res
+        res.push_str("--- Stack end");
+    } else {
+        res.push_str("Empty stack");
     }
+    res
 }
 
 // ----- External functions -----
