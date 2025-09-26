@@ -14,7 +14,6 @@ use std::{
 use num_bigint::BigInt;
 
 use crate::{
-    builtins::get_builtins,
     bytecode::{
         self, BytecodeBuffer, ComplexConstant, JUMP_BIASING, NumericConstant, PRIM_FALSE, PRIM_NIL,
         PRIM_TRUE, Prototype, TableConstantElement, VariableData,
@@ -23,7 +22,6 @@ use crate::{
         },
         op_codes::*,
     },
-    engine::runtime::{DynamicError, DynamicErrorArg, RuntimeData},
     errors::{
         DUPLICATED_SYMBOL, ErrorTemplate, INDEX_OUT_OF_BOUNDS, NO_VALUE_FOR_PARAM,
         POS_AND_NAMED_VALUE_FOR_PARAM, PREVIOUS_SYMBOL_HINT, UNKNOWN_MEMBER, UNKNOWN_SYMBOL,
@@ -36,6 +34,7 @@ use crate::{
         constant_eval::{ConstantValue, ConstantValueVariant},
     },
     report::{Hint, Report},
+    runtime::{DynamicError, DynamicErrorArg, RuntimeData, builtins::get_builtins},
     sources::{SourceRepository, SourceSection},
 };
 

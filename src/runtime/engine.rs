@@ -9,8 +9,6 @@ use regex::Regex;
 
 use crate::{
     ExecutionContext,
-    builtins::get_builtins,
-    engine::runtime::{DynamicError, RuntimeData, RuntimeError, StackTraceElement},
     errors::{ERROR_TEMPLATE_REPOSITORY, LUA_ENGINE_ERROR},
     lua::{
         LuaState, call, close_lua_state, debug_frame, debug_get_local, debug_get_source,
@@ -19,13 +17,12 @@ use crate::{
         to_string,
     },
     report::Report,
+    runtime::{
+        CONTEXT_GLOBAL_NAME, DynamicError, DynamicErrorArg, RuntimeData, RuntimeError,
+        StackTraceElement, builtins::get_builtins,
+    },
     sources::SourceId,
 };
-
-pub mod runtime;
-
-/// Name of the global value where the execution context is stored.
-pub const CONTEXT_GLOBAL_NAME: &str = "<execution_context>";
 
 /// This type represents an engine to execute the bytecode generate by the
 /// [`crate::intermediate_tree::compilation`] module.
@@ -184,8 +181,8 @@ unsafe extern "C" fn handle_error(l: LuaState) -> c_int {
             .message_args
             .into_iter()
             .map(|a| match a {
-                runtime::DynamicErrorArg::Static(s) => s,
-                runtime::DynamicErrorArg::LocalValue(index) => {
+                DynamicErrorArg::Static(s) => s,
+                DynamicErrorArg::LocalValue(index) => {
                     let _ =
                         debug_get_local(l, current_frame.as_ref().unwrap(), index as i32).unwrap();
                     String::from(to_string(l, -1, "<lkql_value>"))

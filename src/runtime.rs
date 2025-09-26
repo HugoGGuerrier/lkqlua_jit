@@ -9,6 +9,15 @@ use serde::{Deserialize, Serialize};
 
 use crate::sources::{SourceId, SourceSection};
 
+pub mod builtins;
+pub mod engine;
+
+/// The default image of a value when the latter doesn't define one.
+pub const DEFAULT_VALUE_IMAGE: &'static str = "<lkql_value>";
+
+/// Name of the global value where the execution context is stored.
+pub const CONTEXT_GLOBAL_NAME: &str = "@execution_context";
+
 /// This type contains all information collected during the compilation and
 /// that may be required during the execution phase.
 #[derive(Debug)]

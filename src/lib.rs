@@ -16,16 +16,16 @@ use clap::ValueEnum;
 use pretty_hex::PrettyHex;
 
 use crate::{
-    engine::Engine, intermediate_tree::ExecutionUnit, report::Report, sources::SourceRepository,
+    intermediate_tree::ExecutionUnit, report::Report, runtime::engine::Engine,
+    sources::SourceRepository,
 };
 
-pub mod builtins;
 pub mod bytecode;
-pub mod engine;
 pub mod errors;
 pub mod intermediate_tree;
 pub mod lua;
 pub mod report;
+pub mod runtime;
 pub mod sources;
 
 /// This type holds all required data to run LKQL sources using LuaJIT as a

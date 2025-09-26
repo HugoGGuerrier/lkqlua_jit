@@ -7,19 +7,13 @@ use std::{ffi::c_int, io::Write};
 
 use crate::{
     ExecutionContext,
-    engine::{
-        CONTEXT_GLOBAL_NAME,
-        runtime::{DynamicError, DynamicErrorArg},
-    },
     errors::{NO_VALUE_FOR_PARAM, POS_AND_NAMED_VALUE_FOR_PARAM},
     lua::{
         LuaCFunction, LuaState, LuaType, get_boolean, get_field, get_global, get_top, get_type,
         get_user_data, pop, push_string, raise_error, to_string,
     },
+    runtime::{CONTEXT_GLOBAL_NAME, DEFAULT_VALUE_IMAGE, DynamicError, DynamicErrorArg},
 };
-
-/// The default image of a value when the latter doesn't define one.
-pub const DEFAULT_IMG: &'static str = "<lkql_value>";
 
 /// This type encapsulate a built-in LKQL function. It contains all required
 /// information for the compilation and the execution.
@@ -52,9 +46,11 @@ unsafe extern "C" fn lkql_print(l: LuaState) -> c_int {
 
     // Then display the value on the configured standard output
     if new_line {
-        writeln!(ctx.config.std_out, "{}", to_string(l, to_print_index, DEFAULT_IMG)).unwrap();
+        writeln!(ctx.config.std_out, "{}", to_string(l, to_print_index, DEFAULT_VALUE_IMAGE))
+            .unwrap();
     } else {
-        write!(ctx.config.std_out, "{}", to_string(l, to_print_index, DEFAULT_IMG)).unwrap();
+        write!(ctx.config.std_out, "{}", to_string(l, to_print_index, DEFAULT_VALUE_IMAGE))
+            .unwrap();
     }
     0
 }
@@ -64,7 +60,7 @@ unsafe extern "C" fn lkql_print(l: LuaState) -> c_int {
 unsafe extern "C" fn lkql_img(l: LuaState) -> c_int {
     let param_count = get_top(l) - 1;
     let value_index = get_param(l, param_count, 1, "value");
-    push_string(l, to_string(l, value_index, DEFAULT_IMG));
+    push_string(l, to_string(l, value_index, DEFAULT_VALUE_IMAGE));
     1
 }
 
