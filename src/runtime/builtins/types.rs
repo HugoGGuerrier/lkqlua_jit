@@ -12,6 +12,7 @@ use crate::lua::{
 
 pub mod bool;
 pub mod int;
+pub mod str;
 
 /// This type represents an LKQL built-in type with all its information.
 #[derive(Debug)]
