@@ -115,6 +115,12 @@ pub fn get_type(l: LuaState, index: i32) -> LuaType {
     unsafe { lua_type(l, index) }
 }
 
+/// Get the length of the object of the provided index. The result is the same
+/// as the one obtained through the `#` Lua operator.
+pub fn get_length(l: LuaState, index: i32) -> usize {
+    unsafe { lua_objlen(l, index) }
+}
+
 /// Get the value at the provided index as a boolean, implicitly converting
 /// all values that aren't of the boolean type to one.
 pub fn get_boolean(l: LuaState, index: i32) -> bool {
@@ -239,6 +245,12 @@ pub fn get_field(l: LuaState, index: i32, name: &str) {
         let c_name = CString::from_str(name).unwrap();
         lua_getfield(l, index, c_name.as_ptr());
     }
+}
+
+/// Given a table value at the provided index, get the element at the provided
+/// given index in it and place it on the top of the stack.
+pub fn get_index(l: LuaState, index: i32, inner_index: i32) {
+    unsafe { lua_rawgeti(l, index, inner_index) }
 }
 
 /// Pop the value on the top of the stack and place it in the field of the
@@ -463,6 +475,7 @@ unsafe extern "C" {
     ) -> c_int;
 
     fn lua_type(l: LuaState, index: c_int) -> LuaType;
+    fn lua_objlen(l: LuaState, index: c_int) -> usize;
     fn lua_toboolean(l: LuaState, index: c_int) -> c_int;
     fn lua_tolstring(l: LuaState, index: c_int, result_size: *mut usize) -> *const c_char;
     fn lua_topointer(l: LuaState, index: c_int) -> *const c_void;
@@ -475,6 +488,7 @@ unsafe extern "C" {
     fn lua_pushlightuserdata(l: LuaState, p: *mut c_void);
     fn lua_pushvalue(l: LuaState, index: c_int);
     fn lua_getfield(l: LuaState, index: c_int, field: *const c_char);
+    fn lua_rawgeti(l: LuaState, index: c_int, i: c_int);
     fn lua_setfield(l: LuaState, index: c_int, field: *const c_char);
     fn lua_createtable(l: LuaState, narr: c_int, nrec: c_int);
     fn lua_getmetatable(l: LuaState, index: c_int) -> c_int;
@@ -485,7 +499,7 @@ unsafe extern "C" {
     fn lua_insert(l: LuaState, index: c_int);
     fn lua_remove(l: LuaState, index: c_int);
 
-    fn lua_pcall(l: LuaState, nargs: c_int, nres: c_int, errfunc: c_int) -> i32;
+    fn lua_pcall(l: LuaState, nargs: c_int, nres: c_int, errfunc: c_int) -> c_int;
     fn luaL_callmeta(l: LuaState, obj: c_int, meta_method: *const c_char) -> c_int;
     fn luaL_error(l: LuaState, fmt: *const c_char, ...) -> c_int;
 

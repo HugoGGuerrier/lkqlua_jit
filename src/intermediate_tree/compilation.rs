@@ -37,7 +37,11 @@ use crate::{
     report::{Hint, Report},
     runtime::{
         DynamicError, DynamicErrorArg, RuntimeData,
-        builtins::{get_builtin_functions, values::UNIT_VALUE_NAME},
+        builtins::{
+            get_builtin_functions,
+            types::{self, metatable_global_field},
+            values::UNIT_VALUE_NAME,
+        },
     },
     sources::{SourceRepository, SourceSection},
 };
@@ -726,6 +730,7 @@ impl Node {
 
             // --- Non-trivial literals
             NodeVariant::TupleLiteral(elements) | NodeVariant::ListLiteral(elements) => {
+                // Compile nodes inside the tuple literals and place them in a table
                 Self::compile_table(
                     ctx,
                     owning_unit,
@@ -736,7 +741,14 @@ impl Node {
                     &Vec::new(),
                 );
 
-                // TODO: Set the object meta-table accordingly to its type
+                // Then set the meta-table of this new table
+                emit_set_metatable(
+                    ctx,
+                    output,
+                    Some(&self.origin_location),
+                    result_slot,
+                    types::tuple::NAME,
+                );
             }
             NodeVariant::ObjectLiteral(items) => {
                 Self::compile_table(
@@ -1539,7 +1551,13 @@ impl ConstantValue {
                 }
                 ctx.current_frame_mut().release_slot(outside_tmp);
 
-                // TODO: Set the object meta-table accordingly to its type
+                emit_set_metatable(
+                    ctx,
+                    output,
+                    Some(&self.origin_location),
+                    result_slot,
+                    types::tuple::NAME,
+                );
             }
             ConstantValueVariant::Object(items) => {
                 // Split constants that can be expressed by a table constant
@@ -1790,6 +1808,34 @@ fn emit_global_read(
 ) {
     let global_name_cst = ctx.current_data().constants.get_from_string(global_name);
     output.ad_maybe_loc(maybe_origin_location, GGET, result_slot, global_name_cst);
+}
+
+/// Emit instructions to set the meta-table of the type designated by the
+/// provided name as the one of the table at the provided slot.
+fn emit_set_metatable(
+    ctx: &mut CompilationContext,
+    output: &mut ExtendedInstructionBuffer,
+    maybe_origin_location: Option<&SourceSection>,
+    table_slot: u8,
+    type_name: &str,
+) {
+    // Get slots for the call
+    let call_slots = ctx.current_frame_mut().reserve_contiguous_slots(4);
+
+    // Get the "setmetatable", fill arguments and make a call
+    emit_global_read(ctx, output, maybe_origin_location, call_slots.first, "setmetatable");
+    output.ad_maybe_loc(maybe_origin_location, MOV, call_slots.last - 1, table_slot as u16);
+    emit_global_read(
+        ctx,
+        output,
+        maybe_origin_location,
+        call_slots.last,
+        &metatable_global_field(type_name),
+    );
+    output.abc_maybe_loc(maybe_origin_location, CALL, call_slots.first, 1, 3);
+
+    // Release call slot
+    ctx.current_frame_mut().release_slots(call_slots);
 }
 
 /// Emit, if required, the instruction to close local values in the current
