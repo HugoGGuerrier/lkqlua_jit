@@ -10,6 +10,7 @@ use crate::lua::{
     push_c_closure, push_c_function, push_nil, push_user_data, remove_value,
 };
 
+pub mod bool;
 pub mod int;
 
 /// This type represents an LKQL built-in type with all its information.

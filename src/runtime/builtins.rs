@@ -50,12 +50,20 @@ pub fn get_builtin_types() -> Vec<BuiltinType> {
         }
     }
 
-    vec![b(
-        types::int::NAME,
-        &types::int::METHODS,
-        &types::int::OVERLOADS,
-        types::int::register_metatable,
-    )]
+    vec![
+        b(
+            types::int::NAME,
+            &types::int::METHODS,
+            &types::int::OVERLOADS,
+            types::int::register_metatable,
+        ),
+        b(
+            types::bool::NAME,
+            &types::bool::METHODS,
+            &types::bool::OVERLOADS,
+            types::bool::register_metatable,
+        ),
+    ]
 }
 
 // ----- Util functions -----

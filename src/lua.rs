@@ -148,6 +148,11 @@ pub fn push_nil(l: LuaState) {
     unsafe { lua_pushnil(l) }
 }
 
+/// Push a boolean value to the top of the stack.
+pub fn push_bool(l: LuaState, value: bool) {
+    unsafe { lua_pushboolean(l, if value { 1 } else { 0 }) }
+}
+
 /// Push a number to the top of the Lua stack.
 pub fn push_number(l: LuaState, number: f64) {
     unsafe { lua_pushnumber(l, number) }
@@ -463,6 +468,7 @@ unsafe extern "C" {
     fn lua_topointer(l: LuaState, index: c_int) -> *const c_void;
 
     fn lua_pushnil(l: LuaState);
+    fn lua_pushboolean(l: LuaState, value: c_int);
     fn lua_pushnumber(l: LuaState, number: c_double);
     fn lua_pushstring(l: LuaState, s: *const c_char);
     fn lua_pushcclosure(l: LuaState, function: LuaCFunction, n: c_int);
