@@ -169,8 +169,8 @@ pub fn push_string(l: LuaState, s: &str) {
 /// Create a new table value and push it on the top of the stack. You can
 /// provide initial size for the table array and hash parts to avoid later
 /// memory allocation.
-pub fn push_table(l: LuaState, array_part_size: Option<i32>, hash_part_size: Option<i32>) {
-    unsafe { lua_createtable(l, array_part_size.unwrap_or(0), hash_part_size.unwrap_or(0)) }
+pub fn push_table(l: LuaState, array_part_size: i32, hash_part_size: i32) {
+    unsafe { lua_createtable(l, array_part_size, hash_part_size) }
 }
 
 /// Push arbitrary data on the Lua stack as a value.

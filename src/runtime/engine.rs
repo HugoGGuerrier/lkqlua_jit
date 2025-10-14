@@ -67,7 +67,7 @@ impl Engine {
             let type_box = Box::new(builtin_type);
 
             // Then create the type meta-table
-            push_table(lua_state, None, Some(type_box.overloads.len() as i32 + 1));
+            push_table(lua_state, 0, type_box.overloads.len() as i32 + 1);
             create_index_method(lua_state, &type_box);
             set_field(lua_state, -2, "__index");
 
