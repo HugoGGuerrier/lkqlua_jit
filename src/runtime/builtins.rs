@@ -60,16 +60,16 @@ pub fn get_builtin_types() -> Vec<BuiltinType> {
             types::int::register_metatable,
         ),
         b(
-            types::bool::NAME,
-            &types::bool::METHODS,
-            &types::bool::OVERLOADS,
-            types::bool::register_metatable,
-        ),
-        b(
             types::str::NAME,
             &types::str::METHODS,
             &types::str::OVERLOADS,
             types::str::register_metatable,
+        ),
+        b(
+            types::bool::NAME,
+            &types::bool::METHODS,
+            &types::bool::OVERLOADS,
+            types::bool::register_metatable,
         ),
     ]
 }
