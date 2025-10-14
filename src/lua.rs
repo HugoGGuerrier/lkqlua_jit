@@ -7,7 +7,7 @@
 
 use std::{
     any::Any,
-    ffi::{CStr, CString, c_char, c_int, c_uint, c_void},
+    ffi::{CStr, CString, c_char, c_double, c_int, c_uint, c_void},
     ptr,
     str::FromStr,
 };
@@ -143,6 +143,16 @@ pub fn get_user_data<'a, T: Any>(l: LuaState, index: i32) -> Option<&'a mut T> {
     }
 }
 
+/// Push the `nil` value to the top of the stack.
+pub fn push_nil(l: LuaState) {
+    unsafe { lua_pushnil(l) }
+}
+
+/// Push a number to the top of the Lua stack.
+pub fn push_number(l: LuaState, number: f64) {
+    unsafe { lua_pushnumber(l, number) }
+}
+
 /// Push a new string to the top of the Lua stack.
 pub fn push_string(l: LuaState, s: &str) {
     unsafe {
@@ -168,6 +178,18 @@ pub fn push_c_function(l: LuaState, function: LuaCFunction) {
     unsafe { lua_pushcclosure(l, function, 0) }
 }
 
+/// Push a new C function value to the top of the Lua stack. Additionally, this
+/// function pops `up_value_count` values from the stack and store them in the
+/// newly created function value, making them up-values.
+pub fn push_c_closure(l: LuaState, function: LuaCFunction, up_value_count: u8) {
+    unsafe { lua_pushcclosure(l, function, up_value_count as c_int) }
+}
+
+/// Copy the value at the provided index on the top of the stack.
+pub fn copy_value(l: LuaState, index: i32) {
+    unsafe { lua_pushvalue(l, index) }
+}
+
 /// Get the global value that has the provided `name` and push it on the top of
 /// the stack. If this value doesn't exists, the `nil` value is pushed instead.
 pub fn get_global(l: LuaState, name: &str) {
@@ -184,6 +206,11 @@ pub fn set_global(l: LuaState, name: &str) {
         let c_name = CString::from_str(name).unwrap();
         lua_setfield(l, GLOBAL_INDEX, c_name.as_ptr());
     }
+}
+
+/// Get the pseudo index of the up-value at the provided index.
+pub fn get_up_value_index(uv_index: i32) -> i32 {
+    GLOBAL_INDEX - uv_index
 }
 
 /// Get the meta-table of the value at the provided `index` and push it on the
@@ -435,9 +462,12 @@ unsafe extern "C" {
     fn lua_tolstring(l: LuaState, index: c_int, result_size: *mut usize) -> *const c_char;
     fn lua_topointer(l: LuaState, index: c_int) -> *const c_void;
 
+    fn lua_pushnil(l: LuaState);
+    fn lua_pushnumber(l: LuaState, number: c_double);
     fn lua_pushstring(l: LuaState, s: *const c_char);
     fn lua_pushcclosure(l: LuaState, function: LuaCFunction, n: c_int);
     fn lua_pushlightuserdata(l: LuaState, p: *mut c_void);
+    fn lua_pushvalue(l: LuaState, index: c_int);
     fn lua_getfield(l: LuaState, index: c_int, field: *const c_char);
     fn lua_setfield(l: LuaState, index: c_int, field: *const c_char);
     fn lua_createtable(l: LuaState, narr: c_int, nrec: c_int);

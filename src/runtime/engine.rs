@@ -13,13 +13,17 @@ use crate::{
     lua::{
         LuaState, call, close_lua_state, debug_frame, debug_get_local, debug_get_source,
         debug_info, debug_proto_and_pc, get_string, get_top, load_buffer, new_lua_state,
-        open_lua_libs, push_c_function, push_string, push_user_data, remove_value, set_global,
-        to_string,
+        open_lua_libs, push_c_function, push_string, push_table, push_user_data, remove_value,
+        set_field, set_global, set_top, to_string,
     },
     report::Report,
     runtime::{
         CONTEXT_GLOBAL_NAME, DynamicError, DynamicErrorArg, RuntimeData, RuntimeError,
-        StackTraceElement, builtins::get_builtin_functions,
+        StackTraceElement,
+        builtins::{
+            get_builtin_functions, get_builtin_types,
+            types::{BuiltinType, create_index_method},
+        },
     },
     sources::SourceId,
 };
@@ -28,6 +32,11 @@ use crate::{
 /// [`crate::intermediate_tree::compilation`] module.
 pub struct Engine {
     lua_state: LuaState,
+
+    /// Holds all built-in types to avoid them being released while the engine
+    /// object is alive.
+    #[allow(unused)]
+    type_registry: Vec<Box<BuiltinType>>,
 }
 
 impl Drop for Engine {
@@ -51,8 +60,32 @@ impl Engine {
             set_global(lua_state, builtin_function.name);
         }
 
+        // Create all built-in types and store them
+        let mut type_registry = Vec::new();
+        for builtin_type in get_builtin_types() {
+            // Create a box containing the type description structure
+            let type_box = Box::new(builtin_type);
+
+            // Then create the type meta-table
+            push_table(lua_state, None, Some(type_box.overloads.len() as i32 + 1));
+            create_index_method(lua_state, &type_box);
+            set_field(lua_state, -2, "__index");
+
+            // Create overloading functions
+            for (target, function) in &type_box.overloads {
+                push_c_function(lua_state, *function);
+                set_field(lua_state, -2, target.metamethod_name());
+            }
+
+            // Finally register the meta-table in the current Lua state and
+            // save the type struct in this engine.
+            (type_box.register_function)(lua_state);
+            type_registry.push(type_box);
+            set_top(lua_state, 0);
+        }
+
         // Finally create the engine type and return it
-        Self { lua_state }
+        Self { lua_state, type_registry }
     }
 
     /// Run the given bytecode buffer in the engine, returning the potential
