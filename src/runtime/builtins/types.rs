@@ -7,12 +7,13 @@ use std::{collections::HashMap, ffi::c_int};
 
 use crate::lua::{
     LuaCFunction, LuaState, get_string, get_up_value_index, get_user_data, move_top_value,
-    push_c_closure, push_c_function, push_nil, push_user_data, remove_value,
+    push_c_closure, push_c_function, push_nil, push_user_data, remove_value, set_global,
 };
 
 pub mod bool;
 pub mod int;
 pub mod str;
+pub mod unit;
 
 /// This type represents an LKQL built-in type with all its information.
 #[derive(Debug)]
@@ -80,7 +81,20 @@ impl OverloadTarget {
 /// This type represents a function that register a type meta-table in the
 /// provided Lua state. This function should assume that the type meta-table is
 /// currently on the top of the stack.
-pub type MetatableRegisteringFunction = fn(LuaState);
+pub type MetatableRegisteringFunction = fn(LuaState, &Box<BuiltinType>);
+
+/// Get the name of the global field where the meta-table of the type
+/// designated by the provided name is stored in.
+pub fn metatable_global_field(type_name: &str) -> String {
+    return format!("type@{}", type_name);
+}
+
+/// This is the generic meta-table registering function, it places the
+/// meta-table on the top of the stack in a global field named from the type's
+/// name.
+pub fn register_metatable_in_globals(l: LuaState, type_box: &Box<BuiltinType>) {
+    set_global(l, &metatable_global_field(type_box.name));
+}
 
 /// Push a C closure on the top of the stack representing the "__index"
 /// meta-method of the provided built-in type.

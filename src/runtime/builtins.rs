@@ -52,6 +52,12 @@ pub fn get_builtin_types() -> Vec<BuiltinType> {
 
     vec![
         b(
+            types::unit::NAME,
+            &types::unit::METHODS,
+            &types::unit::OVERLOADS,
+            types::register_metatable_in_globals,
+        ),
+        b(
             types::int::NAME,
             &types::int::METHODS,
             &types::int::OVERLOADS,

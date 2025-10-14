@@ -79,7 +79,7 @@ impl Engine {
 
             // Finally register the meta-table in the current Lua state and
             // save the type struct in this engine.
-            (type_box.register_function)(lua_state);
+            (type_box.register_function)(lua_state, &type_box);
             type_registry.push(type_box);
             set_top(lua_state, 0);
         }

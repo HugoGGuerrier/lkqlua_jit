@@ -8,7 +8,7 @@ use crate::{
     lua::{LuaCFunction, LuaState, copy_value, get_string, push_string, set_metatable},
     runtime::builtins::{
         functions::lkql_img,
-        types::{BuiltinMethod, OverloadTarget},
+        types::{BuiltinMethod, BuiltinType, OverloadTarget},
     },
 };
 
@@ -20,7 +20,7 @@ pub const METHODS: [(&'static str, BuiltinMethod); 2] = [
 pub const OVERLOADS: [(OverloadTarget, LuaCFunction); 0] = [];
 
 /// Register the meta-table in the provided Lua state.
-pub fn register_metatable(l: LuaState) {
+pub fn register_metatable(l: LuaState, _: &Box<BuiltinType>) {
     push_string(l, "");
     copy_value(l, -2);
     set_metatable(l, -2);
