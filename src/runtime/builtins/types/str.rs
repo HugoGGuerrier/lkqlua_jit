@@ -6,15 +6,12 @@ use std::{ffi::c_int, path::PathBuf, str::FromStr};
 
 use crate::{
     lua::{LuaCFunction, LuaState, copy_value, get_string, push_string, set_metatable},
-    runtime::builtins::{
-        functions::lkql_img,
-        types::{BuiltinMethod, BuiltinType, OverloadTarget},
-    },
+    runtime::builtins::types::{BuiltinMethod, BuiltinType, OverloadTarget},
 };
 
 pub const NAME: &str = "Str";
 pub const METHODS: [(&'static str, BuiltinMethod); 2] = [
-    ("img", BuiltinMethod { function: lkql_img, is_property: true }),
+    ("img", BuiltinMethod { function: str_img, is_property: true }),
     ("base_name", BuiltinMethod { function: str_base_name, is_property: true }),
 ];
 pub const OVERLOADS: [(OverloadTarget, LuaCFunction); 0] = [];
@@ -32,5 +29,12 @@ unsafe extern "C" fn str_base_name(l: LuaState) -> c_int {
     if let Some(base_name) = path.file_name() {
         push_string(l, &base_name.to_string_lossy());
     }
+    1
+}
+
+/// The "img" property for the "Str" type
+unsafe extern "C" fn str_img(l: LuaState) -> c_int {
+    let this = get_string(l, 2).unwrap();
+    push_string(l, &format!("\"{}\"", this));
     1
 }
