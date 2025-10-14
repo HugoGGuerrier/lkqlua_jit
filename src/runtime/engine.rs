@@ -21,7 +21,7 @@ use crate::{
         CONTEXT_GLOBAL_NAME, DynamicError, DynamicErrorArg, RuntimeData, RuntimeError,
         StackTraceElement,
         builtins::{
-            get_builtin_functions, get_builtin_types,
+            get_builtin_functions, get_builtin_types, get_builtin_values,
             types::{BuiltinType, create_index_method},
         },
     },
@@ -82,6 +82,12 @@ impl Engine {
             (type_box.register_function)(lua_state, &type_box);
             type_registry.push(type_box);
             set_top(lua_state, 0);
+        }
+
+        // Create all built-in values
+        for builtin_value in get_builtin_values() {
+            (builtin_value.value_creator)(lua_state);
+            set_global(lua_state, builtin_value.name);
         }
 
         // Finally create the engine type and return it

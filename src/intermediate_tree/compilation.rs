@@ -35,7 +35,10 @@ use crate::{
         constant_eval::{ConstantValue, ConstantValueVariant},
     },
     report::{Hint, Report},
-    runtime::{DynamicError, DynamicErrorArg, RuntimeData, builtins::get_builtin_functions},
+    runtime::{
+        DynamicError, DynamicErrorArg, RuntimeData,
+        builtins::{get_builtin_functions, values::UNIT_VALUE_NAME},
+    },
     sources::{SourceRepository, SourceSection},
 };
 
@@ -404,7 +407,7 @@ impl Node {
                         output,
                         Some(&self.origin_location),
                         result_slot,
-                        "<lkql_unit>",
+                        UNIT_VALUE_NAME,
                     );
                 } else {
                     emit_runtime_error(
@@ -443,7 +446,7 @@ impl Node {
                         output,
                         Some(&self.origin_location),
                         result_slot,
-                        "<lkql_unit>",
+                        UNIT_VALUE_NAME,
                     );
                 } else {
                     emit_runtime_error(
@@ -1458,7 +1461,7 @@ impl ConstantValue {
                     output,
                     Some(&self.origin_location),
                     result_slot,
-                    "<lkql_unit>",
+                    UNIT_VALUE_NAME,
                 );
             }
             ConstantValueVariant::Bool(value) => {

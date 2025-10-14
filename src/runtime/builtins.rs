@@ -13,12 +13,14 @@ use crate::{
         builtins::{
             functions::{BuiltinFunction, lkql_img, lkql_print},
             types::{BuiltinMethod, BuiltinType, MetatableRegisteringFunction, OverloadTarget},
+            values::{BuiltinValue, BuiltinValueCreator},
         },
     },
 };
 
 pub mod functions;
 pub mod types;
+pub mod values;
 
 /// Allocate a new vector and populate it with all LKQL built-in functions,
 /// then return it.
@@ -76,6 +78,15 @@ pub fn get_builtin_types() -> Vec<BuiltinType> {
             types::str::register_metatable,
         ),
     ]
+}
+
+/// Allocate a new vector and populate it with all LKQL built-in values, then
+/// return it.
+pub fn get_builtin_values() -> Vec<BuiltinValue> {
+    fn b(name: &'static str, value_creator: BuiltinValueCreator) -> BuiltinValue {
+        BuiltinValue { name, value_creator }
+    }
+    vec![b(values::UNIT_VALUE_NAME, values::create_unit_value)]
 }
 
 // ----- Util functions -----
