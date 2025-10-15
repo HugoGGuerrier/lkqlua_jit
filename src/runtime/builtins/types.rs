@@ -22,6 +22,9 @@ pub struct BuiltinType {
     /// Name of the type as it should be displayed to the user.
     pub name: &'static str,
 
+    /// Tag of the type, its unique identifier for optimized type checking.
+    pub tag: isize,
+
     /// Methods in the type.
     pub methods: HashMap<String, BuiltinMethod>,
 

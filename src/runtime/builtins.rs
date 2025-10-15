@@ -3,6 +3,8 @@
 //! This module contains information and implementation for every built-in
 //! element of the LKQL language (functions and types).
 
+use std::collections::HashMap;
+
 use crate::{
     lua::LuaCFunction,
     runtime::builtins::{
@@ -28,15 +30,19 @@ pub fn get_builtin_functions() -> Vec<BuiltinFunction> {
 /// Allocate a new vector and populate it with all LKQL built-in types, then
 /// return it.
 pub fn get_builtin_types() -> Vec<BuiltinType> {
-    /// Shortcut function to create a type.
-    fn b(
-        name: &'static str,
-        methods: &'static [(&'static str, BuiltinMethod)],
-        overloads: &'static [(OverloadTarget, LuaCFunction)],
-        register_function: MetatableRegisteringFunction,
-    ) -> BuiltinType {
+    let mut known_tags = HashMap::new();
+    let mut b = |name: &'static str,
+                 tag: isize,
+                 methods: &'static [(&'static str, BuiltinMethod)],
+                 overloads: &'static [(OverloadTarget, LuaCFunction)],
+                 register_function: MetatableRegisteringFunction|
+     -> BuiltinType {
+        if let Some(previous) = known_tags.insert(tag, name) {
+            panic!("Multiple built-in types with the tag {}: {} and {}", tag, name, previous);
+        }
         BuiltinType {
             name,
+            tag,
             methods: methods
                 .iter()
                 .map(|(name, method)| (String::from(*name), method.clone()))
@@ -44,35 +50,40 @@ pub fn get_builtin_types() -> Vec<BuiltinType> {
             overloads: overloads.iter().map(|(target, f)| (*target, *f)).collect(),
             register_function,
         }
-    }
+    };
 
     vec![
         b(
             types::unit::NAME,
+            types::unit::TAG,
             &types::unit::METHODS,
             &types::unit::OVERLOADS,
             types::register_metatable_in_globals,
         ),
         b(
+            types::bool::NAME,
+            types::bool::TAG,
+            &types::bool::METHODS,
+            &types::bool::OVERLOADS,
+            types::bool::register_metatable,
+        ),
+        b(
             types::int::NAME,
+            types::int::TAG,
             &types::int::METHODS,
             &types::int::OVERLOADS,
             types::int::register_metatable,
         ),
         b(
             types::str::NAME,
+            types::str::TAG,
             &types::str::METHODS,
             &types::str::OVERLOADS,
             types::str::register_metatable,
         ),
         b(
-            types::bool::NAME,
-            &types::bool::METHODS,
-            &types::bool::OVERLOADS,
-            types::bool::register_metatable,
-        ),
-        b(
             types::tuple::NAME,
+            types::tuple::TAG,
             &types::tuple::METHODS,
             &types::tuple::OVERLOADS,
             types::register_metatable_in_globals,

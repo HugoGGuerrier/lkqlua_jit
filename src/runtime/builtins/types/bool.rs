@@ -6,11 +6,12 @@ use crate::{
     lua::{LuaCFunction, LuaState, copy_value, push_bool, set_metatable},
     runtime::builtins::{
         functions::lkql_img,
-        types::{BuiltinMethod, BuiltinType, OverloadTarget},
+        types::{BuiltinMethod, BuiltinType, OverloadTarget, unit},
     },
 };
 
 pub const NAME: &str = "Bool";
+pub const TAG: isize = unit::TAG + 1;
 pub const METHODS: [(&'static str, BuiltinMethod); 1] =
     [("img", BuiltinMethod { function: lkql_img, is_property: true })];
 pub const OVERLOADS: [(OverloadTarget, LuaCFunction); 0] = [];

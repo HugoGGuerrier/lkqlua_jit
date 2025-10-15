@@ -10,11 +10,12 @@ use crate::{
     },
     runtime::builtins::{
         functions::lkql_img,
-        types::{BuiltinMethod, OverloadTarget},
+        types::{BuiltinMethod, OverloadTarget, str},
     },
 };
 
 pub const NAME: &str = "Tuple";
+pub const TAG: isize = str::TAG + 1;
 pub const METHODS: [(&'static str, BuiltinMethod); 1] =
     [("img", BuiltinMethod { function: lkql_img, is_property: true })];
 pub const OVERLOADS: [(OverloadTarget, LuaCFunction); 1] =
