@@ -16,7 +16,7 @@ pub mod engine;
 pub const DEFAULT_VALUE_IMAGE: &'static str = "<lkql_value>";
 
 /// Name of the global value where the execution context is stored.
-pub const CONTEXT_GLOBAL_NAME: &str = "@execution_context";
+pub const CONTEXT_GLOBAL_NAME: &str = "runtime@execution_context";
 
 /// This type contains all information collected during the compilation and
 /// that may be required during the execution phase.
