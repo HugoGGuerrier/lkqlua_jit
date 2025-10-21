@@ -6,14 +6,14 @@ use std::{ffi::c_int, path::PathBuf, str::FromStr};
 
 use crate::{
     lua::{LuaCFunction, LuaState, copy_value, get_string, push_string, set_metatable},
-    runtime::builtins::types::{BuiltinMethod, BuiltinType, OverloadTarget, int},
+    runtime::builtins::types::{BuiltinField, BuiltinType, OverloadTarget, int},
 };
 
 pub const NAME: &str = "Str";
 pub const TAG: isize = int::TAG + 1;
-pub const METHODS: [(&'static str, BuiltinMethod); 2] = [
-    ("img", BuiltinMethod { function: str_img, is_property: true }),
-    ("base_name", BuiltinMethod { function: str_base_name, is_property: true }),
+pub const FIELDS: [(&'static str, BuiltinField); 2] = [
+    ("img", BuiltinField::Property(str_img)),
+    ("base_name", BuiltinField::Property(str_base_name)),
 ];
 pub const OVERLOADS: [(OverloadTarget, LuaCFunction); 0] = [];
 

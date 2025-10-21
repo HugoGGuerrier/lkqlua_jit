@@ -13,7 +13,7 @@ use crate::{
     runtime::builtins::{
         functions::{lkql_img, lkql_print},
         types::{
-            BuiltinMethod, BuiltinType, MetatableRegisteringFunction, OverloadTarget,
+            BuiltinField, BuiltinType, MetatableRegisteringFunction, OverloadTarget,
             metatable_global_field,
         },
     },
@@ -85,7 +85,7 @@ pub fn get_builtin_types() -> Vec<BuiltinType> {
     let mut known_tags = HashMap::new();
     let mut b = |name: &'static str,
                  tag: isize,
-                 methods: &'static [(&'static str, BuiltinMethod)],
+                 fields: &'static [(&'static str, BuiltinField)],
                  overloads: &'static [(OverloadTarget, LuaCFunction)],
                  register_function: MetatableRegisteringFunction|
      -> BuiltinType {
@@ -95,7 +95,7 @@ pub fn get_builtin_types() -> Vec<BuiltinType> {
         BuiltinType {
             name,
             tag,
-            methods: methods
+            fields: fields
                 .iter()
                 .map(|(name, method)| (String::from(*name), method.clone()))
                 .collect(),
@@ -108,35 +108,35 @@ pub fn get_builtin_types() -> Vec<BuiltinType> {
         b(
             types::unit::NAME,
             types::unit::TAG,
-            &types::unit::METHODS,
+            &types::unit::FIELDS,
             &types::unit::OVERLOADS,
             types::register_metatable_in_globals,
         ),
         b(
             types::bool::NAME,
             types::bool::TAG,
-            &types::bool::METHODS,
+            &types::bool::FIELDS,
             &types::bool::OVERLOADS,
             types::bool::register_metatable,
         ),
         b(
             types::int::NAME,
             types::int::TAG,
-            &types::int::METHODS,
+            &types::int::FIELDS,
             &types::int::OVERLOADS,
             types::int::register_metatable,
         ),
         b(
             types::str::NAME,
             types::str::TAG,
-            &types::str::METHODS,
+            &types::str::FIELDS,
             &types::str::OVERLOADS,
             types::str::register_metatable,
         ),
         b(
             types::tuple::NAME,
             types::tuple::TAG,
-            &types::tuple::METHODS,
+            &types::tuple::FIELDS,
             &types::tuple::OVERLOADS,
             types::register_metatable_in_globals,
         ),

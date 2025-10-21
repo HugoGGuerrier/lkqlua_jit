@@ -8,14 +8,13 @@ use crate::{
     lua::{LuaCFunction, LuaState, push_string},
     runtime::builtins::{
         functions::lkql_img,
-        types::{BuiltinMethod, OverloadTarget},
+        types::{BuiltinField, OverloadTarget},
     },
 };
 
 pub const NAME: &str = "Unit";
 pub const TAG: isize = 0;
-pub const METHODS: [(&'static str, BuiltinMethod); 1] =
-    [("img", BuiltinMethod { function: lkql_img, is_property: true })];
+pub const FIELDS: [(&'static str, BuiltinField); 1] = [("img", BuiltinField::Property(lkql_img))];
 pub const OVERLOADS: [(OverloadTarget, LuaCFunction); 1] =
     [(OverloadTarget::ToString, unit_tostring)];
 

@@ -5,9 +5,12 @@
 
 use std::{collections::HashMap, ffi::c_int};
 
-use crate::lua::{
-    LuaCFunction, LuaState, get_string, get_up_value_index, get_user_data, move_top_value,
-    push_c_closure, push_c_function, push_nil, push_user_data, remove_value, set_global,
+use crate::{
+    lua::{
+        LuaCFunction, LuaState, get_string, get_up_value_index, get_user_data, move_top_value,
+        push_c_closure, push_c_function, push_nil, push_user_data, remove_value, set_global,
+    },
+    runtime::builtins::BuiltinValue,
 };
 
 pub mod bool;
@@ -25,8 +28,8 @@ pub struct BuiltinType {
     /// Tag of the type, its unique identifier for optimized type checking.
     pub tag: isize,
 
-    /// Methods in the type.
-    pub methods: HashMap<String, BuiltinMethod>,
+    /// Fields in the type.
+    pub fields: HashMap<String, BuiltinField>,
 
     /// Maps used to define custom behavior for the type regarding language
     /// constructions.
@@ -36,13 +39,17 @@ pub struct BuiltinType {
     pub register_function: MetatableRegisteringFunction,
 }
 
-/// This type represents a built-in method in a built-in type.
+/// This type represents the field of a built-in type, it can be of many kinds.
 #[derive(Debug, Clone)]
-pub struct BuiltinMethod {
-    pub function: LuaCFunction,
+pub enum BuiltinField {
+    /// If the field is a constant value.
+    Value(BuiltinValue),
 
-    /// Whether the method should be called implicitly when accessing it.
-    pub is_property: bool,
+    /// If the field is computed value.
+    Property(LuaCFunction),
+
+    /// If the field is a method.
+    Method(LuaCFunction),
 }
 
 /// This type represents the target of an overloading definition.
@@ -117,18 +124,24 @@ unsafe extern "C" fn generic_index(l: LuaState) -> c_int {
     // Fetch the requested field name and check if there is a method
     // corresponding to it.
     let field_name = get_string(l, 2).unwrap();
-    if let Some(builtin_method) = builtin_type.methods.get(field_name) {
-        if builtin_method.is_property {
-            // Call the method directly with the same stack to avoid frame
-            // creation.
-            remove_value(l, 2);
-            push_nil(l);
-            move_top_value(l, 1);
-            unsafe { return (builtin_method.function)(l) }
-        } else {
-            push_c_function(l, builtin_method.function);
-            return 1;
+
+    // First check in the type methods
+    if let Some(builtin_field) = builtin_type.fields.get(field_name) {
+        match builtin_field {
+            BuiltinField::Value(builtin_value) => builtin_value.push_on_stack(l),
+            BuiltinField::Property(property) => {
+                remove_value(l, 2);
+                push_nil(l);
+                move_top_value(l, 1);
+                unsafe {
+                    (property)(l);
+                }
+            }
+            BuiltinField::Method(method) => {
+                push_c_function(l, *method);
+            }
         }
+        return 1;
     }
 
     // Return the failure, there is no field corresponding to the requested
