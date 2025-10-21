@@ -14,7 +14,7 @@ use crate::{
         functions::{lkql_img, lkql_print},
         types::{
             BuiltinField, BuiltinType, MetatableRegisteringFunction, OverloadTarget,
-            metatable_global_field,
+            TYPE_NAME_FIELD, TYPE_TAG_FIELD, metatable_global_field,
         },
     },
 };
@@ -85,20 +85,33 @@ pub fn get_builtin_types() -> Vec<BuiltinType> {
     let mut known_tags = HashMap::new();
     let mut b = |name: &'static str,
                  tag: isize,
-                 fields: &'static [(&'static str, BuiltinField)],
+                 specific_fields: &'static [(&'static str, BuiltinField)],
                  overloads: &'static [(OverloadTarget, LuaCFunction)],
                  register_function: MetatableRegisteringFunction|
      -> BuiltinType {
+        // Ensure the type tag is unique
         if let Some(previous) = known_tags.insert(tag, name) {
             panic!("Multiple built-in types with the tag {}: {} and {}", tag, name, previous);
         }
+
+        // Then create the type fields
+        let mut fields: HashMap<String, BuiltinField> = specific_fields
+            .iter()
+            .map(|(name, method)| (String::from(*name), method.clone()))
+            .collect();
+        fields.insert(
+            String::from(TYPE_NAME_FIELD),
+            BuiltinField::Value(BuiltinValue::String(String::from(name))),
+        );
+        fields.insert(
+            String::from(TYPE_TAG_FIELD),
+            BuiltinField::Value(BuiltinValue::Integer(tag)),
+        );
+
         BuiltinType {
             name,
             tag,
-            fields: fields
-                .iter()
-                .map(|(name, method)| (String::from(*name), method.clone()))
-                .collect(),
+            fields,
             overloads: overloads.iter().map(|(target, f)| (*target, *f)).collect(),
             register_function,
         }

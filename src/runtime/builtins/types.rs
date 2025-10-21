@@ -19,6 +19,12 @@ pub mod str;
 pub mod tuple;
 pub mod unit;
 
+/// Pseudo-field to use to get the name of the type of a value.
+pub const TYPE_NAME_FIELD: &str = "field@type_name";
+
+/// Pseudo-field to use to get the tag of the type of a value.
+pub const TYPE_TAG_FIELD: &str = "field@type_tag";
+
 /// This type represents an LKQL built-in type with all its information.
 #[derive(Debug)]
 pub struct BuiltinType {
