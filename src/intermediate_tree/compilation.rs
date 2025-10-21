@@ -37,10 +37,7 @@ use crate::{
     report::{Hint, Report},
     runtime::{
         DynamicError, DynamicErrorArg, RuntimeData,
-        builtins::{
-            UNIT_VALUE_NAME, get_builtin_bindings,
-            types::{self, metatable_global_field},
-        },
+        builtins::{UNIT_VALUE_NAME, get_builtin_bindings, types, utils::metatable_global_field},
     },
     sources::{SourceRepository, SourceSection},
 };

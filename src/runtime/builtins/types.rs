@@ -10,7 +10,7 @@ use crate::{
         LuaCFunction, LuaState, get_string, get_up_value_index, get_user_data, move_top_value,
         push_c_closure, push_c_function, push_nil, push_user_data, remove_value, set_global,
     },
-    runtime::builtins::BuiltinValue,
+    runtime::builtins::{BuiltinValue, utils::metatable_global_field},
 };
 
 pub mod bool;
@@ -100,11 +100,7 @@ impl OverloadTarget {
 /// currently on the top of the stack.
 pub type MetatableRegisteringFunction = fn(LuaState, &Box<BuiltinType>);
 
-/// Get the name of the global field where the meta-table of the type
-/// designated by the provided name is stored in.
-pub fn metatable_global_field(type_name: &str) -> String {
-    return format!("type@{}", type_name);
-}
+// ----- Support functions -----
 
 /// This is the generic meta-table registering function, it places the
 /// meta-table on the top of the stack in a global field named from the type's

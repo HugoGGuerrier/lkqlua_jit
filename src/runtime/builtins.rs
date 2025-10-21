@@ -14,13 +14,15 @@ use crate::{
         functions::{lkql_img, lkql_print},
         types::{
             BuiltinField, BuiltinType, MetatableRegisteringFunction, OverloadTarget,
-            TYPE_NAME_FIELD, TYPE_TAG_FIELD, metatable_global_field,
+            TYPE_NAME_FIELD, TYPE_TAG_FIELD,
         },
+        utils::metatable_global_field,
     },
 };
 
 pub mod functions;
 pub mod types;
+pub mod utils;
 
 /// Name of the binding leading to the "Unit" singleton.
 pub const UNIT_VALUE_NAME: &str = "value@unit";
