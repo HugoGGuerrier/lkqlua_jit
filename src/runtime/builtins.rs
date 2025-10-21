@@ -6,25 +6,77 @@
 use std::collections::HashMap;
 
 use crate::{
-    lua::LuaCFunction,
+    lua::{
+        LuaCFunction, LuaState, get_global, push_c_function, push_integer, push_string, push_table,
+        set_metatable,
+    },
     runtime::builtins::{
-        functions::{BuiltinFunction, lkql_img, lkql_print},
-        types::{BuiltinMethod, BuiltinType, MetatableRegisteringFunction, OverloadTarget},
-        values::{BuiltinValue, BuiltinValueCreator},
+        functions::{lkql_img, lkql_print},
+        types::{
+            BuiltinMethod, BuiltinType, MetatableRegisteringFunction, OverloadTarget,
+            metatable_global_field,
+        },
     },
 };
 
 pub mod functions;
 pub mod types;
-pub mod values;
+
+/// Name of the binding leading to the "Unit" singleton.
+pub const UNIT_VALUE_NAME: &str = "value@unit";
+pub fn create_unit_value(l: LuaState) {
+    push_table(l, 0, 0);
+    get_global(l, &metatable_global_field(types::unit::NAME));
+    set_metatable(l, -2);
+}
+
+/// This type represents a builder for a built-in values. This function should
+/// push the value on the top of the stack of the provided Lua state.
+pub type BuiltinValueBuilder = fn(LuaState);
+
+/// This type represents a "static" value that can be used by associa ting it
+/// to a symbol.
+#[derive(Debug, Clone)]
+pub enum BuiltinValue {
+    Integer(isize),
+    String(String),
+    Function(LuaCFunction),
+
+    /// Create the value by calling the associated Lua C function that should
+    /// push it on the top of the stack.
+    FromBuilder(BuiltinValueBuilder),
+}
+
+impl BuiltinValue {
+    /// Push the value on the top of the stack in the provided Lua state.
+    pub fn push_on_stack(&self, l: LuaState) {
+        match self {
+            BuiltinValue::Integer(i) => push_integer(l, *i),
+            BuiltinValue::String(s) => push_string(l, &s),
+            BuiltinValue::Function(f) => push_c_function(l, *f),
+            BuiltinValue::FromBuilder(builder) => builder(l),
+        }
+    }
+}
+
+/// This type represents a built-in symbol binding, this symbol is accessible
+/// in all lexical environments.
+pub struct BuiltinBinding {
+    pub name: &'static str,
+    pub value: BuiltinValue,
+}
 
 /// Allocate a new vector and populate it with all LKQL built-in functions,
 /// then return it.
-pub fn get_builtin_functions() -> Vec<BuiltinFunction> {
-    fn b(name: &'static str, c_function: LuaCFunction) -> BuiltinFunction {
-        BuiltinFunction { name, c_function }
+pub fn get_builtin_bindings() -> Vec<BuiltinBinding> {
+    fn b(name: &'static str, value: BuiltinValue) -> BuiltinBinding {
+        BuiltinBinding { name, value }
     }
-    vec![b("print", lkql_print), b("img", lkql_img)]
+    vec![
+        b("print", BuiltinValue::Function(lkql_print)),
+        b("img", BuiltinValue::Function(lkql_img)),
+        b(UNIT_VALUE_NAME, BuiltinValue::FromBuilder(create_unit_value)),
+    ]
 }
 
 /// Allocate a new vector and populate it with all LKQL built-in types, then
@@ -89,13 +141,4 @@ pub fn get_builtin_types() -> Vec<BuiltinType> {
             types::register_metatable_in_globals,
         ),
     ]
-}
-
-/// Allocate a new vector and populate it with all LKQL built-in values, then
-/// return it.
-pub fn get_builtin_values() -> Vec<BuiltinValue> {
-    fn b(name: &'static str, value_creator: BuiltinValueCreator) -> BuiltinValue {
-        BuiltinValue { name, value_creator }
-    }
-    vec![b(values::UNIT_VALUE_NAME, values::create_unit_value)]
 }

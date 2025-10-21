@@ -1,6 +1,6 @@
 //! # Built-in functions
 //!
-//! This module contains all LKQL built-in functions.
+//! This module contains all LKQL built-in functions and utils for them.
 
 use std::ffi::c_int;
 
@@ -10,18 +10,11 @@ use crate::{
     ExecutionContext,
     errors::{NO_VALUE_FOR_PARAM, POS_AND_NAMED_VALUE_FOR_PARAM},
     lua::{
-        LuaCFunction, LuaState, LuaType, get_boolean, get_field, get_global, get_top, get_type,
-        get_user_data, pop, push_string, raise_error, to_string,
+        LuaState, LuaType, get_boolean, get_field, get_global, get_top, get_type, get_user_data,
+        pop, push_string, raise_error, to_string,
     },
     runtime::{CONTEXT_GLOBAL_NAME, DEFAULT_VALUE_IMAGE, DynamicError, DynamicErrorArg},
 };
-
-/// This type encapsulate a built-in LKQL function. It contains all required
-/// information for the compilation and the execution.
-pub struct BuiltinFunction {
-    pub name: &'static str,
-    pub c_function: LuaCFunction,
-}
 
 /// The "print" function
 #[unsafe(no_mangle)]

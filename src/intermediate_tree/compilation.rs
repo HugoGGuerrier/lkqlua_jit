@@ -38,9 +38,8 @@ use crate::{
     runtime::{
         DynamicError, DynamicErrorArg, RuntimeData,
         builtins::{
-            get_builtin_functions,
+            UNIT_VALUE_NAME, get_builtin_bindings,
             types::{self, metatable_global_field},
-            values::UNIT_VALUE_NAME,
         },
     },
     sources::{SourceRepository, SourceSection},
@@ -1929,7 +1928,7 @@ struct CompilationContext {
 impl CompilationContext {
     fn new() -> Self {
         Self {
-            builtins: get_builtin_functions().iter().map(|b| b.name).collect(),
+            builtins: get_builtin_bindings().iter().map(|b| b.name).collect(),
             current_frame: Rc::new(RefCell::new(Frame::new(None))),
             exec_unit_data_stack: Vec::new(),
             prototypes: Vec::new(),

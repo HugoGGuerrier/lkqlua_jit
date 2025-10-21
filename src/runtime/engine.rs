@@ -21,7 +21,7 @@ use crate::{
         CONTEXT_GLOBAL_NAME, DynamicError, DynamicErrorArg, RuntimeData, RuntimeError,
         StackTraceElement,
         builtins::{
-            get_builtin_functions, get_builtin_types, get_builtin_values,
+            get_builtin_bindings, get_builtin_types,
             types::{BuiltinType, create_index_method},
         },
     },
@@ -54,12 +54,6 @@ impl Engine {
         // Open Lua libraries
         open_lua_libs(lua_state);
 
-        // Set all built-in functions in the environment
-        for builtin_function in get_builtin_functions() {
-            push_c_function(lua_state, builtin_function.c_function);
-            set_global(lua_state, builtin_function.name);
-        }
-
         // Create all built-in types and store them
         let mut type_registry = Vec::new();
         for builtin_type in get_builtin_types() {
@@ -84,10 +78,10 @@ impl Engine {
             set_top(lua_state, 0);
         }
 
-        // Create all built-in values
-        for builtin_value in get_builtin_values() {
-            (builtin_value.value_creator)(lua_state);
-            set_global(lua_state, builtin_value.name);
+        // Bind all built-in values to their names
+        for builtin_binding in get_builtin_bindings() {
+            builtin_binding.value.push_on_stack(lua_state);
+            set_global(lua_state, builtin_binding.name);
         }
 
         // Finally create the engine type and return it
