@@ -8,7 +8,10 @@ use std::io::Write;
 
 use crate::{
     ExecutionContext,
-    lua::{LuaState, get_global, get_top, get_user_data, pop, push_string, to_string},
+    lua::{
+        LuaState, get_global, get_string, get_top, get_type, get_user_data, pop, push_string,
+        to_string,
+    },
     runtime::{
         CONTEXT_GLOBAL_NAME, DEFAULT_VALUE_IMAGE,
         builtins::utils::{get_bool_param, get_param},
@@ -44,6 +47,11 @@ pub unsafe extern "C" fn lkql_print(l: LuaState) -> c_int {
 pub unsafe extern "C" fn lkql_img(l: LuaState) -> c_int {
     let param_count = get_top(l) - 1;
     let value_index = get_param(l, param_count, 1, "value");
-    push_string(l, to_string(l, value_index, DEFAULT_VALUE_IMAGE));
+    match get_type(l, value_index) {
+        crate::lua::LuaType::String => {
+            push_string(l, &format!("\"{}\"", get_string(l, value_index).unwrap()))
+        }
+        _ => push_string(l, to_string(l, value_index, DEFAULT_VALUE_IMAGE)),
+    }
     1
 }
