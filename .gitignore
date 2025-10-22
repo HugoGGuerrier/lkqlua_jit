@@ -9,3 +9,6 @@
 # LuaJIT clangd artifacts
 /luajit/.cache/
 /luajit/compile_commands.json
+
+# VS code workspace config
+.vscode
