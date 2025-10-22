@@ -115,6 +115,11 @@ pub fn get_type(l: LuaState, index: i32) -> LuaType {
     unsafe { lua_type(l, index) }
 }
 
+/// Get whether the value at the provided `index` is `nil`.
+pub fn is_nil(l: LuaState, index: i32) -> bool {
+    get_type(l, index) == LuaType::Nil
+}
+
 /// Get the length of the object of the provided index. The result is the same
 /// as the one obtained through the `#` Lua operator.
 pub fn get_length(l: LuaState, index: i32) -> usize {
@@ -125,6 +130,12 @@ pub fn get_length(l: LuaState, index: i32) -> usize {
 /// all values that aren't of the boolean type to one.
 pub fn get_boolean(l: LuaState, index: i32) -> bool {
     unsafe { lua_toboolean(l, index) != 0 }
+}
+
+/// Get the value at the provided `index` as an integer, implicitly converting
+/// it. If the value is not convertible the behavior is not specified.
+pub fn get_integer(l: LuaState, index: i32) -> isize {
+    unsafe { lua_tointeger(l, index) }
 }
 
 /// Try to get the value at the provided index as a string and return it. If
@@ -482,6 +493,7 @@ unsafe extern "C" {
     fn lua_type(l: LuaState, index: c_int) -> LuaType;
     fn lua_objlen(l: LuaState, index: c_int) -> usize;
     fn lua_toboolean(l: LuaState, index: c_int) -> c_int;
+    fn lua_tointeger(l: LuaState, index: i32) -> isize;
     fn lua_tolstring(l: LuaState, index: c_int, result_size: *mut usize) -> *const c_char;
     fn lua_topointer(l: LuaState, index: c_int) -> *const c_void;
 

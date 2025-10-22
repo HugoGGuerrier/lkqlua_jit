@@ -4,9 +4,15 @@
 //! runtime values.
 
 use crate::{
-    errors::{NO_VALUE_FOR_PARAM, POS_AND_NAMED_VALUE_FOR_PARAM},
-    lua::{LuaState, LuaType, get_boolean, get_field, get_top, get_type, raise_error},
-    runtime::{DynamicError, DynamicErrorArg},
+    errors::{NO_VALUE_FOR_PARAM, POS_AND_NAMED_VALUE_FOR_PARAM, WRONG_ARG_TYPE},
+    lua::{
+        LuaState, LuaType, get_boolean, get_field, get_integer, get_string, get_top, get_type,
+        is_nil, pop, raise_error,
+    },
+    runtime::{
+        DynamicError, DynamicErrorArg, TYPE_NAME_FIELD, TYPE_TAG_FIELD,
+        builtins::types::{self, BuiltinType},
+    },
 };
 
 /// Get the name of the global field where the meta-table of the type
@@ -32,6 +38,7 @@ pub extern "C" fn get_bool_param(
 ) -> bool {
     let maybe_param_index = get_param_safe(l, param_count, index, name);
     if let Ok(param_index) = maybe_param_index {
+        check_param_type(l, name, param_index, &types::bool::TYPE);
         get_boolean(l, param_index)
     } else if default_value.is_some() {
         default_value.unwrap()
@@ -95,5 +102,60 @@ fn get_param_safe(
                 message_args: vec![DynamicErrorArg::Static(String::from(name))],
             })
         }
+    }
+}
+
+/// This function ensure the parameter at the provided `index` with the given
+/// `name` is of the correct type. If types don't match, this function raise
+/// an error.
+#[unsafe(no_mangle)]
+#[allow(improper_ctypes_definitions)]
+extern "C" fn check_param_type(
+    l: LuaState,
+    param_name: &str,
+    value_index: i32,
+    expected_type: &BuiltinType,
+) {
+    let param_type_tag = get_type_tag(l, value_index);
+    if param_type_tag != expected_type.tag {
+        let param_type_name = get_type_name(l, value_index);
+        raise_error(
+            l,
+            &DynamicError {
+                template_id: WRONG_ARG_TYPE.id,
+                message_args: vec![
+                    DynamicErrorArg::Static(String::from(expected_type.name)),
+                    DynamicErrorArg::Static(String::from(param_name)),
+                    DynamicErrorArg::Static(String::from(param_type_name)),
+                ],
+            }
+            .to_json_string(),
+        )
+    }
+}
+
+// ----- Type checking functions -----
+
+/// Get the type tag of the value at the provided index if applicable.
+pub fn get_type_tag(l: LuaState, index: i32) -> isize {
+    get_field(l, index, TYPE_TAG_FIELD);
+    if is_nil(l, -1) {
+        panic!("Invalid runtime value");
+    } else {
+        let res = get_integer(l, -1);
+        pop(l, 1);
+        res
+    }
+}
+
+/// Get the type name of the value at the provided index if applicable.
+pub fn get_type_name(l: LuaState, index: i32) -> &'static str {
+    get_field(l, index, TYPE_NAME_FIELD);
+    if is_nil(l, -1) {
+        panic!("Invalid runtime value");
+    } else {
+        let res = get_string(l, -1).unwrap();
+        pop(l, 1);
+        res
     }
 }

@@ -61,12 +61,28 @@ pub const UNKNOWN_MEMBER: ErrorTemplate = ErrorTemplate {
     message_template: "No member named \"{}\" on the value",
 };
 
+// --- Type checking errors
+
+/// Error when an expression if not of the valid type.
+pub const WRONG_TYPE: ErrorTemplate = ErrorTemplate {
+    id: UNKNOWN_MEMBER.id + 1,
+    title: "Invalid expression type",
+    message_template: "Expecting a \"{}\", got a \"{}\"",
+};
+
+/// Error when an argument is not of a valid type.
+pub const WRONG_ARG_TYPE: ErrorTemplate = ErrorTemplate {
+    id: WRONG_TYPE.id + 1,
+    title: "Invalid argument type",
+    message_template: "Expecting a \"{}\" for the parameter \"{}\", got a \"{}\"",
+};
+
 // --- Misc errors
 
 /// Error coming from the Lua engine and that cannot be mapped to a more
 /// precise error.
 pub const LUA_ENGINE_ERROR: ErrorTemplate = ErrorTemplate {
-    id: UNKNOWN_MEMBER.id + 1,
+    id: WRONG_ARG_TYPE.id + 1,
     title: "Error from the Lua engine",
     message_template: "{}",
 };
@@ -75,7 +91,7 @@ pub const LUA_ENGINE_ERROR: ErrorTemplate = ErrorTemplate {
 
 /// This vector contains all error templates stored at the index of their
 /// identifier.
-pub const ERROR_TEMPLATE_REPOSITORY: [&'static ErrorTemplate; 8] = [
+pub const ERROR_TEMPLATE_REPOSITORY: [&'static ErrorTemplate; 10] = [
     &UNKNOWN_SYMBOL,
     &DUPLICATED_SYMBOL,
     &NO_VALUE_FOR_PARAM,
@@ -83,6 +99,8 @@ pub const ERROR_TEMPLATE_REPOSITORY: [&'static ErrorTemplate; 8] = [
     &POS_AFTER_NAMED_ARGUMENT,
     &INDEX_OUT_OF_BOUNDS,
     &UNKNOWN_MEMBER,
+    &WRONG_TYPE,
+    &WRONG_ARG_TYPE,
     &LUA_ENGINE_ERROR,
 ];
 
