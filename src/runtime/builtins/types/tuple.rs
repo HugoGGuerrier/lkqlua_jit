@@ -5,20 +5,23 @@
 use std::ffi::c_int;
 
 use crate::{
-    lua::{
-        LuaCFunction, LuaState, get_field, get_index, get_length, get_string, push_string, set_top,
-    },
-    runtime::builtins::{
-        functions::lkql_img,
-        types::{BuiltinField, OverloadTarget, str},
+    lua::{LuaState, get_field, get_index, get_length, get_string, push_string, set_top},
+    runtime::{
+        RuntimeTypeField,
+        builtins::{
+            functions::lkql_img,
+            types::{BuiltinType, OverloadTarget, register_metatable_in_globals, str},
+        },
     },
 };
 
-pub const NAME: &str = "Tuple";
-pub const TAG: isize = str::TAG + 1;
-pub const FIELDS: [(&'static str, BuiltinField); 1] = [("img", BuiltinField::Property(lkql_img))];
-pub const OVERLOADS: [(OverloadTarget, LuaCFunction); 1] =
-    [(OverloadTarget::ToString, tuple_tostring)];
+pub const TYPE: BuiltinType = BuiltinType {
+    name: "Tuple",
+    tag: str::TYPE.tag + 1,
+    fields: &[("img", RuntimeTypeField::Property(lkql_img))],
+    overloads: &[(OverloadTarget::ToString, tuple_tostring)],
+    register_function: register_metatable_in_globals,
+};
 
 /// Overload of "__tostring" for the "Tuple" type
 unsafe extern "C" fn tuple_tostring(l: LuaState) -> c_int {

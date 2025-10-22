@@ -7,16 +7,25 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::sources::{SourceId, SourceSection};
+use crate::{
+    lua::{LuaCFunction, LuaState, push_c_function, push_integer, push_string},
+    sources::{SourceId, SourceSection},
+};
 
 pub mod builtins;
 pub mod engine;
 
 /// The default image of a value when the latter doesn't define one.
-pub const DEFAULT_VALUE_IMAGE: &'static str = "<lkql_value>";
+pub const DEFAULT_VALUE_IMAGE: &str = "<lkql_value>";
 
 /// Name of the global value where the execution context is stored.
 pub const CONTEXT_GLOBAL_NAME: &str = "runtime@execution_context";
+
+/// Pseudo-field to use to get the name of the type of a value.
+pub const TYPE_NAME_FIELD: &str = "field@type_name";
+
+/// Pseudo-field to use to get the tag of the type of a value.
+pub const TYPE_TAG_FIELD: &str = "field@type_tag";
 
 /// This type contains all information collected during the compilation and
 /// that may be required during the execution phase.
@@ -79,6 +88,61 @@ pub struct PrototypeData {
     /// prototype.
     pub instruction_locations: Vec<Option<SourceSection>>,
 }
+
+/// This type represents the runtime description of a type.
+#[derive(Debug, Clone)]
+pub struct RuntimeType {
+    /// Name of the type as it should be displayed to the user.
+    pub name: &'static str,
+
+    /// Tag of the type, its unique identifier for optimized type checking.
+    pub tag: isize,
+
+    /// Fields in the type.
+    pub fields: HashMap<String, RuntimeTypeField>,
+}
+
+/// This type represents a field that belongs to a [`RuntimeType`].
+#[derive(Debug, Clone)]
+pub enum RuntimeTypeField {
+    /// If the field is a constant value.
+    Value(RuntimeValue),
+
+    /// If the field is computed value.
+    Property(LuaCFunction),
+
+    /// If the field is a method.
+    Method(LuaCFunction),
+}
+
+/// This type represents a runtime value that can be pushed on a Lua state
+/// stack.
+#[derive(Debug, Clone)]
+pub enum RuntimeValue {
+    Integer(isize),
+    String(String),
+    Function(LuaCFunction),
+
+    /// Create the value by calling the associated Lua C function that should
+    /// push it on the top of the stack.
+    FromBuilder(RuntimeValueBuilder),
+}
+
+impl RuntimeValue {
+    /// Push the value on the top of the stack in the provided Lua state.
+    pub fn push_on_stack(&self, l: LuaState) {
+        match self {
+            RuntimeValue::Integer(i) => push_integer(l, *i),
+            RuntimeValue::String(s) => push_string(l, &s),
+            RuntimeValue::Function(f) => push_c_function(l, *f),
+            RuntimeValue::FromBuilder(builder) => builder(l),
+        }
+    }
+}
+
+/// This type represents functions that take a Lua state as parameter, create
+/// a new runtime value and push it on the top of the stack.
+pub type RuntimeValueBuilder = fn(LuaState);
 
 /// This type represents an error that happened during the runtime. It contains
 /// the error template and arguments for it, alongside the stack trace of the

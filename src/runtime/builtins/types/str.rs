@@ -5,23 +5,29 @@
 use std::{ffi::c_int, path::PathBuf, str::FromStr};
 
 use crate::{
-    lua::{LuaCFunction, LuaState, copy_value, get_string, push_string, set_metatable},
-    runtime::builtins::{
-        functions::lkql_img,
-        types::{BuiltinField, BuiltinType, OverloadTarget, int},
+    lua::{LuaState, copy_value, get_string, push_string, set_metatable},
+    runtime::{
+        RuntimeTypeField,
+        builtins::{
+            functions::lkql_img,
+            types::{BuiltinType, int},
+        },
     },
 };
 
-pub const NAME: &str = "Str";
-pub const TAG: isize = int::TAG + 1;
-pub const FIELDS: [(&'static str, BuiltinField); 2] = [
-    ("img", BuiltinField::Property(lkql_img)),
-    ("base_name", BuiltinField::Property(str_base_name)),
-];
-pub const OVERLOADS: [(OverloadTarget, LuaCFunction); 0] = [];
+pub const TYPE: BuiltinType = BuiltinType {
+    name: "Str",
+    tag: int::TYPE.tag + 1,
+    fields: &[
+        ("img", RuntimeTypeField::Property(lkql_img)),
+        ("base_name", RuntimeTypeField::Property(str_base_name)),
+    ],
+    overloads: &[],
+    register_function: register_metatable,
+};
 
 /// Register the meta-table in the provided Lua state.
-pub fn register_metatable(l: LuaState, _: &Box<BuiltinType>) {
+pub fn register_metatable(l: LuaState, _: &'static BuiltinType) {
     push_string(l, "");
     copy_value(l, -2);
     set_metatable(l, -2);

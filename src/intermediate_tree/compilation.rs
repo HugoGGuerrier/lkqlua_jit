@@ -743,7 +743,7 @@ impl Node {
                     output,
                     Some(&self.origin_location),
                     result_slot,
-                    types::tuple::NAME,
+                    types::tuple::TYPE.name,
                 );
             }
             NodeVariant::ObjectLiteral(items) => {
@@ -1552,7 +1552,7 @@ impl ConstantValue {
                     output,
                     Some(&self.origin_location),
                     result_slot,
-                    types::tuple::NAME,
+                    types::tuple::TYPE.name,
                 );
             }
             ConstantValueVariant::Object(items) => {
