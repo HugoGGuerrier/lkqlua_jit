@@ -97,7 +97,7 @@ impl ExecutionUnit {
                 for maybe_param_decl in &params_node {
                     match maybe_param_decl? {
                         Some(LkqlNode::ParameterDecl(pd)) => {
-                            let name = Identifier::from_node(&pd.f_param_identifier()?, ctx)?;
+                            let name = Identifier::from_lkql_node(&pd.f_param_identifier()?, ctx)?;
                             let default_expr = if let Some(n) = pd.f_default_expr()? {
                                 Some(Node::lower_lkql_node(&n, ctx)?)
                             } else {
@@ -139,7 +139,7 @@ impl Node {
         let variant = match node {
             // --- Declarations
             LkqlNode::ValDecl(vd) => NodeVariant::InitLocal {
-                symbol: Identifier::from_node(&vd.f_identifier()?, ctx)?,
+                symbol: Identifier::from_lkql_node(&vd.f_identifier()?, ctx)?,
                 val: Box::new(Self::lower_lkql_node(&vd.f_value()?, ctx)?),
             },
             LkqlNode::FunDecl(_) | LkqlNode::SelectorDecl(_) => {
@@ -149,7 +149,7 @@ impl Node {
                     _ => unreachable!(),
                 };
                 NodeVariant::InitLocalFun {
-                    symbol: Identifier::from_node(&id_node, ctx)?,
+                    symbol: Identifier::from_lkql_node(&id_node, ctx)?,
                     child_index: *ctx.child_index_map.get(node).unwrap(),
                 }
             }
@@ -189,7 +189,7 @@ impl Node {
                                 }
                             }
                             LkqlNode::NamedArg(na) => named_args.push((
-                                Identifier::from_node(&na.f_arg_name()?, ctx)?,
+                                Identifier::from_lkql_node(&na.f_arg_name()?, ctx)?,
                                 Self::lower_lkql_node(&na.f_value_expr()?, ctx)?,
                             )),
                             _ => unreachable!(),
@@ -214,7 +214,7 @@ impl Node {
                 };
                 NodeVariant::DottedExpr {
                     prefix: Box::new(Self::lower_lkql_node(&receiver?, ctx)?),
-                    suffix: Identifier::from_node(&member?, ctx)?,
+                    suffix: Identifier::from_lkql_node(&member?, ctx)?,
                     is_safe,
                 }
             }
@@ -372,14 +372,16 @@ impl Node {
                 for maybe_assoc_node in &assocs_node {
                     if let Some(LkqlNode::ObjectAssoc(ref assoc_node)) = maybe_assoc_node? {
                         assocs.push((
-                            Identifier::from_node(&assoc_node.f_name()?, ctx)?,
+                            Identifier::from_lkql_node(&assoc_node.f_name()?, ctx)?,
                             Self::lower_lkql_node(&assoc_node.f_expr()?, ctx)?,
                         ));
                     }
                 }
                 NodeVariant::ObjectLiteral(assocs)
             }
-            LkqlNode::Identifier(_) => NodeVariant::ReadSymbol(Identifier::from_node(node, ctx)?),
+            LkqlNode::Identifier(_) => {
+                NodeVariant::ReadSymbol(Identifier::from_lkql_node(node, ctx)?)
+            }
             LkqlNode::AnonymousFunction(_) => {
                 NodeVariant::LambdaFun(*ctx.child_index_map.get(node).unwrap())
             }
@@ -456,7 +458,7 @@ impl MiscOperator {
 
 impl Identifier {
     /// Util function to easily create an identifier from an LKQL node.
-    fn from_node(node: &LkqlNode, ctx: &LoweringContext) -> Result<Self, Report> {
+    fn from_lkql_node(node: &LkqlNode, ctx: &LoweringContext) -> Result<Self, Report> {
         Ok(Self {
             origin_location: SourceSection::from_lkql_node(ctx.lowered_source, node)?,
             text: node.text()?,
