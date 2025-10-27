@@ -1677,11 +1677,11 @@ fn emit_table_index_read(
     ctx: &mut CompilationContext,
     output: &mut ExtendedInstructionBuffer,
     origin_location: &SourceSection,
-    source_slot: u8,
+    result_slot: u8,
     table_slot: u8,
     index: usize,
 ) {
-    _access_table_index(ctx, output, origin_location, source_slot, table_slot, index, TGETB, TGETV);
+    _access_table_index(ctx, output, origin_location, result_slot, table_slot, index, TGETB, TGETV);
 }
 
 /// Util function to set a table element by its index.
@@ -1731,7 +1731,7 @@ fn emit_table_member_read(
     ctx: &mut CompilationContext,
     output: &mut ExtendedInstructionBuffer,
     maybe_origin_location: Option<&SourceSection>,
-    target_slot: u8,
+    result_slot: u8,
     table_slot: u8,
     member_name: &str,
 ) {
@@ -1739,7 +1739,7 @@ fn emit_table_member_read(
         ctx,
         output,
         maybe_origin_location,
-        target_slot,
+        result_slot,
         table_slot,
         member_name,
         TGETS,
