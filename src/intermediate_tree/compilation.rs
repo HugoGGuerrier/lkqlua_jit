@@ -766,7 +766,11 @@ impl Node {
             }
 
             // --- All trivial literal nodes should've been compiled by now
-            _ => unreachable!(),
+            NodeVariant::NullLiteral
+            | NodeVariant::UnitLiteral
+            | NodeVariant::BoolLiteral(_)
+            | NodeVariant::IntLiteral(_)
+            | NodeVariant::StringLiteral(_) => unreachable!(),
         }
 
         /// Try compiling the provided arithmetic operation in a constant
