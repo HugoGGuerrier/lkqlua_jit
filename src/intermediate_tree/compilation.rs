@@ -738,12 +738,17 @@ impl Node {
                 );
 
                 // Then set the meta-table of this new table
+                let type_name = match &self.variant {
+                    NodeVariant::TupleLiteral(_) => types::tuple::TYPE.name,
+                    NodeVariant::ListLiteral(_) => "TODO",
+                    _ => unreachable!(),
+                };
                 emit_set_metatable(
                     ctx,
                     output,
                     Some(&self.origin_location),
                     result_slot,
-                    types::tuple::TYPE.name,
+                    type_name,
                 );
             }
             NodeVariant::ObjectLiteral(items) => {
