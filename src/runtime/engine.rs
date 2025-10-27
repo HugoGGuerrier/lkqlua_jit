@@ -213,8 +213,8 @@ unsafe extern "C" fn handle_error(l: LuaState) -> c_int {
             .map(|a| match a {
                 DynamicErrorArg::Static(s) => s,
                 DynamicErrorArg::LocalValue(index) => {
-                    let _ =
-                        debug_get_local(l, current_frame.as_ref().unwrap(), index as i32).unwrap();
+                    let _ = debug_get_local(l, current_frame.as_ref().unwrap(), 1 + index as i32)
+                        .unwrap();
                     String::from(to_string(l, -1, "<lkql_value>"))
                 }
             })

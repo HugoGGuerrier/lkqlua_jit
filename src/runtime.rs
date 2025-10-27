@@ -201,6 +201,7 @@ pub enum DynamicErrorArg {
     /// The argument is known at compile time.
     Static(String),
 
-    /// The argument value is in a frame slot at execution time.
+    /// The argument value is in a frame slot at execution time. This slot
+    /// should be 0-indexed.
     LocalValue(u8),
 }
