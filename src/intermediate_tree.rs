@@ -18,7 +18,7 @@ use std::{
     hash::Hash,
 };
 
-use crate::sources::SourceSection;
+use crate::{runtime::builtins::types::BuiltinType, sources::SourceSection};
 
 pub mod compilation;
 pub mod constant_eval;
@@ -234,6 +234,14 @@ pub enum NodeVariant {
     // --- Lambda function access
     LambdaFun(u16),
 
+    // --- Type checkers
+    /// This node is checking that the child expression matches the given type
+    /// and if so, return it. Otherwise, this node should raise an error.
+    CheckType {
+        expression: Box<Node>,
+        expected_type: &'static BuiltinType,
+    },
+
     // --- Literals
     NullLiteral,
     UnitLiteral,
@@ -376,6 +384,13 @@ impl Node {
             NodeVariant::LambdaFun(child_index) => {
                 ("ChildFunRef", vec![("child_index", child_index.to_string())])
             }
+            NodeVariant::CheckType { expression, expected_type } => (
+                "CheckType",
+                vec![
+                    ("expression", expression.pretty_print(child_level)),
+                    ("expected_type", expected_type.name.to_string()),
+                ],
+            ),
             NodeVariant::NullLiteral => ("NullLiteral", vec![]),
             NodeVariant::UnitLiteral => ("UnitLiteral", vec![]),
             NodeVariant::BoolLiteral(value) => ("BoolLiteral", vec![("value", value.to_string())]),

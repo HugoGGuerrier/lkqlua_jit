@@ -103,7 +103,7 @@ pub struct RuntimeType {
 }
 
 /// This type represents a field that belongs to a [`RuntimeType`].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RuntimeTypeField {
     /// If the field is a constant value.
     Value(RuntimeValue),
@@ -117,7 +117,7 @@ pub enum RuntimeTypeField {
 
 /// This type represents a runtime value that can be pushed on a Lua state
 /// stack.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RuntimeValue {
     Integer(isize),
     String(String),

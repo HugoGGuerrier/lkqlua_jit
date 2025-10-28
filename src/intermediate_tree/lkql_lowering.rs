@@ -11,6 +11,7 @@ use crate::{
         MiscOperatorVariant, Node, NodeVariant,
     },
     report::{Hint, Report},
+    runtime::builtins::types,
     sources::{SourceId, SourceSection},
 };
 
@@ -244,7 +245,12 @@ impl Node {
                 };
                 NodeVariant::IndexExpr {
                     indexed_val: Box::new(Self::lower_lkql_node(&coll_expr?, ctx)?),
-                    index: Box::new(Self::lower_lkql_node(&index?, ctx)?),
+                    index: Box::new(Self::lower_lkql_node(&index?, ctx)?.with_wrapper(|i| {
+                        NodeVariant::CheckType {
+                            expression: Box::new(i),
+                            expected_type: &types::int::TYPE,
+                        }
+                    })),
                     is_safe,
                 }
             }
@@ -415,6 +421,18 @@ impl Node {
             origin_location: SourceSection::from_lkql_node(ctx.lowered_source, node)?,
             variant,
         })
+    }
+
+    /// Wrap the current node using the provided wrapper creation function,
+    /// propagating all information in the current node to the wrapper.
+    fn with_wrapper<F>(self, create_wrapper: F) -> Self
+    where
+        F: Fn(Self) -> NodeVariant,
+    {
+        Node {
+            origin_location: self.origin_location.clone(),
+            variant: create_wrapper(self),
+        }
     }
 }
 

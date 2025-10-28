@@ -24,6 +24,7 @@ use crate::{
     errors::{
         DUPLICATED_SYMBOL, ErrorTemplate, INDEX_OUT_OF_BOUNDS, NO_VALUE_FOR_PARAM,
         POS_AND_NAMED_VALUE_FOR_PARAM, PREVIOUS_SYMBOL_HINT, UNKNOWN_MEMBER, UNKNOWN_SYMBOL,
+        WRONG_TYPE,
     },
     intermediate_tree::{
         ArithOperator, ArithOperatorVariant, CompOperator, CompOperatorVariant, ExecutionUnit,
@@ -36,8 +37,12 @@ use crate::{
     },
     report::{Hint, Report},
     runtime::{
-        DynamicError, DynamicErrorArg, RuntimeData,
-        builtins::{UNIT_VALUE_NAME, get_builtin_bindings, types, utils::metatable_global_field},
+        DynamicError, DynamicErrorArg, RuntimeData, TYPE_NAME_FIELD, TYPE_TAG_FIELD,
+        builtins::{
+            UNIT_VALUE_NAME, get_builtin_bindings,
+            types::{self, BuiltinType},
+            utils::metatable_global_field,
+        },
     },
     sources::{SourceRepository, SourceSection},
 };
@@ -724,6 +729,21 @@ impl Node {
                 output.ad(&self.origin_location, MOV, result_slot, lambda_binding.slot as u16);
             }
 
+            // --- Type checkers
+            NodeVariant::CheckType { expression, expected_type } => {
+                // Compile the expression in the result slot
+                expression.compile_as_value(ctx, owning_unit, output, result_slot);
+
+                // Then emit type checking instructions
+                emit_type_check(
+                    ctx,
+                    output,
+                    Some(&self.origin_location),
+                    result_slot,
+                    expected_type,
+                );
+            }
+
             // --- Non-trivial literals
             NodeVariant::TupleLiteral(elements) | NodeVariant::ListLiteral(elements) => {
                 // Compile nodes inside the tuple literals and place them in a table
@@ -834,10 +854,10 @@ impl Node {
     }
 
     /// Compile the node as a value, but instead of placing it in an already
-    /// reserved slot like the [`Self::compile_as_value`] does, this function
-    /// return a value representing an access to the node result.
-    /// This is used to optimize accesses to already stored values like local
-    /// bindings and avoid useless copy.
+    /// reserved slot like the [`Self::compile_as_value`] functionn does, this
+    /// function returns a value representing an access to the node's result.
+    /// This is used to optimize accesses to already stored values, like local
+    /// bindings, and avoid useless copy.
     fn compile_as_access(
         &self,
         ctx: &mut CompilationContext,
@@ -880,6 +900,23 @@ impl Node {
                 } else {
                     fallback(ctx, owning_unit, output, self)
                 }
+            }
+
+            NodeVariant::CheckType { expression, expected_type } => {
+                // Compile the expression as an access
+                let res = expression.compile_as_access(ctx, owning_unit, output);
+
+                // Check the type of the nested expression
+                emit_type_check(
+                    ctx,
+                    output,
+                    Some(&self.origin_location),
+                    res.slot(),
+                    expected_type,
+                );
+
+                // Return the nested expression's result
+                res
             }
             _ => fallback(ctx, owning_unit, output, self),
         }
@@ -1841,6 +1878,73 @@ fn emit_set_metatable(
 
     // Release call slot
     ctx.current_frame_mut().release_slots(call_slots);
+}
+
+/// Emit instructions to check that the type of the value stored in the
+/// `actual_value` slot is corresponding to `expected_type`. If types don't
+/// a runtime error is raised.
+fn emit_type_check(
+    ctx: &mut CompilationContext,
+    output: &mut ExtendedInstructionBuffer,
+    maybe_origin_location: Option<&SourceSection>,
+    actual_value: u8,
+    expected_type: &BuiltinType,
+) {
+    // First create a label for the instruction next to what this function is
+    // emitting.
+    let next_label = output.new_label();
+
+    // First get the type tag of the actual value
+    let actual_tag = ctx.current_frame_mut().get_tmp();
+    emit_table_member_read(
+        ctx,
+        output,
+        maybe_origin_location,
+        actual_tag,
+        actual_value,
+        TYPE_TAG_FIELD,
+    );
+
+    // Then compare type tags and if they're not equals, emit a
+    // runtime error.
+    output.ad_maybe_loc(
+        maybe_origin_location,
+        ISEQN,
+        actual_tag,
+        ctx.current_data()
+            .constants
+            .get_from_int(expected_type.tag as i32),
+    );
+    output.cgoto(ctx, next_label);
+
+    // Now emit the code to raise a runtime error in the case where type tags
+    // don't match.
+    let actual_name = ctx.current_frame_mut().get_tmp();
+    emit_table_member_read(
+        ctx,
+        output,
+        maybe_origin_location,
+        actual_name,
+        actual_value,
+        TYPE_NAME_FIELD,
+    );
+    emit_runtime_error(
+        ctx,
+        output,
+        maybe_origin_location,
+        &WRONG_TYPE,
+        &vec![
+            DynamicErrorArg::Static(String::from(expected_type.name)),
+            DynamicErrorArg::LocalValue(actual_name),
+        ],
+    );
+
+    // Release used slots
+    ctx.current_frame_mut().release_slot(actual_tag);
+    ctx.current_frame_mut().release_slot(actual_name);
+
+    // Finally label the next instruction
+    output.label(next_label);
 }
 
 /// Emit, if required, the instruction to close local values in the current

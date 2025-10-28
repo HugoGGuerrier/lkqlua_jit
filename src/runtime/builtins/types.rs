@@ -23,7 +23,7 @@ pub mod tuple;
 pub mod unit;
 
 /// This type represents an LKQL built-in type with all its information.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct BuiltinType {
     /// Name of the type as it should be displayed to the user.
     pub name: &'static str,
