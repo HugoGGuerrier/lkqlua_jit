@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    lua::{LuaCFunction, LuaState, push_c_function, push_integer, push_string},
+    lua::{FunctionValue, LuaCFunction, LuaState, push_integer, push_string},
     sources::{SourceId, SourceSection},
 };
 
@@ -121,7 +121,7 @@ pub enum RuntimeTypeField {
 pub enum RuntimeValue {
     Integer(isize),
     String(String),
-    Function(LuaCFunction),
+    Function(FunctionValue),
 
     /// Create the value by calling the associated Lua C function that should
     /// push it on the top of the stack.
@@ -134,7 +134,7 @@ impl RuntimeValue {
         match self {
             RuntimeValue::Integer(i) => push_integer(l, *i),
             RuntimeValue::String(s) => push_string(l, &s),
-            RuntimeValue::Function(f) => push_c_function(l, *f),
+            RuntimeValue::Function(f) => f.push_on_stack(l, 0),
             RuntimeValue::FromBuilder(builder) => builder(l),
         }
     }

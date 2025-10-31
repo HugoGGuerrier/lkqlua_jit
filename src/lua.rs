@@ -31,6 +31,50 @@ pub type LuaState = *mut c_void;
 /// A C function that is going to be called from the Lua environment.
 pub type LuaCFunction = unsafe extern "C" fn(LuaState) -> c_int;
 
+/// This type abstracts the function concept from the Lua engine perspective.
+/// It may represents any executable, function-like Lua runtime value.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FunctionValue {
+    /// In the case where the function value is implemented by a native
+    /// function.
+    CFunction(LuaCFunction),
+
+    /// In the case where the function is implemented by a Lua function source.
+    /// The string in this variant should contains a Lua function expression
+    /// that is going to be parsed and the result is going to be used as
+    /// runtime value.
+    /// Inside this expression the table `__uv` is available to access function
+    /// up-values.
+    LuaFunction(String),
+}
+
+impl FunctionValue {
+    /// Place the runtime value representing this function on the top of the
+    /// stack. Also, consider `up_value_count` as the number of values already
+    /// on the stack to pop and place as function up-values.
+    pub fn push_on_stack(&self, l: LuaState, up_value_count: u8) {
+        match self {
+            FunctionValue::CFunction(function) => unsafe {
+                lua_pushcclosure(l, *function, up_value_count as c_int)
+            },
+            FunctionValue::LuaFunction(source) => {
+                // Create the final Lua source
+                let mut final_source = String::with_capacity(source.len());
+                if up_value_count > 0 {
+                    final_source.push_str("local __uv = {...}; ");
+                }
+                final_source.push_str("return ");
+                final_source.push_str(source);
+
+                // Parse the Lua function source and execute the parsing result
+                load_lua_code(l, &final_source, "<lua_function>");
+                move_top_value(l, get_top(l) - up_value_count as i32);
+                call(l, up_value_count as i32, Some(1));
+            }
+        }
+    }
+}
+
 /// This type represents type tags for Lua values.
 #[repr(C)]
 #[derive(Debug, PartialEq, Eq)]
@@ -107,6 +151,16 @@ pub fn load_buffer(l: LuaState, buffer: &Vec<u8>, buffer_name: &str) -> bool {
         let ext_buffer = buffer.as_ptr() as *const c_char;
         let ext_buffer_name = CString::from_str(buffer_name).unwrap();
         luaL_loadbuffer(l, ext_buffer, buffer.len(), ext_buffer_name.as_ptr()) == 0
+    }
+}
+
+/// Load the Lua source code in `source` in the current state, returning
+/// whether the parsing succeeded.
+pub fn load_lua_code(l: LuaState, source: &str, source_name: &str) -> bool {
+    unsafe {
+        let ext_source = CString::from_str(source).unwrap();
+        let ext_source_name = CString::from_str(source_name).unwrap();
+        luaL_loadbuffer(l, ext_source.as_ptr(), source.len(), ext_source_name.as_ptr()) == 0
     }
 }
 
@@ -212,6 +266,19 @@ pub fn push_c_closure(l: LuaState, function: LuaCFunction, up_value_count: u8) {
     unsafe { lua_pushcclosure(l, function, up_value_count as c_int) }
 }
 
+/// Push a new function-like value on the top of the stack without any closure
+/// values.
+pub fn push_function(l: LuaState, function: FunctionValue) {
+    function.push_on_stack(l, 0);
+}
+
+/// Push a new function-like value on the top of the stack with provided count
+/// of up values. This function pops this number of values from the stack to
+/// make them available to the new executable value.
+pub fn push_closure(l: LuaState, function: FunctionValue, up_value_count: u8) {
+    function.push_on_stack(l, up_value_count);
+}
+
 /// Copy the value at the provided index on the top of the stack.
 pub fn copy_value(l: LuaState, index: i32) {
     unsafe { lua_pushvalue(l, index) }
@@ -306,13 +373,22 @@ pub fn remove_value(l: LuaState, index: i32) {
     unsafe { lua_remove(l, index) }
 }
 
-/// Considering that the stack is filled with `arg_count` arguments and a
-/// callable value: pop all of those and call the value with following
-/// arguments. Place on the stack the specified count of result if any,
-/// otherwise, place them all.
+/// Considering the stack is filled with `arg_count` arguments followed by
+/// a callable value (in this order): pops all of those and call the executable
+/// value with all arguments. Places the specified number of results on the top
+/// of the stack if any, otherwise this function place them all.
+/// This function propagate any error raised by the callable value.
+pub fn call(l: LuaState, arg_count: i32, res_count: Option<i32>) {
+    unsafe { lua_call(l, arg_count, res_count.unwrap_or(MUTRET)) }
+}
+
+/// Considering the stack is filled with `arg_count` arguments followed by
+/// a callable value (in this order): pops all of those and call the executable
+/// value with all arguments. Places the specified number of results on the top
+/// of the stack if any, otherwise this function place them all.
 /// This function returns an [`Err`] containing the error message if an error
 /// has been raised during the call.
-pub fn call(
+pub fn safe_call(
     l: LuaState,
     arg_count: i32,
     res_count: Option<i32>,
@@ -518,6 +594,7 @@ unsafe extern "C" {
     fn lua_remove(l: LuaState, index: c_int);
 
     fn lua_pcall(l: LuaState, nargs: c_int, nres: c_int, errfunc: c_int) -> c_int;
+    fn lua_call(l: LuaState, nargs: c_int, nres: c_int);
     fn luaL_callmeta(l: LuaState, obj: c_int, meta_method: *const c_char) -> c_int;
     fn luaL_error(l: LuaState, fmt: *const c_char, ...) -> c_int;
 

@@ -5,7 +5,9 @@
 use std::ffi::c_int;
 
 use crate::{
-    lua::{LuaState, get_field, get_index, get_length, get_string, push_string, set_top},
+    lua::{
+        FunctionValue, LuaState, get_field, get_index, get_length, get_string, push_string, set_top,
+    },
     runtime::{
         RuntimeTypeField,
         builtins::{
@@ -19,7 +21,7 @@ pub const TYPE: BuiltinType = BuiltinType {
     name: "Tuple",
     tag: str::TYPE.tag + 1,
     fields: &[("img", RuntimeTypeField::Property(lkql_img))],
-    overloads: &[(OverloadTarget::ToString, tuple_tostring)],
+    overloads: &[(OverloadTarget::ToString, FunctionValue::CFunction(tuple_tostring))],
     register_function: register_metatable_in_globals,
 };
 

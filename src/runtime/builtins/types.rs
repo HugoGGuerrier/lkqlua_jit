@@ -7,7 +7,7 @@ use std::{collections::HashMap, ffi::c_int};
 
 use crate::{
     lua::{
-        LuaCFunction, LuaState, get_string, get_up_value_index, get_user_data, move_top_value,
+        FunctionValue, LuaState, get_string, get_up_value_index, get_user_data, move_top_value,
         push_c_closure, push_c_function, push_nil, push_user_data, remove_value, set_global,
     },
     runtime::{
@@ -36,7 +36,7 @@ pub struct BuiltinType {
 
     /// Maps used to define custom behavior for the type regarding language
     /// constructions.
-    pub overloads: &'static [(OverloadTarget, LuaCFunction)],
+    pub overloads: &'static [(OverloadTarget, FunctionValue)],
 
     /// The function to call to register this type in a given Lua state.
     pub register_function: MetatableRegisteringFunction,

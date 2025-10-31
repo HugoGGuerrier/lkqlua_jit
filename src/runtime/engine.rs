@@ -11,9 +11,9 @@ use crate::{
     ExecutionContext,
     errors::{ERROR_TEMPLATE_REPOSITORY, LUA_ENGINE_ERROR},
     lua::{
-        LuaState, call, close_lua_state, debug_frame, debug_get_local, debug_get_source,
-        debug_info, debug_proto_and_pc, get_string, get_top, load_buffer, new_lua_state,
-        open_lua_libs, push_c_function, push_string, push_table, push_user_data, remove_value,
+        LuaState, close_lua_state, debug_frame, debug_get_local, debug_get_source, debug_info,
+        debug_proto_and_pc, get_string, get_top, load_buffer, new_lua_state, open_lua_libs,
+        push_c_function, push_string, push_table, push_user_data, remove_value, safe_call,
         set_field, set_global, set_top, to_string,
     },
     report::Report,
@@ -64,7 +64,7 @@ impl Engine {
 
             // Create overloading functions
             for (target, function) in builtin_type.overloads {
-                push_c_function(lua_state, *function);
+                function.push_on_stack(lua_state, 0);
                 set_field(lua_state, -2, target.metamethod_name());
             }
 
@@ -115,7 +115,7 @@ impl Engine {
         }
 
         // Call the loaded buffer and analyze the result
-        let call_res = call(self.lua_state, 0, None, Some(error_handler));
+        let call_res = safe_call(self.lua_state, 0, None, Some(error_handler));
 
         // Pop the error handler
         remove_value(self.lua_state, error_handler);

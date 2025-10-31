@@ -5,7 +5,7 @@
 use std::ffi::c_int;
 
 use crate::{
-    lua::{LuaState, push_string},
+    lua::{FunctionValue, LuaState, push_string},
     runtime::{
         RuntimeTypeField,
         builtins::{
@@ -19,7 +19,7 @@ pub const TYPE: BuiltinType = BuiltinType {
     name: "Unit",
     tag: 0,
     fields: &[("img", RuntimeTypeField::Property(lkql_img))],
-    overloads: &[(OverloadTarget::ToString, unit_tostring)],
+    overloads: &[(OverloadTarget::ToString, FunctionValue::CFunction(unit_tostring))],
     register_function: register_metatable_in_globals,
 };
 

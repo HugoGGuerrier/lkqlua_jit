@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    lua::{LuaState, get_global, push_table, set_metatable},
+    lua::{FunctionValue, LuaState, get_global, push_table, set_metatable},
     runtime::{
         RuntimeValue,
         builtins::{
@@ -43,8 +43,8 @@ pub fn get_builtin_bindings() -> Vec<BuiltinBinding> {
         BuiltinBinding { name, value }
     }
     vec![
-        b("print", RuntimeValue::Function(lkql_print)),
-        b("img", RuntimeValue::Function(lkql_img)),
+        b("print", RuntimeValue::Function(FunctionValue::CFunction(lkql_print))),
+        b("img", RuntimeValue::Function(FunctionValue::CFunction(lkql_img))),
         b(UNIT_VALUE_NAME, RuntimeValue::FromBuilder(create_unit_value)),
     ]
 }
