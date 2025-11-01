@@ -361,11 +361,12 @@ impl Node {
         output: &mut ExtendedInstructionBuffer,
         result_slot: u8,
     ) {
-        // If the node can be evaluated as a constant value, emit instruction
-        // for it and return.
+        // If the node can be evaluated as a constant value that can be
+        // directly compiled, just return now.
         if let Some(constant) = self.eval_as_constant() {
-            constant.compile(ctx, output, result_slot);
-            return;
+            if constant.try_to_compile(ctx, output, result_slot) {
+                return;
+            }
         }
 
         // If we reach here the node can't be evaluated as a constant, so we
@@ -1489,16 +1490,17 @@ impl Node {
 }
 
 impl ConstantValue {
-    /// Compile the constant value by emitting required instructions to set the
-    /// `result_slot` to the runtime value represented by the constant.
+    /// Try to compile the constant value by emitting required instructions to
+    /// set the `result_slot` to the runtime value represented by the constant.
+    /// Return whether the value has been compiled.
     /// For now, only integers lower than [`i32::MAX`] are handled
     /// (see https://github.com/HugoGGuerrier/lkqlua_jit/issues/3).
-    fn compile(
+    fn try_to_compile(
         &self,
         ctx: &mut CompilationContext,
         output: &mut ExtendedInstructionBuffer,
         result_slot: u8,
-    ) {
+    ) -> bool {
         match &self.variant {
             ConstantValueVariant::Null => {
                 emit_global_read(
@@ -1508,6 +1510,7 @@ impl ConstantValue {
                     result_slot,
                     "<lkql_null>",
                 );
+                true
             }
             ConstantValueVariant::Unit => {
                 emit_global_read(
@@ -1517,6 +1520,7 @@ impl ConstantValue {
                     result_slot,
                     UNIT_VALUE_NAME,
                 );
+                true
             }
             ConstantValueVariant::Bool(value) => {
                 output.ad(
@@ -1525,6 +1529,7 @@ impl ConstantValue {
                     result_slot,
                     if *value { PRIM_TRUE } else { PRIM_FALSE },
                 );
+                true
             }
             ConstantValueVariant::Int(value) => {
                 let value_le_bytes = value.to_signed_bytes_le();
@@ -1555,92 +1560,18 @@ impl ConstantValue {
                 else {
                     panic!("Big integers aren't handled for now");
                 }
+
+                true
             }
             ConstantValueVariant::String(value) => {
                 let value_cst = ctx.current_data().constants.get_from_string(value);
                 output.ad(&self.origin_location, KSTR, result_slot, value_cst);
+                true
             }
-            ConstantValueVariant::Tuple(values) | ConstantValueVariant::List(values) => {
-                // Create the complex constant, base of the table
-                let mut array_part = Vec::new();
-                let mut remains = Vec::new();
-                for (i, value) in values.iter().enumerate() {
-                    if let Some(table_constant) = value.to_table_constant_element() {
-                        array_part.push(table_constant);
-                    } else {
-                        array_part.push(TableConstantElement::Nil);
-                        remains.push((i + 1, value));
-                    }
-                }
-                let table_cst = ctx.current_data().constants.get_from_complex_constant(
-                    ComplexConstant::Table { array_part, hash_part: Vec::new() },
-                );
-                output.ad(&self.origin_location, TDUP, result_slot, table_cst);
 
-                // Now compute parts that cannot be expressed with table
-                // constant elements.
-                let outside_tmp = ctx.current_frame_mut().get_tmp();
-                for (i, value) in remains {
-                    value.compile(ctx, output, outside_tmp);
-                    emit_table_index_write(
-                        ctx,
-                        output,
-                        &self.origin_location,
-                        outside_tmp,
-                        result_slot,
-                        i,
-                    );
-                }
-                ctx.current_frame_mut().release_slot(outside_tmp);
-
-                emit_set_metatable(
-                    ctx,
-                    output,
-                    Some(&self.origin_location),
-                    result_slot,
-                    types::tuple::TYPE.name,
-                );
-            }
-            ConstantValueVariant::Object(items) => {
-                // Split constants that can be expressed by a table constant
-                // element from constants that need to be loaded separately.
-                let mut hash_part = Vec::new();
-                let mut remains = Vec::new();
-                for (field_name, field_value) in items {
-                    if let Some(table_constant) = field_value.to_table_constant_element() {
-                        hash_part.push((
-                            TableConstantElement::String(field_name.clone()),
-                            table_constant,
-                        ));
-                    } else {
-                        remains.push((field_name, field_value));
-                    }
-                }
-
-                // Create the complex constant, base of the table
-                let table_cst = ctx.current_data().constants.get_from_complex_constant(
-                    ComplexConstant::Table { array_part: Vec::new(), hash_part },
-                );
-                output.ad(&self.origin_location, TDUP, result_slot, table_cst);
-
-                // Add members that cannot be expressed through a table
-                // constant element.
-                let outside_tmp = ctx.current_frame_mut().get_tmp();
-                for (field_name, field_value) in remains {
-                    field_value.compile(ctx, output, outside_tmp);
-                    emit_table_member_write(
-                        ctx,
-                        output,
-                        Some(&self.origin_location),
-                        outside_tmp,
-                        result_slot,
-                        &field_name,
-                    );
-                }
-                ctx.current_frame_mut().release_slot(outside_tmp);
-
-                // TODO: Set the object meta-table accordingly to its type
-            }
+            // All other constant values are handled by the "standard"
+            // compilation function.
+            _ => false,
         }
     }
 }
