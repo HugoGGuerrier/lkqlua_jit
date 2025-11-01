@@ -3,10 +3,13 @@
 //! This module defines the LKQL "Int" type.
 
 use crate::{
-    lua::{FunctionValue, LuaState, copy_value, push_number, set_metatable},
-    runtime::builtins::{
-        functions::lkql_img,
-        types::{BuiltinType, BuiltinTypeField, bool},
+    lua::{LuaState, copy_value, push_number, set_metatable},
+    runtime::{
+        FunctionValue,
+        builtins::{
+            functions::lkql_img,
+            types::{BuiltinType, BuiltinTypeField, bool},
+        },
     },
 };
 

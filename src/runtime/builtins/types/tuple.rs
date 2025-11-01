@@ -5,13 +5,14 @@
 use std::ffi::c_int;
 
 use crate::{
-    lua::{
-        FunctionValue, LuaState, get_field, get_index, get_length, get_string, push_string, set_top,
-    },
-    runtime::builtins::{
-        functions::lkql_img,
-        types::{
-            BuiltinType, BuiltinTypeField, OverloadTarget, register_metatable_in_globals, str,
+    lua::{LuaState, get_field, get_index, get_length, get_string, push_string, set_top},
+    runtime::{
+        FunctionValue,
+        builtins::{
+            functions::lkql_img,
+            types::{
+                BuiltinType, BuiltinTypeField, OverloadTarget, register_metatable_in_globals, str,
+            },
         },
     },
 };

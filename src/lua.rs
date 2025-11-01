@@ -31,50 +31,6 @@ pub type LuaState = *mut c_void;
 /// A C function that is going to be called from the Lua environment.
 pub type LuaCFunction = unsafe extern "C" fn(LuaState) -> c_int;
 
-/// This type abstracts the function concept from the Lua engine perspective.
-/// It may represents any executable, function-like Lua runtime value.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum FunctionValue {
-    /// In the case where the function value is implemented by a native
-    /// function.
-    CFunction(LuaCFunction),
-
-    /// In the case where the function is implemented by a Lua function source.
-    /// The string in this variant should contains a Lua function expression
-    /// that is going to be parsed and the result is going to be used as
-    /// runtime value.
-    /// Inside this expression the table `__uv` is available to access function
-    /// up-values.
-    LuaFunction(String),
-}
-
-impl FunctionValue {
-    /// Place the runtime value representing this function on the top of the
-    /// stack. Also, consider `up_value_count` as the number of values already
-    /// on the stack to pop and place as function up-values.
-    pub fn push_on_stack(&self, l: LuaState, up_value_count: u8) {
-        match self {
-            FunctionValue::CFunction(function) => unsafe {
-                lua_pushcclosure(l, *function, up_value_count as c_int)
-            },
-            FunctionValue::LuaFunction(source) => {
-                // Create the final Lua source
-                let mut final_source = String::with_capacity(source.len());
-                if up_value_count > 0 {
-                    final_source.push_str("local __uv = {...}; ");
-                }
-                final_source.push_str("return ");
-                final_source.push_str(source);
-
-                // Parse the Lua function source and execute the parsing result
-                load_lua_code(l, &final_source, "<lua_function>");
-                move_top_value(l, get_top(l) - up_value_count as i32);
-                call(l, up_value_count as i32, Some(1));
-            }
-        }
-    }
-}
-
 /// This type represents type tags for Lua values.
 #[repr(C)]
 #[derive(Debug, PartialEq, Eq)]
@@ -264,19 +220,6 @@ pub fn push_c_function(l: LuaState, function: LuaCFunction) {
 /// newly created function value, making them up-values.
 pub fn push_c_closure(l: LuaState, function: LuaCFunction, up_value_count: u8) {
     unsafe { lua_pushcclosure(l, function, up_value_count as c_int) }
-}
-
-/// Push a new function-like value on the top of the stack without any closure
-/// values.
-pub fn push_function(l: LuaState, function: FunctionValue) {
-    function.push_on_stack(l, 0);
-}
-
-/// Push a new function-like value on the top of the stack with provided count
-/// of up values. This function pops this number of values from the stack to
-/// make them available to the new executable value.
-pub fn push_closure(l: LuaState, function: FunctionValue, up_value_count: u8) {
-    function.push_on_stack(l, up_value_count);
 }
 
 /// Copy the value at the provided index on the top of the stack.

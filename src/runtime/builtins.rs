@@ -6,9 +6,9 @@
 use std::collections::HashMap;
 
 use crate::{
-    lua::{FunctionValue, LuaState, get_global, push_table, set_metatable},
+    lua::{LuaState, get_global, push_table, set_metatable},
     runtime::{
-        RuntimeValue,
+        FunctionValue, RuntimeValue,
         builtins::{
             functions::{lkql_img, lkql_print},
             types::BuiltinType,

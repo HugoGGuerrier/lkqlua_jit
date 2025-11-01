@@ -5,10 +5,13 @@
 use std::{ffi::c_int, path::PathBuf, str::FromStr};
 
 use crate::{
-    lua::{FunctionValue, LuaState, copy_value, get_string, push_string, set_metatable},
-    runtime::builtins::{
-        functions::lkql_img,
-        types::{BuiltinType, BuiltinTypeField, int},
+    lua::{LuaState, copy_value, get_string, push_string, set_metatable},
+    runtime::{
+        FunctionValue,
+        builtins::{
+            functions::lkql_img,
+            types::{BuiltinType, BuiltinTypeField, int},
+        },
     },
 };
 

@@ -8,7 +8,10 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    lua::{FunctionValue, LuaState, push_integer, push_string},
+    lua::{
+        LuaCFunction, LuaState, call, get_top, load_lua_code, move_top_value, push_c_closure,
+        push_integer, push_string,
+    },
     sources::{SourceId, SourceSection},
 };
 
@@ -110,6 +113,48 @@ impl RuntimeValue {
             RuntimeValue::String(s) => push_string(l, &s),
             RuntimeValue::Function(f) => f.push_on_stack(l, 0),
             RuntimeValue::FromBuilder(builder) => builder(l),
+        }
+    }
+}
+
+/// This type abstracts the function concept from the Lua engine perspective.
+/// It may represents any executable, function-like runtime value.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FunctionValue {
+    /// In the case where the function value is implemented by a native
+    /// function.
+    CFunction(LuaCFunction),
+
+    /// In the case where the function is implemented by a Lua function source.
+    /// The string in this variant should contains a Lua function expression
+    /// that is going to be parsed and the result is going to be used as
+    /// runtime value.
+    /// Inside this expression the table `__uv` is available to access function
+    /// up-values.
+    LuaFunction(String),
+}
+
+impl FunctionValue {
+    /// Place the runtime value representing this function on the top of the
+    /// stack. Also, consider `up_value_count` as the number of values already
+    /// on the stack to pop and place as function up-values.
+    pub fn push_on_stack(&self, l: LuaState, up_value_count: u8) {
+        match self {
+            FunctionValue::CFunction(function) => push_c_closure(l, *function, up_value_count),
+            FunctionValue::LuaFunction(source) => {
+                // Create the final Lua source
+                let mut final_source = String::with_capacity(source.len());
+                if up_value_count > 0 {
+                    final_source.push_str("local __uv = {...}; ");
+                }
+                final_source.push_str("return ");
+                final_source.push_str(source);
+
+                // Parse the Lua function source and execute the parsing result
+                load_lua_code(l, &final_source, "<lua_function>");
+                move_top_value(l, get_top(l) - up_value_count as i32);
+                call(l, up_value_count as i32, Some(1));
+            }
         }
     }
 }

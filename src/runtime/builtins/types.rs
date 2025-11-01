@@ -4,9 +4,10 @@
 //! values.
 
 use crate::{
-    lua::{FunctionValue, LuaState, push_table, set_field, set_global},
+    lua::{LuaState, push_table, set_field, set_global},
     runtime::{
-        RuntimeValue, TYPE_NAME_FIELD, TYPE_TAG_FIELD, builtins::utils::metatable_global_field,
+        FunctionValue, RuntimeValue, TYPE_NAME_FIELD, TYPE_TAG_FIELD,
+        builtins::utils::metatable_global_field,
     },
 };
 
