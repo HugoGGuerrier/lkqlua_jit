@@ -761,7 +761,7 @@ impl Node {
                 // Then set the meta-table of this new table
                 let type_name = match &self.variant {
                     NodeVariant::TupleLiteral(_) => types::tuple::TYPE.name,
-                    NodeVariant::ListLiteral(_) => "TODO",
+                    NodeVariant::ListLiteral(_) => types::list::TYPE.name,
                     _ => unreachable!(),
                 };
                 emit_set_metatable(

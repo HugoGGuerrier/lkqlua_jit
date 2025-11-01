@@ -13,6 +13,7 @@ use crate::{
 
 pub mod bool;
 pub mod int;
+pub mod list;
 pub mod str;
 pub mod tuple;
 pub mod unit;
