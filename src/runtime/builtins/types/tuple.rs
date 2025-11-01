@@ -8,11 +8,10 @@ use crate::{
     lua::{
         FunctionValue, LuaState, get_field, get_index, get_length, get_string, push_string, set_top,
     },
-    runtime::{
-        RuntimeTypeField,
-        builtins::{
-            functions::lkql_img,
-            types::{BuiltinType, OverloadTarget, register_metatable_in_globals, str},
+    runtime::builtins::{
+        functions::lkql_img,
+        types::{
+            BuiltinType, BuiltinTypeField, OverloadTarget, register_metatable_in_globals, str,
         },
     },
 };
@@ -20,7 +19,7 @@ use crate::{
 pub const TYPE: BuiltinType = BuiltinType {
     name: "Tuple",
     tag: str::TYPE.tag + 1,
-    fields: &[("img", RuntimeTypeField::Property(lkql_img))],
+    fields: &[("img", BuiltinTypeField::Property(FunctionValue::CFunction(lkql_img)))],
     overloads: &[(OverloadTarget::ToString, FunctionValue::CFunction(tuple_tostring))],
     register_function: register_metatable_in_globals,
 };

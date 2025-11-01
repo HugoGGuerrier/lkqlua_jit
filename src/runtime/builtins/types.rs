@@ -3,16 +3,10 @@
 //! This module contains all LKQL built-in types and their associated working
 //! values.
 
-use std::{collections::HashMap, ffi::c_int};
-
 use crate::{
-    lua::{
-        FunctionValue, LuaState, get_string, get_up_value_index, get_user_data, move_top_value,
-        push_c_closure, push_c_function, push_nil, push_user_data, remove_value, set_global,
-    },
+    lua::{FunctionValue, LuaState, push_table, set_field, set_global},
     runtime::{
-        RuntimeType, RuntimeTypeField, RuntimeValue, TYPE_NAME_FIELD, TYPE_TAG_FIELD,
-        builtins::utils::metatable_global_field,
+        RuntimeValue, TYPE_NAME_FIELD, TYPE_TAG_FIELD, builtins::utils::metatable_global_field,
     },
 };
 
@@ -32,7 +26,7 @@ pub struct BuiltinType {
     pub tag: isize,
 
     /// Fields in the type.
-    pub fields: &'static [(&'static str, RuntimeTypeField)],
+    pub fields: &'static [(&'static str, BuiltinTypeField)],
 
     /// Maps used to define custom behavior for the type regarding language
     /// constructions.
@@ -43,28 +37,97 @@ pub struct BuiltinType {
 }
 
 impl BuiltinType {
-    /// Create a runtime type representation of this built-in type.
-    pub fn as_runtime_type(&self) -> RuntimeType {
-        // Collect fields of the built-in type
-        let mut fields: HashMap<String, RuntimeTypeField> = self
-            .fields
-            .iter()
-            .map(|(name, field)| (String::from(*name), field.clone()))
-            .collect();
+    /// String for the generic index function Lua source.
+    const GENERIC_INDEX: &str = "function (self, field)
+        -- Check in fields
+        local res = __uv[1][field]
+        if res ~= nil then
+            return res
+        end
 
-        // Then add support fields
-        fields.insert(
-            String::from(TYPE_NAME_FIELD),
-            RuntimeTypeField::Value(RuntimeValue::String(String::from(self.name))),
-        );
-        fields.insert(
-            String::from(TYPE_TAG_FIELD),
-            RuntimeTypeField::Value(RuntimeValue::Integer(self.tag)),
-        );
+        -- Check in properties
+        res = __uv[2][field]
+        if res ~= nil then
+            return res(nil, self)
+        end
 
-        // Return the new runtime type representation
-        RuntimeType { name: self.name, tag: self.tag, fields }
+        -- Check in methods
+        res = __uv[3][field]
+        if res ~= nil then
+            return res
+        end
+
+        return nil
+    end";
+
+    /// Push a function on the stack corresponding to the `__index` meta-method
+    /// for this built-in type.
+    pub fn create_index_method(&self, l: LuaState) {
+        self.push_representation_tables(l);
+        FunctionValue::LuaFunction(String::from(Self::GENERIC_INDEX)).push_on_stack(l, 3);
     }
+
+    /// Create Lua tables representing at run-time all parts of this built-in
+    /// type:
+    ///   * The first one being a table of all static fields.
+    ///   * The second one is the properties table, all functions in this one
+    ///     are automatically executed when accessed.
+    ///   * The third one is the methods table.
+    /// This function push tables in this order on the stack meaning that the
+    /// new top of the stack is the method table of the type.
+    fn push_representation_tables(&self, l: LuaState) {
+        // Split static values, properties and methods
+        let mut static_fields = Vec::new();
+        let mut properties = Vec::new();
+        let mut methods = Vec::new();
+        for (name, field) in self.fields {
+            match field {
+                BuiltinTypeField::Value(runtime_value) => {
+                    static_fields.push((name, runtime_value.clone()))
+                }
+                BuiltinTypeField::Property(function) => properties.push((name, function)),
+                BuiltinTypeField::Method(function) => methods.push((name, function)),
+            }
+        }
+
+        // Add synthetic fields in the type representation
+        static_fields.push((&TYPE_TAG_FIELD, RuntimeValue::Integer(self.tag)));
+        static_fields.push((&TYPE_NAME_FIELD, RuntimeValue::String(String::from(self.name))));
+
+        // Create the static values table
+        push_table(l, 0, static_fields.len() as i32);
+        for (name, value) in static_fields {
+            value.push_on_stack(l);
+            set_field(l, -2, name);
+        }
+
+        // Create the properties table
+        push_table(l, 0, properties.len() as i32);
+        for (name, property) in properties {
+            property.push_on_stack(l, 0);
+            set_field(l, -2, name);
+        }
+
+        // Create the methods table
+        push_table(l, 0, methods.len() as i32);
+        for (name, method) in methods {
+            method.push_on_stack(l, 0);
+            set_field(l, -2, name);
+        }
+    }
+}
+
+/// This type represents a field in a built-in type.
+#[derive(Debug, PartialEq, Eq)]
+pub enum BuiltinTypeField {
+    /// If the field is a constant value.
+    Value(RuntimeValue),
+
+    /// If the field is computed value.
+    Property(FunctionValue),
+
+    /// If the field is a method.
+    Method(FunctionValue),
 }
 
 /// This type represents the target of an overloading definition.
@@ -116,46 +179,4 @@ pub type MetatableRegisteringFunction = fn(LuaState, &'static BuiltinType);
 /// name.
 pub fn register_metatable_in_globals(l: LuaState, builtin_type: &'static BuiltinType) {
     set_global(l, &metatable_global_field(builtin_type.name));
-}
-
-/// Push a C closure on the top of the stack representing the "__index"
-/// meta-method of the provided built-in type.
-pub fn create_index_method(l: LuaState, runtime_type: &Box<RuntimeType>) {
-    push_user_data(l, runtime_type.as_ref());
-    push_c_closure(l, generic_index, 1);
-}
-
-/// Generic type indexing function, basing method name resolution on the
-/// [`BuiltinType`] instance stored in its up-values.
-#[unsafe(no_mangle)]
-unsafe extern "C" fn generic_index(l: LuaState) -> c_int {
-    // Get the type descriptor in the up-values
-    let builtin_type = get_user_data::<RuntimeType>(l, get_up_value_index(1)).unwrap();
-
-    // Fetch the requested field name and check if there is a method
-    // corresponding to it.
-    let field_name = get_string(l, 2).unwrap();
-
-    // First check in the type methods
-    if let Some(builtin_field) = builtin_type.fields.get(field_name) {
-        match builtin_field {
-            RuntimeTypeField::Value(builtin_value) => builtin_value.push_on_stack(l),
-            RuntimeTypeField::Property(property) => {
-                remove_value(l, 2);
-                push_nil(l);
-                move_top_value(l, 1);
-                unsafe {
-                    (property)(l);
-                }
-            }
-            RuntimeTypeField::Method(method) => {
-                push_c_function(l, *method);
-            }
-        }
-        return 1;
-    }
-
-    // Return the failure, there is no field corresponding to the requested
-    // name.
-    0
 }

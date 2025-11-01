@@ -3,20 +3,17 @@
 //! This module defines the LKQL "Bool" type.
 
 use crate::{
-    lua::{LuaState, copy_value, push_bool, set_metatable},
-    runtime::{
-        RuntimeTypeField,
-        builtins::{
-            functions::lkql_img,
-            types::{BuiltinType, unit},
-        },
+    lua::{FunctionValue, LuaState, copy_value, push_bool, set_metatable},
+    runtime::builtins::{
+        functions::lkql_img,
+        types::{BuiltinType, BuiltinTypeField, unit},
     },
 };
 
 pub const TYPE: BuiltinType = BuiltinType {
     name: "Bool",
     tag: unit::TYPE.tag + 1,
-    fields: &[("img", RuntimeTypeField::Property(lkql_img))],
+    fields: &[("img", BuiltinTypeField::Property(FunctionValue::CFunction(lkql_img)))],
     overloads: &[],
     register_function: register_metatable,
 };

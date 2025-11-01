@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    lua::{FunctionValue, LuaCFunction, LuaState, push_integer, push_string},
+    lua::{FunctionValue, LuaState, push_integer, push_string},
     sources::{SourceId, SourceSection},
 };
 
@@ -87,32 +87,6 @@ pub struct PrototypeData {
     /// vector corresponds to the instruction at the same index in the
     /// prototype.
     pub instruction_locations: Vec<Option<SourceSection>>,
-}
-
-/// This type represents the runtime description of a type.
-#[derive(Debug, Clone)]
-pub struct RuntimeType {
-    /// Name of the type as it should be displayed to the user.
-    pub name: &'static str,
-
-    /// Tag of the type, its unique identifier for optimized type checking.
-    pub tag: isize,
-
-    /// Fields in the type.
-    pub fields: HashMap<String, RuntimeTypeField>,
-}
-
-/// This type represents a field that belongs to a [`RuntimeType`].
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RuntimeTypeField {
-    /// If the field is a constant value.
-    Value(RuntimeValue),
-
-    /// If the field is computed value.
-    Property(LuaCFunction),
-
-    /// If the field is a method.
-    Method(LuaCFunction),
 }
 
 /// This type represents a runtime value that can be pushed on a Lua state

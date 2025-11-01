@@ -3,20 +3,17 @@
 //! This module defines the LKQL "Int" type.
 
 use crate::{
-    lua::{LuaState, copy_value, push_number, set_metatable},
-    runtime::{
-        RuntimeTypeField,
-        builtins::{
-            functions::lkql_img,
-            types::{BuiltinType, bool},
-        },
+    lua::{FunctionValue, LuaState, copy_value, push_number, set_metatable},
+    runtime::builtins::{
+        functions::lkql_img,
+        types::{BuiltinType, BuiltinTypeField, bool},
     },
 };
 
 pub const TYPE: BuiltinType = BuiltinType {
     name: "Int",
     tag: bool::TYPE.tag + 1,
-    fields: &[("img", RuntimeTypeField::Property(lkql_img))],
+    fields: &[("img", BuiltinTypeField::Property(FunctionValue::CFunction(lkql_img)))],
     overloads: &[],
     register_function: register_metatable,
 };

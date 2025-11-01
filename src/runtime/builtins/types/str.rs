@@ -5,13 +5,10 @@
 use std::{ffi::c_int, path::PathBuf, str::FromStr};
 
 use crate::{
-    lua::{LuaState, copy_value, get_string, push_string, set_metatable},
-    runtime::{
-        RuntimeTypeField,
-        builtins::{
-            functions::lkql_img,
-            types::{BuiltinType, int},
-        },
+    lua::{FunctionValue, LuaState, copy_value, get_string, push_string, set_metatable},
+    runtime::builtins::{
+        functions::lkql_img,
+        types::{BuiltinType, BuiltinTypeField, int},
     },
 };
 
@@ -19,8 +16,11 @@ pub const TYPE: BuiltinType = BuiltinType {
     name: "Str",
     tag: int::TYPE.tag + 1,
     fields: &[
-        ("img", RuntimeTypeField::Property(lkql_img)),
-        ("base_name", RuntimeTypeField::Property(str_base_name)),
+        ("img", BuiltinTypeField::Property(FunctionValue::CFunction(lkql_img))),
+        (
+            "base_name",
+            BuiltinTypeField::Method(FunctionValue::CFunction(str_base_name)),
+        ),
     ],
     overloads: &[],
     register_function: register_metatable,

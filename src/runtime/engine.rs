@@ -18,9 +18,9 @@ use crate::{
     },
     report::Report,
     runtime::{
-        CONTEXT_GLOBAL_NAME, DynamicError, DynamicErrorArg, RuntimeData, RuntimeError, RuntimeType,
+        CONTEXT_GLOBAL_NAME, DynamicError, DynamicErrorArg, RuntimeData, RuntimeError,
         StackTraceElement,
-        builtins::{get_builtin_bindings, get_builtin_types, types::create_index_method},
+        builtins::{get_builtin_bindings, get_builtin_types},
     },
     sources::SourceId,
 };
@@ -29,11 +29,6 @@ use crate::{
 /// [`crate::intermediate_tree::compilation`] module.
 pub struct Engine {
     lua_state: LuaState,
-
-    /// Holds all runtime type descriptor to keep them alive while this engine
-    /// is also alive.
-    #[allow(unused)]
-    type_registry: Vec<Box<RuntimeType>>,
 }
 
 impl Drop for Engine {
@@ -52,14 +47,10 @@ impl Engine {
         open_lua_libs(lua_state);
 
         // Create all built-in types and store them
-        let mut type_registry = Vec::new();
         for builtin_type in get_builtin_types() {
-            // Create a box containing the runtime type description
-            let runtime_type = Box::new(builtin_type.as_runtime_type());
-
             // Then create the type meta-table
             push_table(lua_state, 0, builtin_type.overloads.len() as i32 + 1);
-            create_index_method(lua_state, &runtime_type);
+            builtin_type.create_index_method(lua_state);
             set_field(lua_state, -2, "__index");
 
             // Create overloading functions
@@ -71,7 +62,6 @@ impl Engine {
             // Finally register the meta-table in the current Lua state and
             // save the type struct in this engine.
             (builtin_type.register_function)(lua_state, builtin_type);
-            type_registry.push(runtime_type);
             set_top(lua_state, 0);
         }
 
@@ -82,7 +72,7 @@ impl Engine {
         }
 
         // Finally create the engine type and return it
-        Self { lua_state, type_registry }
+        Self { lua_state }
     }
 
     /// Run the given bytecode buffer in the engine, returning the potential
