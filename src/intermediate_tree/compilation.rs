@@ -782,8 +782,13 @@ impl Node {
                     &Vec::new(),
                     items,
                 );
-
-                // TODO: Set the object meta-table accordingly to its type
+                emit_set_metatable(
+                    ctx,
+                    output,
+                    Some(&self.origin_location),
+                    result_slot,
+                    types::obj::TYPE.name,
+                );
             }
 
             // --- All trivial literal nodes should've been compiled by now
