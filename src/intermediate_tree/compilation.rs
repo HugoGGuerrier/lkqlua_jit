@@ -256,7 +256,7 @@ impl ExecutionUnit {
                 }
 
                 // The compile the body as a returning node
-                body.compile_as_return(ctx, self, &mut extended_instructions);
+                body.compile_as_function_body(ctx, self, &mut extended_instructions);
             }
         };
 
@@ -1187,11 +1187,14 @@ impl Node {
         }
     }
 
-    /// Compile the node as a function top-level instruction, meaning that
-    /// the emitted code is going to return the value of this node to the
-    /// caller. This function is used to compile composite expressions in an
-    /// optimized way, having return instructions in every branch.
-    fn compile_as_return(
+    /// Compile the node as a function body, meaning that the emitted code is
+    /// going to return the value of this node to the caller.
+    /// This function also emits required instructions to close local up-values
+    /// for them to be available to children functions.
+    /// This function is used to compile composite expressions in an optimized
+    /// way by having return instructions in every branch, and use the tail
+    /// call recursion.
+    fn compile_as_function_body(
         &self,
         ctx: &mut CompilationContext,
         owning_unit: &ExecutionUnit,
@@ -1233,11 +1236,11 @@ impl Node {
                 condition.compile_as_branching(ctx, owning_unit, output, alternative_label);
 
                 // Emit code to return the consequence value
-                consequence.compile_as_return(ctx, owning_unit, output);
+                consequence.compile_as_function_body(ctx, owning_unit, output);
 
                 // Emit code to return the alternative
                 output.label(alternative_label);
-                alternative.compile_as_return(ctx, owning_unit, output);
+                alternative.compile_as_function_body(ctx, owning_unit, output);
             }
 
             // In the case of a block expression, compile its result as return
@@ -1247,7 +1250,7 @@ impl Node {
                     Self::compile_block_body(ctx, owning_unit, output, local_symbols, body);
 
                 // The compile the value as a returning node
-                val.compile_as_return(ctx, owning_unit, output);
+                val.compile_as_function_body(ctx, owning_unit, output);
 
                 // Release the block local bindings
                 let death_label = output.new_label();
