@@ -1318,29 +1318,29 @@ impl Node {
         hash_part_nodes: &Vec<(Identifier, Node)>,
     ) {
         // Create the constant array part
-        let mut array_part = Vec::new();
+        let mut array_constant_elems = Vec::new();
         let mut array_remains = Vec::new();
         for (i, array_elem) in array_part_nodes.iter().enumerate() {
             if let Some(array_elem_table_constant) = array_elem
                 .eval_as_constant()
                 .and_then(|c| c.to_table_constant_element())
             {
-                array_part.push(array_elem_table_constant);
+                array_constant_elems.push(array_elem_table_constant);
             } else {
-                array_part.push(TableConstantElement::Nil);
+                array_constant_elems.push(TableConstantElement::Nil);
                 array_remains.push((i, array_elem));
             }
         }
 
         // Create the constant hash part
-        let mut hash_part = Vec::new();
+        let mut hash_constant_elems = Vec::new();
         let mut hash_remains = Vec::new();
         for (name, hash_elem) in hash_part_nodes {
             if let Some(hash_elem_table_constant) = hash_elem
                 .eval_as_constant()
                 .and_then(|c| c.to_table_constant_element())
             {
-                hash_part.push((
+                hash_constant_elems.push((
                     TableConstantElement::String(name.text.clone()),
                     hash_elem_table_constant,
                 ));
@@ -1350,13 +1350,17 @@ impl Node {
         }
 
         // Create the complex constant and duplicate it
-        let table_cst = ctx
-            .current_data()
-            .constants
-            .get_from_complex_constant(ComplexConstant::Table { array_part, hash_part });
+        let table_cst =
+            ctx.current_data()
+                .constants
+                .get_from_complex_constant(ComplexConstant::Table {
+                    array_part: array_constant_elems,
+                    hash_part: hash_constant_elems,
+                });
         output.ad(origin_location, TDUP, result_slot, table_cst);
 
-        // Finally place the non-constant value in the table
+        // Finally place values that cannot be represented with table constants
+        // in the table.
         for (i, array_elem) in array_remains {
             let elem_access = array_elem.compile_as_access(ctx, owning_unit, output);
             emit_table_index_write(
@@ -1365,7 +1369,7 @@ impl Node {
                 origin_location,
                 elem_access.slot(),
                 result_slot,
-                i,
+                i + 1,
             );
             elem_access.release(ctx);
         }
