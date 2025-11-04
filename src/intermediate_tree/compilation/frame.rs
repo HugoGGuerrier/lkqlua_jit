@@ -14,6 +14,7 @@ use crate::{bytecode::extended_bytecode::Label, sources::SourceSection};
 
 /// This type represents the concept of framing in the intermediate tree. This
 /// is where local variables and up-values lives.
+#[derive(Debug)]
 pub struct Frame {
     /// A reference to the frame that owns this one.
     pub parent_frame: Option<Rc<RefCell<Frame>>>,
@@ -25,6 +26,7 @@ pub struct Frame {
     pub variant: FrameVariant,
 }
 
+#[derive(Debug)]
 pub enum FrameVariant {
     /// The case when the frame is a semantic one, it means that it corresponds
     /// to a frame in the resulting bytecode.

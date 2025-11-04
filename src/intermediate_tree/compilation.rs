@@ -126,9 +126,13 @@ impl ExecutionUnit {
 
                 // Compile module elements
                 for elem in elements {
-                    let elem_access = elem.compile_as_access(ctx, self, &mut extended_instructions);
+                    let elem_access =
+                        elem.compile_as_access(ctx, self, &mut extended_instructions, None);
                     elem_access.release(ctx);
                 }
+
+                // Reserve a slot for the module table
+                let result_tmp = ctx.current_frame_mut().get_tmp();
 
                 // Create a source section at the end of the module
                 let end_source_section = SourceSection {
@@ -136,9 +140,6 @@ impl ExecutionUnit {
                     start: self.origin_location.end,
                     end: self.origin_location.end,
                 };
-
-                // Reserve a slot for the module table
-                let result_tmp = ctx.current_frame_mut().get_tmp();
 
                 // Emit instructions to create the module table
                 let empty_table_cst = ctx.current_data().constants.get_empty_table();
@@ -390,7 +391,8 @@ impl Node {
             // --- Composite expressions
             NodeVariant::DottedExpr { prefix, suffix, is_safe } => {
                 // Get the access to the prefix expression
-                let prefix_access = prefix.compile_as_access(ctx, owning_unit, output);
+                let prefix_access =
+                    prefix.compile_as_access(ctx, owning_unit, output, Some(result_slot));
 
                 // Get the table member corresponding to the suffix in the
                 // result slot
@@ -402,6 +404,9 @@ impl Node {
                     prefix_access.slot(),
                     &suffix.text,
                 );
+
+                // Release prefix value access
+                prefix_access.release(ctx);
 
                 // Emit post access check
                 let next_label = output.new_label();
@@ -430,8 +435,9 @@ impl Node {
             }
             NodeVariant::IndexExpr { indexed_val, index, is_safe } => {
                 // Get the access to the indexed value and to the index
-                let indexed_value_access = indexed_val.compile_as_access(ctx, owning_unit, output);
-                let index_access = index.compile_as_access(ctx, owning_unit, output);
+                let indexed_value_access =
+                    indexed_val.compile_as_access(ctx, owning_unit, output, Some(result_slot));
+                let index_access = index.compile_as_access(ctx, owning_unit, output, None);
 
                 // Emit code to the the value at the specified index
                 output.abc(
@@ -441,6 +447,7 @@ impl Node {
                     indexed_value_access.slot(),
                     index_access.slot(),
                 );
+                indexed_value_access.release(ctx);
 
                 // Emit post access check
                 let next_label = output.new_label();
@@ -463,6 +470,9 @@ impl Node {
                         &vec![DynamicErrorArg::LocalValue(index_access.slot())],
                     );
                 }
+
+                // Release index value access accesses
+                index_access.release(ctx);
 
                 // Label the next instruction
                 output.label(next_label);
@@ -488,8 +498,14 @@ impl Node {
             }
             NodeVariant::BlockExpr { local_symbols, body, val } => {
                 // Compile the block body
-                let parent_frame =
-                    Self::compile_block_body(ctx, owning_unit, output, local_symbols, body);
+                let parent_frame = Self::compile_block_body(
+                    ctx,
+                    owning_unit,
+                    output,
+                    result_slot,
+                    local_symbols,
+                    body,
+                );
 
                 // Then compile the expression representing the value of the
                 // block.
@@ -546,8 +562,9 @@ impl Node {
                 // If the node hasn't been compile yet, fallback on emitting
                 // the fully slot-based variant.
                 if !already_compiled {
-                    let left_access = left.compile_as_access(ctx, owning_unit, output);
-                    let right_access = right.compile_as_access(ctx, owning_unit, output);
+                    let left_access =
+                        left.compile_as_access(ctx, owning_unit, output, Some(result_slot));
+                    let right_access = right.compile_as_access(ctx, owning_unit, output, None);
                     let op = match operator.variant {
                         ArithOperatorVariant::Plus => ADDVV,
                         ArithOperatorVariant::Minus => SUBVV,
@@ -594,8 +611,8 @@ impl Node {
                         left.compile_as_value(ctx, owning_unit, output, operand_slots.first);
                         right.compile_as_value(ctx, owning_unit, output, operand_slots.last);
                         (
-                            ValueAccess::Tmp(operand_slots.first),
-                            ValueAccess::Tmp(operand_slots.last),
+                            ValueAccess::OwnedTmp(operand_slots.first),
+                            ValueAccess::OwnedTmp(operand_slots.last),
                         )
                     }
                 };
@@ -615,7 +632,8 @@ impl Node {
 
             // --- Unary operations
             NodeVariant::ArithUnOp { operator, operand } => {
-                let operand_access = operand.compile_as_access(ctx, owning_unit, output);
+                let operand_access =
+                    operand.compile_as_access(ctx, owning_unit, output, Some(result_slot));
                 let op = match operator.variant {
                     ArithOperatorVariant::Plus => MOV,
                     ArithOperatorVariant::Minus => UNM,
@@ -625,7 +643,8 @@ impl Node {
                 operand_access.release(ctx);
             }
             NodeVariant::LogicUnOp { operator, operand } => {
-                let operand_access = operand.compile_as_access(ctx, owning_unit, output);
+                let operand_access =
+                    operand.compile_as_access(ctx, owning_unit, output, Some(result_slot));
                 let op = match operator.variant {
                     LogicOperatorVariant::Not => NOT,
                     _ => unreachable!(),
@@ -840,7 +859,8 @@ impl Node {
             {
                 // Emit the code the perform the arithmetic operation with the
                 // constant operand.
-                let operand_access = variable_operand.compile_as_access(ctx, owning_unit, output);
+                let operand_access =
+                    variable_operand.compile_as_access(ctx, owning_unit, output, Some(result_slot));
                 output.abc(
                     &operation.origin_location,
                     op,
@@ -859,26 +879,39 @@ impl Node {
         }
     }
 
-    /// Compile the node as a value, but instead of placing it in an already
-    /// reserved slot like the [`Self::compile_as_value`] functionn does, this
-    /// function returns a value representing an access to the node's result.
-    /// This is used to optimize accesses to already stored values, like local
-    /// bindings, and avoid useless copy.
+    /// Compile the node as a value, but instead of placing it in a result slot
+    /// like the [`Self::compile_as_value`] function does, this function
+    /// returns a value representing an access to the node's result.
+    /// If the compiled node represent an access to an already stored value,
+    /// the result allow direct access to it, avoiding a useless copy.
+    /// Otherwise, this function reserve a temporary slot (or use the already
+    /// reserved provided one), and use the [`Self::compile_as_value`]
+    /// function to place the node result in it.
     fn compile_as_access(
         &self,
         ctx: &mut CompilationContext,
         owning_unit: &ExecutionUnit,
         output: &mut ExtendedInstructionBuffer,
+        already_reserved_slot: Option<u8>,
     ) -> ValueAccess {
         fn fallback(
             ctx: &mut CompilationContext,
             owning_unit: &ExecutionUnit,
             output: &mut ExtendedInstructionBuffer,
+            already_reserved_slot: Option<u8>,
             node: &Node,
         ) -> ValueAccess {
-            let result_tmp = ctx.current_frame_mut().get_tmp();
-            node.compile_as_value(ctx, owning_unit, output, result_tmp);
-            ValueAccess::Tmp(result_tmp)
+            let result_slot = if already_reserved_slot.is_some() {
+                already_reserved_slot.unwrap()
+            } else {
+                ctx.current_frame_mut().get_tmp()
+            };
+            node.compile_as_value(ctx, owning_unit, output, result_slot);
+            if already_reserved_slot.is_some() {
+                ValueAccess::BorrowedTmp(result_slot)
+            } else {
+                ValueAccess::OwnedTmp(result_slot)
+            }
         }
 
         match &self.variant {
@@ -896,7 +929,7 @@ impl Node {
                     first: call_slots.first + 1,
                     last: call_slots.last,
                 });
-                ValueAccess::Tmp(call_slots.first)
+                ValueAccess::OwnedTmp(call_slots.first)
             }
 
             NodeVariant::ReadSymbol(identifier) => {
@@ -904,13 +937,14 @@ impl Node {
                 if let Some(BindingData { slot, is_init: true, .. }) = maybe_local_binding {
                     ValueAccess::Direct(slot)
                 } else {
-                    fallback(ctx, owning_unit, output, self)
+                    fallback(ctx, owning_unit, output, already_reserved_slot, self)
                 }
             }
 
             NodeVariant::CheckType { expression, expected_type } => {
                 // Compile the expression as an access
-                let res = expression.compile_as_access(ctx, owning_unit, output);
+                let res =
+                    expression.compile_as_access(ctx, owning_unit, output, already_reserved_slot);
 
                 // Check the type of the nested expression
                 emit_type_check(
@@ -924,7 +958,7 @@ impl Node {
                 // Return the nested expression's result
                 res
             }
-            _ => fallback(ctx, owning_unit, output, self),
+            _ => fallback(ctx, owning_unit, output, already_reserved_slot, self),
         }
     }
 
@@ -1049,8 +1083,8 @@ impl Node {
                     // the fully slot-based variant.
                     if !already_compiled {
                         // Get access to left and right values
-                        let left_access = left.compile_as_access(ctx, owning_unit, output);
-                        let right_access = right.compile_as_access(ctx, owning_unit, output);
+                        let left_access = left.compile_as_access(ctx, owning_unit, output, None);
+                        let right_access = right.compile_as_access(ctx, owning_unit, output, None);
 
                         // Get the inverted comparison operation code according to the
                         // operator.
@@ -1094,7 +1128,7 @@ impl Node {
                 // In all other cases, the node is compiled as an access and
                 // the value of the latter is tested to branch if required.
                 _ => {
-                    let result_access = node.compile_as_access(ctx, owning_unit, output);
+                    let result_access = node.compile_as_access(ctx, owning_unit, output, None);
                     let (op, label) = match branching_kind {
                         BranchingKind::IfTrue => (IST, if_true_label),
                         BranchingKind::IfFalse => (ISF, if_false_label),
@@ -1156,7 +1190,8 @@ impl Node {
             // Compile the node if possible
             if let Some((op, d)) = maybe_op_and_d {
                 // Get an access to the variable operand
-                let operand_access = variable_operand.compile_as_access(ctx, owning_unit, output);
+                let operand_access =
+                    variable_operand.compile_as_access(ctx, owning_unit, output, None);
 
                 // Emit the branching instruction
                 output.ad(&operation.origin_location, op, operand_access.slot(), d);
@@ -1246,8 +1281,16 @@ impl Node {
             // In the case of a block expression, compile its result as return
             NodeVariant::BlockExpr { local_symbols, body, val } => {
                 // Compile the block body
-                let parent_frame =
-                    Self::compile_block_body(ctx, owning_unit, output, local_symbols, body);
+                let body_elem_tmp = ctx.current_frame_mut().get_tmp();
+                let parent_frame = Self::compile_block_body(
+                    ctx,
+                    owning_unit,
+                    output,
+                    body_elem_tmp,
+                    local_symbols,
+                    body,
+                );
+                ctx.current_frame_mut().release_slot(body_elem_tmp);
 
                 // The compile the value as a returning node
                 val.compile_as_function_body(ctx, owning_unit, output);
@@ -1264,9 +1307,10 @@ impl Node {
             // In all other cases, just get an access to the value and return
             // it.
             _ => {
-                let value_access = self.compile_as_access(ctx, owning_unit, output);
+                let value_access = self.compile_as_access(ctx, owning_unit, output, None);
                 emit_closing_instruction(&ctx.current_frame(), output);
                 output.ad(&self.origin_location, RET1, value_access.slot(), 2);
+                value_access.release(ctx);
             }
         }
     }
@@ -1365,7 +1409,7 @@ impl Node {
         // Finally place values that cannot be represented with table constants
         // in the table.
         for (i, array_elem) in array_remains {
-            let elem_access = array_elem.compile_as_access(ctx, owning_unit, output);
+            let elem_access = array_elem.compile_as_access(ctx, owning_unit, output, None);
             emit_table_index_write(
                 ctx,
                 output,
@@ -1377,7 +1421,7 @@ impl Node {
             elem_access.release(ctx);
         }
         for (name, hash_elem) in hash_remains {
-            let elem_access = hash_elem.compile_as_access(ctx, owning_unit, output);
+            let elem_access = hash_elem.compile_as_access(ctx, owning_unit, output, None);
             emit_table_member_write(
                 ctx,
                 output,
@@ -1473,6 +1517,7 @@ impl Node {
         ctx: &mut CompilationContext,
         owning_unit: &ExecutionUnit,
         output: &mut ExtendedInstructionBuffer,
+        working_slot: u8,
         local_symbols: &Vec<Identifier>,
         body: &Vec<Node>,
     ) -> Rc<RefCell<Frame>> {
@@ -1487,7 +1532,8 @@ impl Node {
 
         // Compile the body of the block
         for body_elem in body {
-            let elem_access = body_elem.compile_as_access(ctx, owning_unit, output);
+            let elem_access =
+                body_elem.compile_as_access(ctx, owning_unit, output, Some(working_slot));
 
             // TODO: Check that the value returned by the body element
             // is "unit".
@@ -1859,6 +1905,7 @@ fn emit_type_check(
             .get_from_int(expected_type.tag as i32),
     );
     output.cgoto(ctx, next_label);
+    ctx.current_frame_mut().release_slot(actual_tag);
 
     // Now emit the code to raise a runtime error in the case where type tags
     // don't match.
@@ -1881,9 +1928,6 @@ fn emit_type_check(
             DynamicErrorArg::LocalValue(actual_name),
         ],
     );
-
-    // Release used slots
-    ctx.current_frame_mut().release_slot(actual_tag);
     ctx.current_frame_mut().release_slot(actual_name);
 
     // Finally label the next instruction
@@ -1932,20 +1976,21 @@ pub fn emit_closed_bindings_init(frame: &Frame, output: &mut ExtendedInstruction
 /// slot read, or through a temporary value.
 enum ValueAccess {
     Direct(u8),
-    Tmp(u8),
+    OwnedTmp(u8),
+    BorrowedTmp(u8),
 }
 
 impl ValueAccess {
     fn slot(&self) -> u8 {
         match self {
-            ValueAccess::Direct(s) | ValueAccess::Tmp(s) => *s,
+            ValueAccess::Direct(s) | ValueAccess::OwnedTmp(s) | ValueAccess::BorrowedTmp(s) => *s,
         }
     }
 
     fn release(&self, ctx: &mut CompilationContext) {
         match self {
-            ValueAccess::Direct(_) => (),
-            ValueAccess::Tmp(s) => ctx.current_frame_mut().release_slot(*s),
+            ValueAccess::OwnedTmp(s) => ctx.current_frame_mut().release_slot(*s),
+            ValueAccess::Direct(_) | &ValueAccess::BorrowedTmp(_) => (),
         }
     }
 }
