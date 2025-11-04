@@ -31,7 +31,7 @@ pub enum FrameVariant {
     Semantic {
         /// Array representing all the slots in the current semantic frame,
         /// an array element is set to `true` when it is currently used.
-        available_slots: [bool; u8::MAX as usize],
+        occupied_slots: [bool; u8::MAX as usize],
 
         /// Maximum number of slots that are occupied simultaneously.
         maximum_size: u8,
@@ -60,7 +60,7 @@ impl Frame {
             parent_frame,
             bindings: HashMap::new(),
             variant: FrameVariant::Semantic {
-                available_slots: [false; u8::MAX as usize],
+                occupied_slots: [false; u8::MAX as usize],
                 maximum_size: 0,
                 up_values: HashMap::new(),
                 close_from: None,
@@ -248,7 +248,7 @@ impl Frame {
     /// Release all slots in the provided range, making them free to use.
     pub fn release_slots(&mut self, slots: SlotRange) {
         match &mut self.variant {
-            FrameVariant::Semantic { available_slots, .. } => {
+            FrameVariant::Semantic { occupied_slots: available_slots, .. } => {
                 for slot in slots.range() {
                     available_slots[slot as usize] = false;
                 }
@@ -272,7 +272,7 @@ impl Frame {
     /// Get the next available slot without flagging it as occupied.
     pub fn peek_next_slot(&self) -> u8 {
         match self.variant {
-            FrameVariant::Semantic { available_slots, .. } => {
+            FrameVariant::Semantic { occupied_slots: available_slots, .. } => {
                 available_slots
                     .iter()
                     .enumerate()
@@ -291,7 +291,7 @@ impl Frame {
     /// for use.
     fn get_slots(&mut self, count: usize, reserve: bool, update_size: bool) -> SlotRange {
         match &mut self.variant {
-            FrameVariant::Semantic { available_slots, maximum_size, .. } => {
+            FrameVariant::Semantic { occupied_slots: available_slots, maximum_size, .. } => {
                 let mut start_bound = 0;
                 for i in 0..available_slots.len() {
                     // We know that `start_bound..(i-1)` slots are available,
