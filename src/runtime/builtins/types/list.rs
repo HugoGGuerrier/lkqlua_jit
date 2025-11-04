@@ -26,6 +26,7 @@ pub const TYPE: BuiltinType = BuiltinType {
 };
 
 /// Overload of "__tostring" for the "List" type
+#[unsafe(no_mangle)]
 unsafe extern "C" fn list_tostring(l: LuaState) -> c_int {
     // Get image of items inside the list
     let list_len = get_length(l, 1);
