@@ -91,7 +91,7 @@ pub const LUA_ENGINE_ERROR: ErrorTemplate = ErrorTemplate {
 
 /// This vector contains all error templates stored at the index of their
 /// identifier.
-pub const ERROR_TEMPLATE_REPOSITORY: [&'static ErrorTemplate; 10] = [
+pub const ERROR_TEMPLATE_REPOSITORY: &[&ErrorTemplate] = &[
     &UNKNOWN_SYMBOL,
     &DUPLICATED_SYMBOL,
     &NO_VALUE_FOR_PARAM,
