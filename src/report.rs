@@ -6,7 +6,7 @@
 use std::io::Write;
 
 use crate::{
-    errors::ErrorTemplate,
+    error_templates::ErrorTemplate,
     sources::{SourceId, SourceSection},
 };
 use ariadne::{self, Label, StdoutFmt};

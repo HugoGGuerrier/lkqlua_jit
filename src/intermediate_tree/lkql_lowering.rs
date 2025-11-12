@@ -4,7 +4,7 @@
 use std::{collections::HashMap, path::PathBuf};
 
 use crate::{
-    errors::{POS_AFTER_NAMED_ARGUMENT, PREVIOUS_NAMED_ARG_HINT},
+    error_templates::{POS_AFTER_NAMED_ARGUMENT, PREVIOUS_NAMED_ARG_HINT},
     intermediate_tree::{
         ArithOperator, ArithOperatorVariant, CompOperator, CompOperatorVariant, ExecutionUnit,
         ExecutionUnitVariant, Identifier, LogicOperator, LogicOperatorVariant, MiscOperator,

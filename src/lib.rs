@@ -21,7 +21,7 @@ use crate::{
 };
 
 pub mod bytecode;
-pub mod errors;
+pub mod error_templates;
 pub mod intermediate_tree;
 pub mod lua;
 pub mod report;
