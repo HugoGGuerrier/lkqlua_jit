@@ -146,9 +146,15 @@ pub struct Node {
 /// This enumeration represents the variant part of an [`Node`].
 #[derive(Debug, PartialEq)]
 pub enum NodeVariant {
-    // --- Function call
+    // --- Call expressions
     FunCall {
         callee: Box<Node>,
+        positional_args: Vec<Node>,
+        named_args: Vec<(Identifier, Node)>,
+    },
+    MethodCall {
+        prefix: Box<Node>,
+        method_name: Identifier,
         positional_args: Vec<Node>,
         named_args: Vec<(Identifier, Node)>,
     },
@@ -265,6 +271,15 @@ impl Node {
                 "FunCall",
                 vec![
                     ("callee", callee.pretty_print(child_level)),
+                    ("positional_args", Self::pretty_print_vec(positional_args, child_level)),
+                    ("named_args", Self::pretty_print_labeled_vec(named_args, child_level)),
+                ],
+            ),
+            NodeVariant::MethodCall { prefix, method_name, positional_args, named_args } => (
+                "MethodCall",
+                vec![
+                    ("prefix", prefix.pretty_print(child_level)),
+                    ("method_name", format!("\"{}\"", method_name.text)),
                     ("positional_args", Self::pretty_print_vec(positional_args, child_level)),
                     ("named_args", Self::pretty_print_labeled_vec(named_args, child_level)),
                 ],

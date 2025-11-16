@@ -25,6 +25,8 @@ pub fn metatable_global_field(type_name: &str) -> String {
 
 /// Given a Lua state, get the value of the parameter designated by the
 /// provided index and the provided name as a boolean value.
+/// This function checks the parameter type, raising an error if it isn't the
+/// `bool` one.
 /// If this parameter hasn't any value, this function returns the default value
 /// if any, otherwise it raises an error using the [`raise_error`] function.
 #[unsafe(no_mangle)]
@@ -45,6 +47,33 @@ pub extern "C" fn get_bool_param(
     } else {
         raise_error(l, &maybe_param_index.unwrap_err().to_json_string());
         false
+    }
+}
+
+/// Given a Lua state, get the value of the parameter designated by the
+/// provided index and the provided name as a string value.
+/// This function checks the parameter type, raising an error if it isn't the
+/// `str` one.
+/// If this parameter hasn't any value, this function returns the default value
+/// if any, otherwise it raises an error using the [`raise_error`] function.
+#[unsafe(no_mangle)]
+#[allow(improper_ctypes_definitions)]
+pub extern "C" fn get_string_param(
+    l: LuaState,
+    param_count: i32,
+    index: i32,
+    name: &str,
+    default_value: Option<&'static str>,
+) -> &'static str {
+    let maybe_param_index = get_param_safe(l, param_count, index, name);
+    if let Ok(param_index) = maybe_param_index {
+        check_param_type(l, name, param_index, &types::str::TYPE);
+        get_string(l, param_index).unwrap()
+    } else if default_value.is_some() {
+        default_value.unwrap()
+    } else {
+        raise_error(l, &maybe_param_index.unwrap_err().to_json_string());
+        ""
     }
 }
 

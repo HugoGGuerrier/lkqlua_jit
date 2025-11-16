@@ -373,7 +373,7 @@ impl Node {
         // If we reach here the node can't be evaluated as a constant, so we
         // have to compile it manually
         match &self.variant {
-            // --- Function call
+            // --- Call expressions
             NodeVariant::FunCall { callee, positional_args, named_args } => {
                 let call_slots = Self::compile_call(
                     ctx,
@@ -386,6 +386,9 @@ impl Node {
                 );
                 output.ad(&self.origin_location, MOV, result_slot, call_slots.first as u16);
                 ctx.current_frame_mut().release_slots(call_slots);
+            }
+            NodeVariant::MethodCall { prefix, method_name, positional_args, named_args } => {
+                todo!()
             }
 
             // --- Composite expressions
