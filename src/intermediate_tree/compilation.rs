@@ -373,16 +373,48 @@ impl Node {
         // If we reach here the node can't be evaluated as a constant, so we
         // have to compile it manually
         match &self.variant {
-            // --- Function call
-            NodeVariant::FunCall { callee, positional_args, named_args } => {
-                let call_slots = Self::compile_call(
-                    ctx,
-                    owning_unit,
-                    output,
-                    self,
-                    callee,
-                    positional_args,
-                    named_args,
+            // --- Call expressions
+            NodeVariant::FunCall { .. } | NodeVariant::MethodCall { .. } => {
+                // Prepare the call by getting working slots
+                let call_slots = match &self.variant {
+                    NodeVariant::FunCall { callee, positional_args, named_args } => {
+                        Self::prepare_function_call(
+                            ctx,
+                            owning_unit,
+                            output,
+                            &self.origin_location,
+                            callee,
+                            positional_args,
+                            named_args,
+                        )
+                    }
+                    NodeVariant::MethodCall {
+                        prefix,
+                        method_name,
+                        is_safe,
+                        positional_args,
+                        named_args,
+                    } => Self::prepare_method_call(
+                        ctx,
+                        owning_unit,
+                        output,
+                        &self.origin_location,
+                        prefix,
+                        method_name,
+                        *is_safe,
+                        positional_args,
+                        named_args,
+                    ),
+                    _ => unreachable!(),
+                };
+
+                // Finally emit a call instruction and place the result in the required slot
+                output.abc(
+                    &self.origin_location,
+                    CALL,
+                    call_slots.first,
+                    2,
+                    call_slots.count() - 1,
                 );
                 output.ad(&self.origin_location, MOV, result_slot, call_slots.first as u16);
                 ctx.current_frame_mut().release_slots(call_slots);
@@ -390,48 +422,18 @@ impl Node {
 
             // --- Composite expressions
             NodeVariant::DottedExpr { prefix, suffix, is_safe } => {
-                // Get the access to the prefix expression
                 let prefix_access =
                     prefix.compile_as_access(ctx, owning_unit, output, Some(result_slot));
-
-                // Get the table member corresponding to the suffix in the
-                // result slot
-                emit_table_member_read(
+                Self::compile_dot_access(
                     ctx,
                     output,
-                    Some(&self.origin_location),
                     result_slot,
+                    &self.origin_location,
                     prefix_access.slot(),
-                    &suffix.text,
+                    suffix,
+                    *is_safe,
                 );
-
-                // Release prefix value access
                 prefix_access.release(ctx);
-
-                // Emit post access check
-                let next_label = output.new_label();
-                output.ad(&self.origin_location, ISNEP, result_slot, PRIM_NIL);
-                output.cgoto(ctx, next_label);
-                if *is_safe {
-                    emit_global_read(
-                        ctx,
-                        output,
-                        Some(&self.origin_location),
-                        result_slot,
-                        UNIT_VALUE_NAME,
-                    );
-                } else {
-                    emit_runtime_error(
-                        ctx,
-                        output,
-                        Some(&suffix.origin_location),
-                        &UNKNOWN_MEMBER,
-                        &vec![DynamicErrorArg::Static(suffix.text.clone())],
-                    );
-                }
-
-                // Label the next instruction
-                output.label(next_label);
             }
             NodeVariant::IndexExpr { indexed_val, index, is_safe } => {
                 // Get the access to the indexed value and to the index
@@ -915,20 +917,52 @@ impl Node {
         }
 
         match &self.variant {
-            NodeVariant::FunCall { callee, positional_args, named_args } => {
-                let call_slots = Self::compile_call(
-                    ctx,
-                    owning_unit,
-                    output,
-                    self,
-                    callee,
-                    positional_args,
-                    named_args,
+            NodeVariant::FunCall { .. } | NodeVariant::MethodCall { .. } => {
+                // Prepare the call by getting slots used for it
+                let call_slots = match &self.variant {
+                    NodeVariant::FunCall { callee, positional_args, named_args } => {
+                        Self::prepare_function_call(
+                            ctx,
+                            owning_unit,
+                            output,
+                            &self.origin_location,
+                            callee,
+                            positional_args,
+                            named_args,
+                        )
+                    }
+                    NodeVariant::MethodCall {
+                        prefix,
+                        method_name,
+                        is_safe,
+                        positional_args,
+                        named_args,
+                    } => Self::prepare_method_call(
+                        ctx,
+                        owning_unit,
+                        output,
+                        &self.origin_location,
+                        prefix,
+                        method_name,
+                        *is_safe,
+                        positional_args,
+                        named_args,
+                    ),
+                    _ => unreachable!(),
+                };
+
+                // Emit the call instruction
+                output.abc(
+                    &self.origin_location,
+                    CALL,
+                    call_slots.first,
+                    2,
+                    call_slots.count() - 1,
                 );
-                ctx.current_frame_mut().release_slots(SlotRange {
-                    first: call_slots.first + 1,
-                    last: call_slots.last,
-                });
+
+                // Then free all slots except the first one that contains the result
+                ctx.current_frame_mut()
+                    .release_slots(call_slots.sub_range(Some(1), None));
                 ValueAccess::OwnedTmp(call_slots.first)
             }
 
@@ -1236,20 +1270,42 @@ impl Node {
         output: &mut ExtendedInstructionBuffer,
     ) {
         match &self.variant {
-            // In the case of a function call, we can emit a tail call
-            NodeVariant::FunCall { callee, positional_args, named_args } => {
-                // Prepare the function call
-                let call_slots = Self::prepare_call(
-                    ctx,
-                    owning_unit,
-                    output,
-                    self,
-                    callee,
-                    positional_args,
-                    named_args,
-                );
+            // In the case of a function / method call, we can emit a tail call
+            NodeVariant::FunCall { .. } | NodeVariant::MethodCall { .. } => {
+                // Prepare the call by getting working slots
+                let call_slots = match &self.variant {
+                    NodeVariant::FunCall { callee, positional_args, named_args } => {
+                        Self::prepare_function_call(
+                            ctx,
+                            owning_unit,
+                            output,
+                            &self.origin_location,
+                            callee,
+                            positional_args,
+                            named_args,
+                        )
+                    }
+                    NodeVariant::MethodCall {
+                        prefix,
+                        method_name,
+                        is_safe,
+                        positional_args,
+                        named_args,
+                    } => Self::prepare_method_call(
+                        ctx,
+                        owning_unit,
+                        output,
+                        &self.origin_location,
+                        prefix,
+                        method_name,
+                        *is_safe,
+                        positional_args,
+                        named_args,
+                    ),
+                    _ => unreachable!(),
+                };
 
-                // Close locals before returning
+                // Enclose required bindings
                 emit_closing_instruction(&ctx.current_frame(), output);
 
                 // Emit a function tail call
@@ -1257,7 +1313,7 @@ impl Node {
                     &self.origin_location,
                     CALLT,
                     call_slots.first,
-                    positional_args.len() as u16 + 2,
+                    call_slots.count() as u16 - 1,
                 );
             }
 
@@ -1434,63 +1490,116 @@ impl Node {
         }
     }
 
-    /// Util function to compile provided nodes as a function call and then
-    /// return the slot range used for calling operation.
-    fn compile_call(
-        ctx: &mut CompilationContext,
-        owning_unit: &ExecutionUnit,
-        output: &mut ExtendedInstructionBuffer,
-        call: &Node,
-        callee: &Node,
-        positional_args: &Vec<Node>,
-        named_args: &Vec<(Identifier, Node)>,
-    ) -> SlotRange {
-        // Prepare the call
-        let call_slots =
-            Self::prepare_call(ctx, owning_unit, output, call, callee, positional_args, named_args);
-
-        // Call the function and return the used slots
-        output.abc(
-            &call.origin_location,
-            CALL,
-            call_slots.first,
-            2,
-            positional_args.len() as u8 + 2,
-        );
-        call_slots
-    }
-
     /// Util function to prepare a function call and then return the slot range
     /// in which the function and arguments are placed.
-    fn prepare_call(
+    fn prepare_function_call(
         ctx: &mut CompilationContext,
         owning_unit: &ExecutionUnit,
         output: &mut ExtendedInstructionBuffer,
-        call: &Node,
+        origin_location: &SourceSection,
         callee: &Node,
         positional_args: &Vec<Node>,
         named_args: &Vec<(Identifier, Node)>,
     ) -> SlotRange {
         // Reserve slots for the call
-        let arg_count = positional_args.len() + 2;
         let call_slots = ctx
             .current_frame_mut()
-            .reserve_contiguous_slots(arg_count + 1);
+            .reserve_contiguous_slots(positional_args.len() + 3);
 
         // Evaluate the callee and place it in the first of the call slots.
         callee.compile_as_value(ctx, owning_unit, output, call_slots.first);
 
-        // Compile named arguments to a table (or nil if there is no named
+        // Prepare arguments
+        Self::compile_args(
+            ctx,
+            owning_unit,
+            output,
+            origin_location,
+            positional_args,
+            call_slots.first + 3,
+            named_args,
+            call_slots.first + 2,
+        );
+
+        // Finally return slots used for the call
+        call_slots
+    }
+
+    /// Util function to prepare a method call and then return the slot range
+    /// in which the method and arguments (including 'this') are placed.
+    fn prepare_method_call(
+        ctx: &mut CompilationContext,
+        owning_unit: &ExecutionUnit,
+        output: &mut ExtendedInstructionBuffer,
+        origin_location: &SourceSection,
+        prefix: &Node,
+        method_name: &Identifier,
+        is_safe: bool,
+        positional_args: &Vec<Node>,
+        named_args: &Vec<(Identifier, Node)>,
+    ) -> SlotRange {
+        // Reserve all slots for the method call
+        let call_slots = ctx
+            .current_frame_mut()
+            .reserve_contiguous_slots(positional_args.len() + 4);
+        let callee_slot = call_slots.first;
+        let this_slot = call_slots.first + 3;
+
+        // Place the "this" argument in the call slots
+        prefix.compile_as_value(ctx, owning_unit, output, this_slot);
+
+        // Compile the field accessing and place it as the callee
+        Self::compile_dot_access(
+            ctx,
+            output,
+            callee_slot,
+            &SourceSection::range(&prefix.origin_location, &method_name.origin_location).unwrap(),
+            this_slot,
+            method_name,
+            is_safe,
+        );
+
+        // Compile arguments
+        Self::compile_args(
+            ctx,
+            owning_unit,
+            output,
+            origin_location,
+            positional_args,
+            call_slots.first + 4,
+            named_args,
+            call_slots.first + 2,
+        );
+
+        // Finally return slots used for the call
+        call_slots
+    }
+
+    /// Util function used to compile provided arguments in a way to place
+    /// their values in the specified slot range. The first slot is going to
+    /// hold the named arguments table, and all others are going to store
+    /// positional ones.
+    fn compile_args(
+        ctx: &mut CompilationContext,
+        owning_unit: &ExecutionUnit,
+        output: &mut ExtendedInstructionBuffer,
+        origin_location: &SourceSection,
+        positional_args: &Vec<Node>,
+        first_positional_arg_slot: u8,
+        named_args: &Vec<(Identifier, Node)>,
+        named_args_slot: u8,
+    ) {
+        // Compile named arguments to a table (or nil if there are no named
         // arguments).
         if named_args.is_empty() {
-            output.ad(&call.origin_location, KPRI, call_slots.first + 2, PRIM_NIL);
+            output.ad(origin_location, KPRI, named_args_slot, PRIM_NIL);
         } else {
             Self::compile_table(
                 ctx,
                 owning_unit,
                 output,
-                call_slots.first + 2,
-                &call.origin_location,
+                named_args_slot,
+                origin_location,
                 &Vec::new(),
                 named_args,
             );
@@ -1502,10 +1611,9 @@ impl Node {
                 ctx,
                 owning_unit,
                 output,
-                call_slots.first + 3 + i as u8,
+                first_positional_arg_slot + i as u8,
             );
         }
-        call_slots
     }
 
     /// Util function used to compile the body part of a block expression. Note
@@ -1544,6 +1652,49 @@ impl Node {
 
         // Return the parent frame
         parent_frame
+    }
+
+    /// Util function factorizing the compilation process of a (potentially
+    /// safe) dot access. This function also emit the code to check the member
+    /// exists in the accessed prefix.
+    fn compile_dot_access(
+        ctx: &mut CompilationContext,
+        output: &mut ExtendedInstructionBuffer,
+        result_slot: u8,
+        origin_location: &SourceSection,
+        prefix: u8,
+        suffix: &Identifier,
+        is_safe: bool,
+    ) {
+        // Get the table member corresponding to the suffix in the
+        // result slot
+        emit_table_member_read(
+            ctx,
+            output,
+            Some(origin_location),
+            result_slot,
+            prefix,
+            &suffix.text,
+        );
+
+        // Emit post access check
+        let next_label = output.new_label();
+        output.ad(origin_location, ISNEP, result_slot, PRIM_NIL);
+        output.cgoto(ctx, next_label);
+        if is_safe {
+            emit_global_read(ctx, output, Some(origin_location), result_slot, UNIT_VALUE_NAME);
+        } else {
+            emit_runtime_error(
+                ctx,
+                output,
+                Some(&suffix.origin_location),
+                &UNKNOWN_MEMBER,
+                &vec![DynamicErrorArg::Static(suffix.text.clone())],
+            );
+        }
+
+        // Label the next instruction
+        output.label(next_label);
     }
 }
 

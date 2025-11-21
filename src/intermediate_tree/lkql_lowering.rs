@@ -206,11 +206,33 @@ impl Node {
                     }
                 }
 
-                // Return the resulting node variant
-                NodeVariant::FunCall {
-                    callee: Box::new(Self::lower_lkql_node(&fun_call.f_name()?, ctx)?),
-                    positional_args,
-                    named_args,
+                // There is a special case when the callee of the function is a
+                // dot access, in that case we emit a method call.
+                let name = fun_call.f_name()?;
+                match name {
+                    LkqlNode::DotAccess(_) | LkqlNode::SafeAccess(_) => {
+                        let (receiver, member, is_safe) = match name {
+                            LkqlNode::DotAccess(dot_access) => {
+                                (dot_access.f_receiver(), dot_access.f_member(), false)
+                            }
+                            LkqlNode::SafeAccess(safe_access) => {
+                                (safe_access.f_receiver(), safe_access.f_member(), true)
+                            }
+                            _ => unreachable!(),
+                        };
+                        NodeVariant::MethodCall {
+                            prefix: Box::new(Self::lower_lkql_node(&receiver?, ctx)?),
+                            method_name: Identifier::from_lkql_node(&member?, ctx)?,
+                            is_safe,
+                            positional_args,
+                            named_args,
+                        }
+                    }
+                    _ => NodeVariant::FunCall {
+                        callee: Box::new(Self::lower_lkql_node(&name, ctx)?),
+                        positional_args,
+                        named_args,
+                    },
                 }
             }
 

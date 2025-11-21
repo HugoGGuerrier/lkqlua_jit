@@ -251,7 +251,7 @@ impl Frame {
     pub fn release_slots(&mut self, slots: SlotRange) {
         match &mut self.variant {
             FrameVariant::Semantic { occupied_slots: available_slots, .. } => {
-                for slot in slots.range() {
+                for slot in slots.to_range() {
                     available_slots[slot as usize] = false;
                 }
             }
@@ -425,7 +425,31 @@ pub struct SlotRange {
 impl SlotRange {
     /// Get a standard range from this slot range to iterate over all slots in
     /// the range.
-    fn range(&self) -> Range<u8> {
+    fn to_range(&self) -> Range<u8> {
         self.first..self.last + 1
+    }
+
+    /// Get the count slots in this range
+    pub fn count(&self) -> u8 {
+        self.last - self.first + 1
+    }
+
+    /// Create a new slot range from an existing one. This function arguments
+    /// represents 0-starting index inside this range, meaning that calling
+    /// `<1..5>.sub_range(1, 3)` would result in the range `<2..4>`.
+    pub fn sub_range(&self, from_index: Option<u8>, to_index: Option<u8>) -> SlotRange {
+        // Get bounds of the new range
+        let first = from_index.unwrap_or(0) + self.first;
+        let last = to_index.map(|i| self.first + i).unwrap_or(self.last);
+
+        // Ensure the bounds are in the range
+        assert!(first <= self.last, "Invalid sub-range creation");
+        assert!(last <= self.last, "Invalid sub-range creation");
+
+        // Ensure new bounds are sound
+        assert!(first <= last, "Invalid sub-range creation");
+
+        // Finally return the new range
+        SlotRange { first, last }
     }
 }
