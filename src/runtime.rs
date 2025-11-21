@@ -94,7 +94,7 @@ pub struct PrototypeData {
 
 /// This type represents a runtime value that can be pushed on a Lua state
 /// stack.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub enum RuntimeValue {
     Integer(isize),
     String(String),
@@ -119,7 +119,7 @@ impl RuntimeValue {
 
 /// This type abstracts the function concept from the Lua engine perspective.
 /// It may represents any executable, function-like runtime value.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub enum FunctionValue {
     /// In the case where the function value is implemented by a native
     /// function.

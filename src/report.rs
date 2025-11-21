@@ -264,7 +264,7 @@ pub enum ReportKind {
 }
 
 impl ReportKind {
-    fn to_ariadne_kind(&self) -> ariadne::ReportKind {
+    fn to_ariadne_kind(&self) -> ariadne::ReportKind<'_> {
         ariadne::ReportKind::Custom(self.label(), self.color())
     }
 

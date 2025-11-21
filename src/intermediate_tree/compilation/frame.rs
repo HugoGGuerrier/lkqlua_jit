@@ -262,12 +262,12 @@ impl Frame {
     // --- Utils
 
     /// Get the parent frame of this one, if any.
-    pub fn parent_frame(&self) -> Option<Ref<Frame>> {
+    pub fn parent_frame(&self) -> Option<Ref<'_, Frame>> {
         self.parent_frame.as_ref().map(|f| f.borrow())
     }
 
     /// Get the parent frame of this one as mutable, if any.
-    fn parent_frame_mut(&self) -> Option<RefMut<Frame>> {
+    fn parent_frame_mut(&self) -> Option<RefMut<'_, Frame>> {
         self.parent_frame.as_ref().map(|f| f.borrow_mut())
     }
 

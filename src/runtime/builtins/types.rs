@@ -20,7 +20,7 @@ pub mod tuple;
 pub mod unit;
 
 /// This type represents an LKQL built-in type with all its information.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug)]
 pub struct BuiltinType {
     /// Name of the type as it should be displayed to the user.
     pub name: &'static str,
@@ -121,7 +121,7 @@ impl BuiltinType {
 }
 
 /// This type represents a field in a built-in type.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum BuiltinTypeField {
     /// If the field is a constant value.
     Value(RuntimeValue),

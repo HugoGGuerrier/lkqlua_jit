@@ -137,14 +137,14 @@ impl ExecutionUnit {
 /// This structure represents a node of the intermediate tree. The structure of
 /// the tree is made to easily represents the program semantics while being
 /// convenient to analyze and compile to LuaJIT bytecode.
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub struct Node {
     pub origin_location: SourceSection,
     pub variant: NodeVariant,
 }
 
 /// This enumeration represents the variant part of an [`Node`].
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub enum NodeVariant {
     // --- Call expressions
     FunCall {
