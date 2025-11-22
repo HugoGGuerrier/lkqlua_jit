@@ -4,7 +4,7 @@
 //! tree into a [`crate::bytecode::BytecodeBuffer`].
 
 use std::{
-    cell::{Ref, RefCell, RefMut},
+    cell::RefCell,
     collections::{HashMap, HashSet},
     rc::Rc,
     u8, usize,
@@ -87,15 +87,15 @@ impl ExecutionUnit {
     /// unit using the [`Self::internal_compile`] method.
     fn open_frame_and_compile(&self, ctx: &mut CompilationContext) {
         // Open a new semantic frame for this function
-        let parent_frame = ctx.current_frame.clone();
+        let parent_frame = ctx.frame.clone();
         let current_frame = Rc::new(RefCell::new(Frame::new(Some(parent_frame.clone()))));
-        ctx.current_frame = current_frame;
+        ctx.frame = current_frame;
 
         // Compile the execution unit
         self.internal_compile(ctx);
 
         // Restore the parent frame
-        ctx.current_frame = parent_frame;
+        ctx.frame = parent_frame;
         ctx.current_data().has_child = true;
     }
 
@@ -132,7 +132,7 @@ impl ExecutionUnit {
                 }
 
                 // Reserve a slot for the module table
-                let result_tmp = ctx.current_frame_mut().get_tmp();
+                let result_tmp = ctx.frame.borrow_mut().get_tmp();
 
                 // Create a source section at the end of the module
                 let end_source_section = SourceSection {
@@ -145,7 +145,7 @@ impl ExecutionUnit {
                 let empty_table_cst = ctx.current_data().constants.get_empty_table();
                 extended_instructions.ad(&end_source_section, TDUP, result_tmp, empty_table_cst);
                 for symbol in symbols {
-                    let local_slot = ctx.current_frame().get_local(&symbol.text).unwrap();
+                    let local_slot = ctx.frame.borrow().get_local(&symbol.text).unwrap();
                     emit_table_member_write(
                         ctx,
                         &mut extended_instructions,
@@ -157,11 +157,11 @@ impl ExecutionUnit {
                 }
 
                 // Emit local values closing
-                emit_closing_instruction(&ctx.current_frame(), &mut extended_instructions);
+                emit_closing_instruction(&ctx.frame.borrow(), &mut extended_instructions);
 
                 // Emit returning of the module table
                 extended_instructions.ad(&end_source_section, RET1, result_tmp, 2);
-                ctx.current_frame_mut().release_slot(result_tmp);
+                ctx.frame.borrow_mut().release_slot(result_tmp);
             }
             ExecutionUnitVariant::Function { params, body } => {
                 // Set the argument count
@@ -169,7 +169,7 @@ impl ExecutionUnit {
 
                 // Reserve the first slot of the frame, by convention, this
                 // slot is used to provide named arguments.
-                let named_args_slot = ctx.current_frame_mut().get_tmp();
+                let named_args_slot = ctx.frame.borrow_mut().get_tmp();
 
                 // Get the function parameters identifiers
                 let param_identifiers = params.iter().map(|(s, _)| s.clone()).collect::<Vec<_>>();
@@ -180,7 +180,7 @@ impl ExecutionUnit {
                 // Emit instructions to ensure all parameters have a valid and
                 // unique value.
                 for (param_id, maybe_default_value) in params {
-                    let param_slot = ctx.current_frame().get_local(&param_id.text).unwrap();
+                    let param_slot = ctx.frame.borrow().get_local(&param_id.text).unwrap();
 
                     // Create working labels
                     let no_value_label = extended_instructions.new_label();
@@ -252,7 +252,8 @@ impl ExecutionUnit {
                     extended_instructions.label(next_label);
 
                     // Finally, set the parameter slot as initialized
-                    ctx.current_frame_mut()
+                    ctx.frame
+                        .borrow_mut()
                         .init_local(&param_id.text, next_label);
                 }
 
@@ -267,7 +268,7 @@ impl ExecutionUnit {
         extended_instructions.label(death_label);
 
         // Emit additional instructions to initialize closed bindings
-        emit_closed_bindings_init(&ctx.current_frame(), &mut extended_instructions);
+        emit_closed_bindings_init(&ctx.frame.borrow(), &mut extended_instructions);
 
         // Perform post compilation assertions
         assert!(arg_count <= u8::MAX as usize, "Too many arguments for prototype");
@@ -297,7 +298,7 @@ impl ExecutionUnit {
 
         // Create the bytecode prototype and add it to the current context
         // result.
-        match &ctx.current_frame.borrow().variant {
+        match &ctx.frame.borrow().variant {
             FrameVariant::Semantic { maximum_size, up_values, .. } => {
                 // Sort up-values from their index
                 let mut sorted_up_values = up_values
@@ -417,7 +418,7 @@ impl Node {
                     call_slots.count() - 1,
                 );
                 output.ad(&self.origin_location, MOV, result_slot, call_slots.first as u16);
-                ctx.current_frame_mut().release_slots(call_slots);
+                ctx.frame.borrow_mut().release_slots(call_slots);
             }
 
             // --- Composite expressions
@@ -519,7 +520,7 @@ impl Node {
                 output.label(death_label);
 
                 // Finally, restore the previous frame as the current one
-                ctx.current_frame = parent_frame;
+                ctx.frame = parent_frame;
             }
 
             // --- Lazy sequence creation
@@ -609,7 +610,7 @@ impl Node {
                     // The concatenation operation requires that values are
                     // stored in contiguous slots.
                     MiscOperatorVariant::Concat => {
-                        let operand_slots = ctx.current_frame_mut().reserve_contiguous_slots(2);
+                        let operand_slots = ctx.frame.borrow_mut().reserve_contiguous_slots(2);
                         left.compile_as_value(ctx, owning_unit, output, operand_slots.first);
                         right.compile_as_value(ctx, owning_unit, output, operand_slots.last);
                         (
@@ -662,14 +663,13 @@ impl Node {
 
                 // Then compile the initialization value and place it into the
                 // reserved slot.
-                let binding_slot = ctx.current_frame().get_local(&symbol.text).unwrap();
+                let binding_slot = ctx.frame.borrow().get_local(&symbol.text).unwrap();
                 val.compile_as_value(ctx, owning_unit, output, binding_slot.slot);
 
                 // Then label the next instruction as the birthing one and flag
                 // the slot as initialized in the current frame.
                 output.label(birth_label);
-                ctx.current_frame_mut()
-                    .init_local(&symbol.text, birth_label);
+                ctx.frame.borrow_mut().init_local(&symbol.text, birth_label);
             }
             NodeVariant::InitLocalFun { symbol, child_index } => {
                 Self::compile_child_unit(
@@ -683,12 +683,12 @@ impl Node {
             }
             NodeVariant::ReadSymbol(identifier) => {
                 // First try getting the symbol in the local frame
-                let maybe_local_binding = ctx.current_frame().get_local(&identifier.text);
+                let maybe_local_binding = ctx.frame.borrow().get_local(&identifier.text);
                 if let Some(BindingData { slot, is_init: true, .. }) = maybe_local_binding {
                     output.ad(&self.origin_location, MOV, result_slot, slot as u16);
                 } else {
                     // Then try to look in the up-values
-                    let maybe_up_value = ctx.current_frame_mut().get_up_value(&identifier.text);
+                    let maybe_up_value = ctx.frame.borrow_mut().get_up_value(&identifier.text);
                     if let Some(up_value) = maybe_up_value {
                         output.ad(&self.origin_location, UGET, result_slot, up_value.index as u16);
                         if !up_value.is_safe {
@@ -733,7 +733,8 @@ impl Node {
             NodeVariant::LambdaFun(child_index) => {
                 // Add the lambda symbol in the frame locals
                 let lambda_name = &owning_unit.children_units[*child_index as usize].name;
-                ctx.current_frame_mut()
+                ctx.frame
+                    .borrow_mut()
                     .bind_local(lambda_name, &self.origin_location);
 
                 // Compile the child unit
@@ -747,7 +748,7 @@ impl Node {
                 );
 
                 // Finally move the lambda value in the result slot
-                let lambda_binding = ctx.current_frame().get_local(lambda_name).unwrap();
+                let lambda_binding = ctx.frame.borrow().get_local(lambda_name).unwrap();
                 output.ad(&self.origin_location, MOV, result_slot, lambda_binding.slot as u16);
             }
 
@@ -906,7 +907,7 @@ impl Node {
             let result_slot = if already_reserved_slot.is_some() {
                 already_reserved_slot.unwrap()
             } else {
-                ctx.current_frame_mut().get_tmp()
+                ctx.frame.borrow_mut().get_tmp()
             };
             node.compile_as_value(ctx, owning_unit, output, result_slot);
             if already_reserved_slot.is_some() {
@@ -961,13 +962,14 @@ impl Node {
                 );
 
                 // Then free all slots except the first one that contains the result
-                ctx.current_frame_mut()
+                ctx.frame
+                    .borrow_mut()
                     .release_slots(call_slots.sub_range(Some(1), None));
                 ValueAccess::OwnedTmp(call_slots.first)
             }
 
             NodeVariant::ReadSymbol(identifier) => {
-                let maybe_local_binding = ctx.current_frame().get_local(&identifier.text);
+                let maybe_local_binding = ctx.frame.borrow().get_local(&identifier.text);
                 if let Some(BindingData { slot, is_init: true, .. }) = maybe_local_binding {
                     ValueAccess::Direct(slot)
                 } else {
@@ -1306,7 +1308,7 @@ impl Node {
                 };
 
                 // Enclose required bindings
-                emit_closing_instruction(&ctx.current_frame(), output);
+                emit_closing_instruction(&ctx.frame.borrow(), output);
 
                 // Emit a function tail call
                 output.ad(
@@ -1337,7 +1339,7 @@ impl Node {
             // In the case of a block expression, compile its result as return
             NodeVariant::BlockExpr { local_symbols, body, val } => {
                 // Compile the block body
-                let body_elem_tmp = ctx.current_frame_mut().get_tmp();
+                let body_elem_tmp = ctx.frame.borrow_mut().get_tmp();
                 let parent_frame = Self::compile_block_body(
                     ctx,
                     owning_unit,
@@ -1346,7 +1348,7 @@ impl Node {
                     local_symbols,
                     body,
                 );
-                ctx.current_frame_mut().release_slot(body_elem_tmp);
+                ctx.frame.borrow_mut().release_slot(body_elem_tmp);
 
                 // The compile the value as a returning node
                 val.compile_as_function_body(ctx, owning_unit, output);
@@ -1357,14 +1359,14 @@ impl Node {
                 output.label(death_label);
 
                 // Finally, restore the previous frame as the current one
-                ctx.current_frame = parent_frame;
+                ctx.frame = parent_frame;
             }
 
             // In all other cases, just get an access to the value and return
             // it.
             _ => {
                 let value_access = self.compile_as_access(ctx, owning_unit, output, None);
-                emit_closing_instruction(&ctx.current_frame(), output);
+                emit_closing_instruction(&ctx.frame.borrow(), output);
                 output.ad(&self.origin_location, RET1, value_access.slot(), 2);
                 value_access.release(ctx);
             }
@@ -1386,7 +1388,7 @@ impl Node {
         let birth_label = output.new_label();
 
         // Get the slot to place the functional value in
-        let binding_slot = ctx.current_frame().get_local(child_symbol).unwrap();
+        let binding_slot = ctx.frame.borrow().get_local(child_symbol).unwrap();
 
         // Create the child unit identifier
         let child_unit = &owning_unit.children_units[child_index];
@@ -1394,7 +1396,7 @@ impl Node {
 
         // Flag the local slot as initialized before compiling the
         // unit to allow the latter to be recursive.
-        ctx.current_frame_mut().init_local_with_debug_name(
+        ctx.frame.borrow_mut().init_local_with_debug_name(
             child_symbol,
             &child_unit_id,
             birth_label,
@@ -1503,7 +1505,8 @@ impl Node {
     ) -> SlotRange {
         // Reserve slots for the call
         let call_slots = ctx
-            .current_frame_mut()
+            .frame
+            .borrow_mut()
             .reserve_contiguous_slots(positional_args.len() + 3);
 
         // Evaluate the callee and place it in the first of the call slots.
@@ -1540,7 +1543,8 @@ impl Node {
     ) -> SlotRange {
         // Reserve all slots for the method call
         let call_slots = ctx
-            .current_frame_mut()
+            .frame
+            .borrow_mut()
             .reserve_contiguous_slots(positional_args.len() + 4);
         let callee_slot = call_slots.first;
         let this_slot = call_slots.first + 3;
@@ -1631,9 +1635,9 @@ impl Node {
     ) -> Rc<RefCell<Frame>> {
         // Open a new lexical frame that will contains all symbols
         // declared in the block.
-        let parent_frame = ctx.current_frame.clone();
+        let parent_frame = ctx.frame.clone();
         let current_frame = Rc::new(RefCell::new(Frame::new_lexical(parent_frame.clone())));
-        ctx.current_frame = current_frame;
+        ctx.frame = current_frame;
 
         // Insert all locals in the frame
         declare_locals(ctx, local_symbols);
@@ -1791,7 +1795,7 @@ impl ExtendedInstructionBuffer {
     /// Shortcut function to emit a "goto" instruction in the provided
     /// compilation context.
     fn cgoto(&mut self, ctx: &CompilationContext, label: Label) {
-        self.goto(label, ctx.current_frame().peek_next_slot());
+        self.goto(label, ctx.frame.borrow().peek_next_slot());
     }
 }
 
@@ -1800,7 +1804,7 @@ impl ExtendedInstructionBuffer {
 /// corresponding diagnostics in the compilation context.
 fn declare_locals(ctx: &mut CompilationContext, symbols: &Vec<Identifier>) {
     for symbol in symbols {
-        let maybe_local_slot = ctx.current_frame().is_conflicting(&symbol.text);
+        let maybe_local_slot = ctx.frame.borrow().is_conflicting(&symbol.text);
         if let Some(previous_binding) = maybe_local_slot {
             ctx.diagnostics.push(Report::from_error_template_with_hints(
                 &symbol.origin_location,
@@ -1812,7 +1816,8 @@ fn declare_locals(ctx: &mut CompilationContext, symbols: &Vec<Identifier>) {
                 )],
             ));
         } else {
-            ctx.current_frame_mut()
+            ctx.frame
+                .borrow_mut()
                 .bind_local(&symbol.text, &symbol.origin_location);
         }
     }
@@ -1840,13 +1845,13 @@ fn emit_runtime_error(
         .get_from_string(&runtime_error_instance.to_json_string());
 
     // Reserve temporary slots, fill them and call the function
-    let call_slots = ctx.current_frame_mut().reserve_contiguous_slots(3);
+    let call_slots = ctx.frame.borrow_mut().reserve_contiguous_slots(3);
     emit_global_read(ctx, output, maybe_error_location, call_slots.first, "error");
     output.ad_maybe_loc(maybe_error_location, KSTR, call_slots.last, message_cst);
     output.abc_maybe_loc(maybe_error_location, CALL, call_slots.first, 1, 2);
 
     // Free slots allocated for the call
-    ctx.current_frame_mut().release_slots(call_slots);
+    ctx.frame.borrow_mut().release_slots(call_slots);
 }
 
 /// Util function to get a table element by its index.
@@ -1887,7 +1892,7 @@ fn _access_table_index(
     if index <= u8::MAX as usize {
         output.abc(origin_location, immediate_access_op, working_slot, table_slot, index as u8);
     } else if index <= i32::MAX as usize {
-        let index_tmp = ctx.current_frame.borrow_mut().get_tmp();
+        let index_tmp = ctx.frame.borrow_mut().get_tmp();
         let index_cst = ctx
             .exec_unit_data_stack
             .last_mut()
@@ -1896,7 +1901,7 @@ fn _access_table_index(
             .get_from_int(index as i32);
         output.ad(origin_location, KNUM, index_tmp, index_cst);
         output.abc(origin_location, slot_access_op, working_slot, table_slot, index_tmp);
-        ctx.current_frame.borrow_mut().release_slot(index_tmp);
+        ctx.frame.borrow_mut().release_slot(index_tmp);
     } else {
         panic!("Big integers aren't handled for now")
     }
@@ -1967,7 +1972,7 @@ fn _access_table_field(
             member_name_cst as u8,
         );
     } else {
-        let field_tmp = ctx.current_frame_mut().get_tmp();
+        let field_tmp = ctx.frame.borrow_mut().get_tmp();
         output.ad_maybe_loc(maybe_origin_location, KSTR, field_tmp, member_name_cst);
         output.abc_maybe_loc(
             maybe_origin_location,
@@ -1976,7 +1981,7 @@ fn _access_table_field(
             table_slot,
             field_tmp,
         );
-        ctx.current_frame_mut().release_slot(field_tmp);
+        ctx.frame.borrow_mut().release_slot(field_tmp);
     }
 }
 
@@ -2002,7 +2007,7 @@ fn emit_set_metatable(
     type_name: &str,
 ) {
     // Get slots for the call
-    let call_slots = ctx.current_frame_mut().reserve_contiguous_slots(4);
+    let call_slots = ctx.frame.borrow_mut().reserve_contiguous_slots(4);
 
     // Get the "setmetatable", fill arguments and make a call
     emit_global_read(ctx, output, maybe_origin_location, call_slots.first, "setmetatable");
@@ -2017,7 +2022,7 @@ fn emit_set_metatable(
     output.abc_maybe_loc(maybe_origin_location, CALL, call_slots.first, 1, 3);
 
     // Release call slot
-    ctx.current_frame_mut().release_slots(call_slots);
+    ctx.frame.borrow_mut().release_slots(call_slots);
 }
 
 /// Emit instructions to check that the type of the value stored in the
@@ -2035,7 +2040,7 @@ fn emit_type_check(
     let next_label = output.new_label();
 
     // First get the type tag of the actual value
-    let actual_tag = ctx.current_frame_mut().get_tmp();
+    let actual_tag = ctx.frame.borrow_mut().get_tmp();
     emit_table_member_read(
         ctx,
         output,
@@ -2056,11 +2061,11 @@ fn emit_type_check(
             .get_from_int(expected_type.tag as i32),
     );
     output.cgoto(ctx, next_label);
-    ctx.current_frame_mut().release_slot(actual_tag);
+    ctx.frame.borrow_mut().release_slot(actual_tag);
 
     // Now emit the code to raise a runtime error in the case where type tags
     // don't match.
-    let actual_name = ctx.current_frame_mut().get_tmp();
+    let actual_name = ctx.frame.borrow_mut().get_tmp();
     emit_table_member_read(
         ctx,
         output,
@@ -2079,7 +2084,7 @@ fn emit_type_check(
             DynamicErrorArg::LocalValue(actual_name),
         ],
     );
-    ctx.current_frame_mut().release_slot(actual_name);
+    ctx.frame.borrow_mut().release_slot(actual_name);
 
     // Finally label the next instruction
     output.label(next_label);
@@ -2140,7 +2145,7 @@ impl ValueAccess {
 
     fn release(&self, ctx: &mut CompilationContext) {
         match self {
-            ValueAccess::OwnedTmp(s) => ctx.current_frame_mut().release_slot(*s),
+            ValueAccess::OwnedTmp(s) => ctx.frame.borrow_mut().release_slot(*s),
             ValueAccess::Direct(_) | &ValueAccess::BorrowedTmp(_) => (),
         }
     }
@@ -2154,7 +2159,7 @@ struct CompilationContext {
     /// The frame that is currently being used in the compilation process. This
     /// stores all information about local symbols, up-values and temporary
     /// slots.
-    current_frame: Rc<RefCell<Frame>>,
+    frame: Rc<RefCell<Frame>>,
 
     /// A stack of compilation data, the last element being the current one.
     /// Each element stores information about the currently compiled execution
@@ -2178,7 +2183,7 @@ impl CompilationContext {
     fn new() -> Self {
         Self {
             builtins: get_builtin_bindings().iter().map(|b| b.name).collect(),
-            current_frame: Rc::new(RefCell::new(Frame::new(None))),
+            frame: Rc::new(RefCell::new(Frame::new(None))),
             exec_unit_data_stack: Vec::new(),
             prototypes: Vec::new(),
             runtime_data: RuntimeData::new(),
@@ -2192,25 +2197,11 @@ impl CompilationContext {
         self.exec_unit_data_stack.last_mut().unwrap()
     }
 
-    /// Get a reference to the current frame.
-    fn current_frame(&self) -> Ref<'_, Frame> {
-        self.current_frame.borrow()
-    }
-
-    /// Get a mutable reference to the current frame.
-    fn current_frame_mut(&self) -> RefMut<'_, Frame> {
-        self.current_frame.borrow_mut()
-    }
-
     /// Util function to release all local bindings of the current frame and
     /// store remaining data in the current [`ExecUnitCompilationData`]
     /// instance.
     fn release_locals(&mut self, death_label: Label) {
-        let old_bindings = self
-            .current_frame_mut()
-            .bindings
-            .drain()
-            .collect::<Vec<_>>();
+        let old_bindings = self.frame.borrow_mut().bindings.drain().collect::<Vec<_>>();
         for (name, mut old_binding) in old_bindings {
             old_binding.death_label = death_label;
             self.current_data().dead_bindings.insert(name, old_binding);
