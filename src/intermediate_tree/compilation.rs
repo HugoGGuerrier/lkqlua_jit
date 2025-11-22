@@ -267,8 +267,23 @@ impl ExecutionUnit {
         ctx.release_locals(death_label);
         extended_instructions.label(death_label);
 
-        // Emit additional instructions to initialize closed bindings
-        emit_closed_bindings_init(&ctx.frame.borrow(), &mut extended_instructions);
+        // Emit additional instructions to initialize unsafely closed bindings,
+        // they are inserted before all other instructions.
+        for binding in ctx.frame.borrow().bindings.values() {
+            if binding.closing_kind == ClosingKind::Unsafe {
+                extended_instructions.insert_instruction(
+                    0,
+                    ExtendedInstruction {
+                        origin_location: None,
+                        variant: ExtendedInstructionVariant::AD {
+                            op_code: KPRI,
+                            a: binding.slot,
+                            d: PRIM_NIL,
+                        },
+                    },
+                );
+            }
+        }
 
         // Perform post compilation assertions
         assert!(arg_count <= u8::MAX as usize, "Too many arguments for prototype");
@@ -2101,27 +2116,6 @@ pub fn emit_closing_instruction(frame: &Frame, output: &mut ExtendedInstructionB
             }
         }
         FrameVariant::Lexical => emit_closing_instruction(&frame.parent_frame().unwrap(), output),
-    }
-}
-
-/// Emit instructions in provided output to initialize closed binding that
-/// requires it.
-pub fn emit_closed_bindings_init(frame: &Frame, output: &mut ExtendedInstructionBuffer) {
-    // Set bindings that are unsafely closed to nil
-    for binding in frame.bindings.values() {
-        if binding.closing_kind == ClosingKind::Unsafe {
-            output.insert_instruction(
-                0,
-                ExtendedInstruction {
-                    origin_location: None,
-                    variant: ExtendedInstructionVariant::AD {
-                        op_code: KPRI,
-                        a: binding.slot,
-                        d: PRIM_NIL,
-                    },
-                },
-            );
-        }
     }
 }
 
