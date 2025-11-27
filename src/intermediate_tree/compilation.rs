@@ -60,7 +60,7 @@ impl ExecutionUnit {
         source_repo: &SourceRepository,
     ) -> Result<(BytecodeBuffer, RuntimeData), Report> {
         // Open the initial compilation context and create the prototypes vector
-        let mut compile_context = CompilationContext::new();
+        let mut compile_context = CompilationContext::new(self);
 
         // Compile the current execution unit
         self.internal_compile(&mut compile_context);
@@ -85,7 +85,10 @@ impl ExecutionUnit {
 
     /// Open a new frame in the compilation context and compile this execution
     /// unit using the [`Self::internal_compile`] method.
-    fn open_frame_and_compile(&self, ctx: &mut CompilationContext) {
+    fn open_frame_and_compile<'a, 'b>(&'a self, ctx: &mut CompilationContext<'b>)
+    where
+        'a: 'b,
+    {
         // Open a new semantic frame for this function
         let parent_frame = ctx.frame.clone();
         let current_frame = Rc::new(RefCell::new(Frame::new(Some(parent_frame.clone()))));
@@ -101,7 +104,14 @@ impl ExecutionUnit {
 
     /// Compile the execution unit and all its children (direct and indirect
     /// ones), and place the result in the provided  `output` buffer.
-    fn internal_compile(&self, ctx: &mut CompilationContext) {
+    fn internal_compile<'a, 'b>(&'a self, ctx: &mut CompilationContext<'b>)
+    where
+        'a: 'b,
+    {
+        // Save the previous execution unit and set `self` as the current one
+        let previous_unit = ctx.unit;
+        ctx.unit = self;
+
         // Start by adding a new compilation data in the context
         let new_id = ctx
             .exec_unit_data_stack
@@ -126,8 +136,7 @@ impl ExecutionUnit {
 
                 // Compile module elements
                 for elem in elements {
-                    let elem_access =
-                        elem.compile_as_access(ctx, self, &mut extended_instructions, None);
+                    let elem_access = elem.compile_as_access(ctx, &mut extended_instructions, None);
                     elem_access.release(ctx);
                 }
 
@@ -211,7 +220,6 @@ impl ExecutionUnit {
                     if let Some(default_value) = maybe_default_value {
                         default_value.compile_as_value(
                             ctx,
-                            self,
                             &mut extended_instructions,
                             param_slot.slot,
                         );
@@ -258,7 +266,7 @@ impl ExecutionUnit {
                 }
 
                 // The compile the body as a returning node
-                body.compile_as_function_body(ctx, self, &mut extended_instructions);
+                body.compile_as_function_body(ctx, &mut extended_instructions);
             }
         };
 
@@ -361,6 +369,9 @@ impl ExecutionUnit {
             data.identifier,
             instruction_locations,
         );
+
+        // Finish by restoring the previous compilation context
+        ctx.unit = previous_unit;
     }
 }
 
@@ -370,11 +381,9 @@ impl Node {
     /// execution.
     /// Instructions produced by this compilation are placed in the `output`
     /// vector.
-    /// The `owning_unit` is the execution unit that this node belongs to.
     fn compile_as_value(
         &self,
         ctx: &mut CompilationContext,
-        owning_unit: &ExecutionUnit,
         output: &mut ExtendedInstructionBuffer,
         result_slot: u8,
     ) {
@@ -396,7 +405,6 @@ impl Node {
                     NodeVariant::FunCall { callee, positional_args, named_args } => {
                         Self::prepare_function_call(
                             ctx,
-                            owning_unit,
                             output,
                             &self.origin_location,
                             callee,
@@ -412,7 +420,6 @@ impl Node {
                         named_args,
                     } => Self::prepare_method_call(
                         ctx,
-                        owning_unit,
                         output,
                         &self.origin_location,
                         prefix,
@@ -438,8 +445,7 @@ impl Node {
 
             // --- Composite expressions
             NodeVariant::DottedExpr { prefix, suffix, is_safe } => {
-                let prefix_access =
-                    prefix.compile_as_access(ctx, owning_unit, output, Some(result_slot));
+                let prefix_access = prefix.compile_as_access(ctx, output, Some(result_slot));
                 Self::compile_dot_access(
                     ctx,
                     output,
@@ -454,8 +460,8 @@ impl Node {
             NodeVariant::IndexExpr { indexed_val, index, is_safe } => {
                 // Get the access to the indexed value and to the index
                 let indexed_value_access =
-                    indexed_val.compile_as_access(ctx, owning_unit, output, Some(result_slot));
-                let index_access = index.compile_as_access(ctx, owning_unit, output, None);
+                    indexed_val.compile_as_access(ctx, output, Some(result_slot));
+                let index_access = index.compile_as_access(ctx, output, None);
 
                 // Emit code to the the value at the specified index
                 output.abc(
@@ -502,32 +508,26 @@ impl Node {
                 let next_label = output.new_label();
 
                 // Compile the condition as a branching node
-                condition.compile_as_branching(ctx, owning_unit, output, alternative_label);
+                condition.compile_as_branching(ctx, output, alternative_label);
 
                 // Then, compile the consequence, that is going to be executed
                 // if the condition is true
-                consequence.compile_as_value(ctx, owning_unit, output, result_slot);
+                consequence.compile_as_value(ctx, output, result_slot);
                 output.cgoto(ctx, next_label);
 
                 // Finally, compile the alternative with the appropriate label
                 output.label(alternative_label);
-                alternative.compile_as_value(ctx, owning_unit, output, result_slot);
+                alternative.compile_as_value(ctx, output, result_slot);
                 output.label(next_label);
             }
             NodeVariant::BlockExpr { local_symbols, body, val } => {
                 // Compile the block body
-                let parent_frame = Self::compile_block_body(
-                    ctx,
-                    owning_unit,
-                    output,
-                    result_slot,
-                    local_symbols,
-                    body,
-                );
+                let parent_frame =
+                    Self::compile_block_body(ctx, output, result_slot, local_symbols, body);
 
                 // Then compile the expression representing the value of the
                 // block.
-                val.compile_as_value(ctx, owning_unit, output, result_slot);
+                val.compile_as_value(ctx, output, result_slot);
 
                 // Release the block local bindings
                 let death_label = output.new_label();
@@ -551,7 +551,6 @@ impl Node {
                 {
                     already_compiled = compile_arith_bin_op_with_constant_operand(
                         ctx,
-                        owning_unit,
                         output,
                         result_slot,
                         self,
@@ -566,7 +565,6 @@ impl Node {
                 {
                     already_compiled = compile_arith_bin_op_with_constant_operand(
                         ctx,
-                        owning_unit,
                         output,
                         result_slot,
                         self,
@@ -580,9 +578,8 @@ impl Node {
                 // If the node hasn't been compile yet, fallback on emitting
                 // the fully slot-based variant.
                 if !already_compiled {
-                    let left_access =
-                        left.compile_as_access(ctx, owning_unit, output, Some(result_slot));
-                    let right_access = right.compile_as_access(ctx, owning_unit, output, None);
+                    let left_access = left.compile_as_access(ctx, output, Some(result_slot));
+                    let right_access = right.compile_as_access(ctx, output, None);
                     let op = match operator.variant {
                         ArithOperatorVariant::Plus => ADDVV,
                         ArithOperatorVariant::Minus => SUBVV,
@@ -607,7 +604,7 @@ impl Node {
 
                 // Compile the current node as branching to emit short
                 // circuiting instructions
-                self.compile_as_branching(ctx, owning_unit, output, if_false_label);
+                self.compile_as_branching(ctx, output, if_false_label);
 
                 // Emit the code to set the result to "true"
                 output.ad(&self.origin_location, KPRI, result_slot, PRIM_TRUE);
@@ -626,8 +623,8 @@ impl Node {
                     // stored in contiguous slots.
                     MiscOperatorVariant::Concat => {
                         let operand_slots = ctx.frame.borrow_mut().reserve_contiguous_slots(2);
-                        left.compile_as_value(ctx, owning_unit, output, operand_slots.first);
-                        right.compile_as_value(ctx, owning_unit, output, operand_slots.last);
+                        left.compile_as_value(ctx, output, operand_slots.first);
+                        right.compile_as_value(ctx, output, operand_slots.last);
                         (
                             ValueAccess::OwnedTmp(operand_slots.first),
                             ValueAccess::OwnedTmp(operand_slots.last),
@@ -650,8 +647,7 @@ impl Node {
 
             // --- Unary operations
             NodeVariant::ArithUnOp { operator, operand } => {
-                let operand_access =
-                    operand.compile_as_access(ctx, owning_unit, output, Some(result_slot));
+                let operand_access = operand.compile_as_access(ctx, output, Some(result_slot));
                 let op = match operator.variant {
                     ArithOperatorVariant::Plus => MOV,
                     ArithOperatorVariant::Minus => UNM,
@@ -661,8 +657,7 @@ impl Node {
                 operand_access.release(ctx);
             }
             NodeVariant::LogicUnOp { operator, operand } => {
-                let operand_access =
-                    operand.compile_as_access(ctx, owning_unit, output, Some(result_slot));
+                let operand_access = operand.compile_as_access(ctx, output, Some(result_slot));
                 let op = match operator.variant {
                     LogicOperatorVariant::Not => NOT,
                     _ => unreachable!(),
@@ -679,7 +674,7 @@ impl Node {
                 // Then compile the initialization value and place it into the
                 // reserved slot.
                 let binding_slot = ctx.frame.borrow().get_local(&symbol.text).unwrap();
-                val.compile_as_value(ctx, owning_unit, output, binding_slot.slot);
+                val.compile_as_value(ctx, output, binding_slot.slot);
 
                 // Then label the next instruction as the birthing one and flag
                 // the slot as initialized in the current frame.
@@ -689,7 +684,6 @@ impl Node {
             NodeVariant::InitLocalFun { symbol, child_index } => {
                 Self::compile_child_unit(
                     ctx,
-                    owning_unit,
                     output,
                     &self.origin_location,
                     &symbol.text,
@@ -747,7 +741,7 @@ impl Node {
             // --- Lambda function access
             NodeVariant::LambdaFun(child_index) => {
                 // Add the lambda symbol in the frame locals
-                let lambda_name = &owning_unit.children_units[*child_index as usize].name;
+                let lambda_name = &ctx.unit.children_units[*child_index as usize].name;
                 ctx.frame
                     .borrow_mut()
                     .bind_local(lambda_name, &self.origin_location);
@@ -755,7 +749,6 @@ impl Node {
                 // Compile the child unit
                 Self::compile_child_unit(
                     ctx,
-                    owning_unit,
                     output,
                     &self.origin_location,
                     lambda_name,
@@ -770,7 +763,7 @@ impl Node {
             // --- Type checkers
             NodeVariant::CheckType { expression, expected_type } => {
                 // Compile the expression in the result slot
-                expression.compile_as_value(ctx, owning_unit, output, result_slot);
+                expression.compile_as_value(ctx, output, result_slot);
 
                 // Then emit type checking instructions
                 emit_type_check(
@@ -787,7 +780,6 @@ impl Node {
                 // Compile nodes inside the tuple literals and place them in a table
                 Self::compile_table(
                     ctx,
-                    owning_unit,
                     output,
                     result_slot,
                     &self.origin_location,
@@ -812,7 +804,6 @@ impl Node {
             NodeVariant::ObjectLiteral(items) => {
                 Self::compile_table(
                     ctx,
-                    owning_unit,
                     output,
                     result_slot,
                     &self.origin_location,
@@ -840,7 +831,6 @@ impl Node {
         /// optimized way, returning whether it is successful.
         fn compile_arith_bin_op_with_constant_operand(
             ctx: &mut CompilationContext,
-            owning_unit: &ExecutionUnit,
             output: &mut ExtendedInstructionBuffer,
             result_slot: u8,
             operation: &Node,
@@ -878,7 +868,7 @@ impl Node {
                 // Emit the code the perform the arithmetic operation with the
                 // constant operand.
                 let operand_access =
-                    variable_operand.compile_as_access(ctx, owning_unit, output, Some(result_slot));
+                    variable_operand.compile_as_access(ctx, output, Some(result_slot));
                 output.abc(
                     &operation.origin_location,
                     op,
@@ -908,13 +898,11 @@ impl Node {
     fn compile_as_access(
         &self,
         ctx: &mut CompilationContext,
-        owning_unit: &ExecutionUnit,
         output: &mut ExtendedInstructionBuffer,
         already_reserved_slot: Option<u8>,
     ) -> ValueAccess {
         fn fallback(
             ctx: &mut CompilationContext,
-            owning_unit: &ExecutionUnit,
             output: &mut ExtendedInstructionBuffer,
             already_reserved_slot: Option<u8>,
             node: &Node,
@@ -924,7 +912,7 @@ impl Node {
             } else {
                 ctx.frame.borrow_mut().get_tmp()
             };
-            node.compile_as_value(ctx, owning_unit, output, result_slot);
+            node.compile_as_value(ctx, output, result_slot);
             if already_reserved_slot.is_some() {
                 ValueAccess::BorrowedTmp(result_slot)
             } else {
@@ -939,7 +927,6 @@ impl Node {
                     NodeVariant::FunCall { callee, positional_args, named_args } => {
                         Self::prepare_function_call(
                             ctx,
-                            owning_unit,
                             output,
                             &self.origin_location,
                             callee,
@@ -955,7 +942,6 @@ impl Node {
                         named_args,
                     } => Self::prepare_method_call(
                         ctx,
-                        owning_unit,
                         output,
                         &self.origin_location,
                         prefix,
@@ -988,14 +974,13 @@ impl Node {
                 if let Some(BindingData { slot, is_init: true, .. }) = maybe_local_binding {
                     ValueAccess::Direct(slot)
                 } else {
-                    fallback(ctx, owning_unit, output, already_reserved_slot, self)
+                    fallback(ctx, output, already_reserved_slot, self)
                 }
             }
 
             NodeVariant::CheckType { expression, expected_type } => {
                 // Compile the expression as an access
-                let res =
-                    expression.compile_as_access(ctx, owning_unit, output, already_reserved_slot);
+                let res = expression.compile_as_access(ctx, output, already_reserved_slot);
 
                 // Check the type of the nested expression
                 emit_type_check(
@@ -1009,7 +994,7 @@ impl Node {
                 // Return the nested expression's result
                 res
             }
-            _ => fallback(ctx, owning_unit, output, already_reserved_slot, self),
+            _ => fallback(ctx, output, already_reserved_slot, self),
         }
     }
 
@@ -1021,22 +1006,13 @@ impl Node {
     fn compile_as_branching(
         &self,
         ctx: &mut CompilationContext,
-        owning_unit: &ExecutionUnit,
         output: &mut ExtendedInstructionBuffer,
         if_false_label: Label,
     ) {
         // Use the `internal_compile` function to compile the node as a
         // branching one.
         let if_true_label = output.new_label();
-        internal_compile(
-            self,
-            ctx,
-            owning_unit,
-            output,
-            if_true_label,
-            if_false_label,
-            BranchingKind::IfFalse,
-        );
+        internal_compile(self, ctx, output, if_true_label, if_false_label, BranchingKind::IfFalse);
         output.label(if_true_label);
 
         /// Internal branching compilation function, this is used to hide
@@ -1044,7 +1020,6 @@ impl Node {
         fn internal_compile(
             node: &Node,
             ctx: &mut CompilationContext,
-            owning_unit: &ExecutionUnit,
             output: &mut ExtendedInstructionBuffer,
             if_true_label: Label,
             if_false_label: Label,
@@ -1062,7 +1037,6 @@ impl Node {
                             internal_compile(
                                 left,
                                 ctx,
-                                owning_unit,
                                 output,
                                 if_true_label,
                                 eval_right_part_label,
@@ -1073,7 +1047,6 @@ impl Node {
                             internal_compile(
                                 left,
                                 ctx,
-                                owning_unit,
                                 output,
                                 eval_right_part_label,
                                 if_false_label,
@@ -1088,7 +1061,6 @@ impl Node {
                     internal_compile(
                         right,
                         ctx,
-                        owning_unit,
                         output,
                         if_true_label,
                         if_false_label,
@@ -1102,7 +1074,6 @@ impl Node {
                         (_, Some(right_constant_value)) => {
                             compile_comp_bin_op_with_constant_operand(
                                 ctx,
-                                owning_unit,
                                 output,
                                 node,
                                 operator,
@@ -1116,7 +1087,6 @@ impl Node {
                         (Some(left_constant_value), _) => {
                             compile_comp_bin_op_with_constant_operand(
                                 ctx,
-                                owning_unit,
                                 output,
                                 node,
                                 operator,
@@ -1134,8 +1104,8 @@ impl Node {
                     // the fully slot-based variant.
                     if !already_compiled {
                         // Get access to left and right values
-                        let left_access = left.compile_as_access(ctx, owning_unit, output, None);
-                        let right_access = right.compile_as_access(ctx, owning_unit, output, None);
+                        let left_access = left.compile_as_access(ctx, output, None);
+                        let right_access = right.compile_as_access(ctx, output, None);
 
                         // Get the inverted comparison operation code according to the
                         // operator.
@@ -1179,7 +1149,7 @@ impl Node {
                 // In all other cases, the node is compiled as an access and
                 // the value of the latter is tested to branch if required.
                 _ => {
-                    let result_access = node.compile_as_access(ctx, owning_unit, output, None);
+                    let result_access = node.compile_as_access(ctx, output, None);
                     let (op, label) = match branching_kind {
                         BranchingKind::IfTrue => (IST, if_true_label),
                         BranchingKind::IfFalse => (ISF, if_false_label),
@@ -1195,7 +1165,6 @@ impl Node {
         /// optimized way, returning whether it is successful.
         fn compile_comp_bin_op_with_constant_operand(
             ctx: &mut CompilationContext,
-            owning_unit: &ExecutionUnit,
             output: &mut ExtendedInstructionBuffer,
             operation: &Node,
             operator: &CompOperator,
@@ -1241,8 +1210,7 @@ impl Node {
             // Compile the node if possible
             if let Some((op, d)) = maybe_op_and_d {
                 // Get an access to the variable operand
-                let operand_access =
-                    variable_operand.compile_as_access(ctx, owning_unit, output, None);
+                let operand_access = variable_operand.compile_as_access(ctx, output, None);
 
                 // Emit the branching instruction
                 output.ad(&operation.origin_location, op, operand_access.slot(), d);
@@ -1283,7 +1251,6 @@ impl Node {
     fn compile_as_function_body(
         &self,
         ctx: &mut CompilationContext,
-        owning_unit: &ExecutionUnit,
         output: &mut ExtendedInstructionBuffer,
     ) {
         match &self.variant {
@@ -1294,7 +1261,6 @@ impl Node {
                     NodeVariant::FunCall { callee, positional_args, named_args } => {
                         Self::prepare_function_call(
                             ctx,
-                            owning_unit,
                             output,
                             &self.origin_location,
                             callee,
@@ -1310,7 +1276,6 @@ impl Node {
                         named_args,
                     } => Self::prepare_method_call(
                         ctx,
-                        owning_unit,
                         output,
                         &self.origin_location,
                         prefix,
@@ -1341,32 +1306,26 @@ impl Node {
                 let alternative_label = output.new_label();
 
                 // Compile the condition as a branching one
-                condition.compile_as_branching(ctx, owning_unit, output, alternative_label);
+                condition.compile_as_branching(ctx, output, alternative_label);
 
                 // Emit code to return the consequence value
-                consequence.compile_as_function_body(ctx, owning_unit, output);
+                consequence.compile_as_function_body(ctx, output);
 
                 // Emit code to return the alternative
                 output.label(alternative_label);
-                alternative.compile_as_function_body(ctx, owning_unit, output);
+                alternative.compile_as_function_body(ctx, output);
             }
 
             // In the case of a block expression, compile its result as return
             NodeVariant::BlockExpr { local_symbols, body, val } => {
                 // Compile the block body
                 let body_elem_tmp = ctx.frame.borrow_mut().get_tmp();
-                let parent_frame = Self::compile_block_body(
-                    ctx,
-                    owning_unit,
-                    output,
-                    body_elem_tmp,
-                    local_symbols,
-                    body,
-                );
+                let parent_frame =
+                    Self::compile_block_body(ctx, output, body_elem_tmp, local_symbols, body);
                 ctx.frame.borrow_mut().release_slot(body_elem_tmp);
 
                 // The compile the value as a returning node
-                val.compile_as_function_body(ctx, owning_unit, output);
+                val.compile_as_function_body(ctx, output);
 
                 // Release the block local bindings
                 let death_label = output.new_label();
@@ -1380,7 +1339,7 @@ impl Node {
             // In all other cases, just get an access to the value and return
             // it.
             _ => {
-                let value_access = self.compile_as_access(ctx, owning_unit, output, None);
+                let value_access = self.compile_as_access(ctx, output, None);
                 emit_closing_instruction(&ctx.frame.borrow(), output);
                 output.ad(&self.origin_location, RET1, value_access.slot(), 2);
                 value_access.release(ctx);
@@ -1393,7 +1352,6 @@ impl Node {
     /// with the child identifier as debug name.
     fn compile_child_unit(
         ctx: &mut CompilationContext,
-        owning_unit: &ExecutionUnit,
         output: &mut ExtendedInstructionBuffer,
         origin_location: &SourceSection,
         child_symbol: &str,
@@ -1406,7 +1364,7 @@ impl Node {
         let binding_slot = ctx.frame.borrow().get_local(child_symbol).unwrap();
 
         // Create the child unit identifier
-        let child_unit = &owning_unit.children_units[child_index];
+        let child_unit = &ctx.unit.children_units[child_index];
         let child_unit_id = child_unit.id(&ctx.current_data().identifier);
 
         // Flag the local slot as initialized before compiling the
@@ -1430,7 +1388,6 @@ impl Node {
     /// Util function used to compile a collection of nodes into a table value.
     fn compile_table(
         ctx: &mut CompilationContext,
-        owning_unit: &ExecutionUnit,
         output: &mut ExtendedInstructionBuffer,
         result_slot: u8,
         origin_location: &SourceSection,
@@ -1482,7 +1439,7 @@ impl Node {
         // Finally place values that cannot be represented with table constants
         // in the table.
         for (i, array_elem) in array_remains {
-            let elem_access = array_elem.compile_as_access(ctx, owning_unit, output, None);
+            let elem_access = array_elem.compile_as_access(ctx, output, None);
             emit_table_index_write(
                 ctx,
                 output,
@@ -1494,7 +1451,7 @@ impl Node {
             elem_access.release(ctx);
         }
         for (name, hash_elem) in hash_remains {
-            let elem_access = hash_elem.compile_as_access(ctx, owning_unit, output, None);
+            let elem_access = hash_elem.compile_as_access(ctx, output, None);
             emit_table_member_write(
                 ctx,
                 output,
@@ -1511,7 +1468,6 @@ impl Node {
     /// in which the function and arguments are placed.
     fn prepare_function_call(
         ctx: &mut CompilationContext,
-        owning_unit: &ExecutionUnit,
         output: &mut ExtendedInstructionBuffer,
         origin_location: &SourceSection,
         callee: &Node,
@@ -1525,12 +1481,11 @@ impl Node {
             .reserve_contiguous_slots(positional_args.len() + 3);
 
         // Evaluate the callee and place it in the first of the call slots.
-        callee.compile_as_value(ctx, owning_unit, output, call_slots.first);
+        callee.compile_as_value(ctx, output, call_slots.first);
 
         // Prepare arguments
         Self::compile_args(
             ctx,
-            owning_unit,
             output,
             origin_location,
             positional_args,
@@ -1547,7 +1502,6 @@ impl Node {
     /// in which the method and arguments (including 'this') are placed.
     fn prepare_method_call(
         ctx: &mut CompilationContext,
-        owning_unit: &ExecutionUnit,
         output: &mut ExtendedInstructionBuffer,
         origin_location: &SourceSection,
         prefix: &Node,
@@ -1565,7 +1519,7 @@ impl Node {
         let this_slot = call_slots.first + 3;
 
         // Place the "this" argument in the call slots
-        prefix.compile_as_value(ctx, owning_unit, output, this_slot);
+        prefix.compile_as_value(ctx, output, this_slot);
 
         // Compile the field accessing and place it as the callee
         Self::compile_dot_access(
@@ -1581,7 +1535,6 @@ impl Node {
         // Compile arguments
         Self::compile_args(
             ctx,
-            owning_unit,
             output,
             origin_location,
             positional_args,
@@ -1600,7 +1553,6 @@ impl Node {
     /// positional ones.
     fn compile_args(
         ctx: &mut CompilationContext,
-        owning_unit: &ExecutionUnit,
         output: &mut ExtendedInstructionBuffer,
         origin_location: &SourceSection,
         positional_args: &Vec<Node>,
@@ -1615,7 +1567,6 @@ impl Node {
         } else {
             Self::compile_table(
                 ctx,
-                owning_unit,
                 output,
                 named_args_slot,
                 origin_location,
@@ -1626,12 +1577,7 @@ impl Node {
 
         // Place positional arguments in the required slots
         for (i, positional_arg) in positional_args.iter().enumerate() {
-            positional_arg.compile_as_value(
-                ctx,
-                owning_unit,
-                output,
-                first_positional_arg_slot + i as u8,
-            );
+            positional_arg.compile_as_value(ctx, output, first_positional_arg_slot + i as u8);
         }
     }
 
@@ -1642,7 +1588,6 @@ impl Node {
     /// previous compilation context.
     fn compile_block_body(
         ctx: &mut CompilationContext,
-        owning_unit: &ExecutionUnit,
         output: &mut ExtendedInstructionBuffer,
         working_slot: u8,
         local_symbols: &Vec<Identifier>,
@@ -1659,8 +1604,7 @@ impl Node {
 
         // Compile the body of the block
         for body_elem in body {
-            let elem_access =
-                body_elem.compile_as_access(ctx, owning_unit, output, Some(working_slot));
+            let elem_access = body_elem.compile_as_access(ctx, output, Some(working_slot));
 
             // TODO: Check that the value returned by the body element
             // is "unit".
@@ -1908,12 +1852,7 @@ fn _access_table_index(
         output.abc(origin_location, immediate_access_op, working_slot, table_slot, index as u8);
     } else if index <= i32::MAX as usize {
         let index_tmp = ctx.frame.borrow_mut().get_tmp();
-        let index_cst = ctx
-            .exec_unit_data_stack
-            .last_mut()
-            .unwrap()
-            .constants
-            .get_from_int(index as i32);
+        let index_cst = ctx.current_data().constants.get_from_int(index as i32);
         output.ad(origin_location, KNUM, index_tmp, index_cst);
         output.abc(origin_location, slot_access_op, working_slot, table_slot, index_tmp);
         ctx.frame.borrow_mut().release_slot(index_tmp);
@@ -2146,7 +2085,7 @@ impl ValueAccess {
 }
 
 /// This type is the main data holder during the compilation process.
-struct CompilationContext {
+struct CompilationContext<'a> {
     /// Built-in symbols that are available during the compilation.
     builtins: HashSet<&'static str>,
 
@@ -2154,6 +2093,9 @@ struct CompilationContext {
     /// stores all information about local symbols, up-values and temporary
     /// slots.
     frame: Rc<RefCell<Frame>>,
+
+    /// Execution unit that is currently being compiled.
+    unit: &'a ExecutionUnit,
 
     /// A stack of compilation data, the last element being the current one.
     /// Each element stores information about the currently compiled execution
@@ -2173,11 +2115,15 @@ struct CompilationContext {
     diagnostics: Vec<Report>,
 }
 
-impl CompilationContext {
-    fn new() -> Self {
+impl<'a> CompilationContext<'a> {
+    fn new<'b>(unit: &'b ExecutionUnit) -> Self
+    where
+        'b: 'a,
+    {
         Self {
             builtins: get_builtin_bindings().iter().map(|b| b.name).collect(),
             frame: Rc::new(RefCell::new(Frame::new(None))),
+            unit,
             exec_unit_data_stack: Vec::new(),
             prototypes: Vec::new(),
             runtime_data: RuntimeData::new(),
