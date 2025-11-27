@@ -12,13 +12,13 @@ use crate::{
     error_templates::{ERROR_TEMPLATE_REPOSITORY, LUA_ENGINE_ERROR},
     lua::{
         LuaState, close_lua_state, debug_frame, debug_get_local, debug_get_source, debug_info,
-        debug_proto_and_pc, get_string, get_top, load_buffer, new_lua_state, open_lua_libs,
+        debug_proto_and_pc, get_string, get_top, load_buffer, new_lua_state, open_lua_libs, pop,
         push_c_function, push_string, push_table, push_user_data, remove_value, safe_call,
         set_field, set_global, set_top, to_string,
     },
     report::Report,
     runtime::{
-        CONTEXT_GLOBAL_NAME, DynamicError, DynamicErrorArg, RuntimeData, RuntimeError,
+        CONTEXT_GLOBAL_NAME, DynamicError, DynamicErrorArg, ERROR_VALUE, RuntimeData, RuntimeError,
         StackTraceElement,
         builtins::{get_builtin_bindings, get_builtin_types},
     },
@@ -203,19 +203,21 @@ unsafe extern "C" fn handle_error(l: LuaState) -> c_int {
             .map(|a| match a {
                 DynamicErrorArg::Static(s) => s,
                 DynamicErrorArg::LocalValue(index) => {
-                    let _ = debug_get_local(l, current_frame.as_ref().unwrap(), 1 + index as i32)
-                        .unwrap();
-                    String::from(to_string(l, -1, "<lkql_value>"))
+                    if let Some(_) =
+                        debug_get_local(l, current_frame.as_ref().unwrap(), 1 + index as i32)
+                    {
+                        let res = String::from(to_string(l, -1, "<lkql_value>"));
+                        pop(l, 1);
+                        res
+                    } else {
+                        String::from(ERROR_VALUE)
+                    }
                 }
             })
             .collect::<Vec<_>>();
 
         // Then we create the runtime error
-        RuntimeError {
-            template_id: runtime_error_instance.template_id,
-            message_args,
-            stack_trace: stack_trace,
-        }
+        RuntimeError { template_id: runtime_error_instance.template_id, message_args, stack_trace }
     } else {
         let (template_id, message_args) = parse_lua_error(error_message);
         RuntimeError { template_id, message_args, stack_trace }

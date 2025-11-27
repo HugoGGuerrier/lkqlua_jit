@@ -21,6 +21,9 @@ pub mod engine;
 /// The default image of a value when the latter doesn't define one.
 pub const DEFAULT_VALUE_IMAGE: &str = "<lkql_value>";
 
+/// String to represents an erroneous runtime value.
+pub const ERROR_VALUE: &str = "##ERROR##";
+
 /// Name of the global value where the execution context is stored.
 pub const CONTEXT_GLOBAL_NAME: &str = "runtime@execution_context";
 

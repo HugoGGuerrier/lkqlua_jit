@@ -422,8 +422,9 @@ pub fn debug_proto_and_pc(l: LuaState, ar: &mut LuaDebug) -> Option<(&'static st
 }
 
 /// Get the local value at the provide index in the provided debug frame, push
-/// its value on the current stack. This function returns the local value name
-/// if it has been found, [`None`] otherwise.
+/// its value on the current stack if it exists.
+/// This function returns the local value name if it has been found, [`None`]
+/// otherwise.
 pub fn debug_get_local(l: LuaState, ar: &LuaDebug, index: i32) -> Option<&'static str> {
     unsafe {
         let ext_var_name = lua_getlocal(l, ar, index);
