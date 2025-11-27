@@ -149,8 +149,8 @@ impl Frame {
         let new_up_value_index = self.next_up_value_index();
         let maybe_new_up_value = self.parent_frame_mut().and_then(|mut parent_frame| {
             // First look in the parent's locals
-            if let Some(parent_local) = parent_frame.get_local(name) {
-                parent_frame.close_binding(name);
+            if let Some(ref mut parent_local) = parent_frame.get_local(name) {
+                parent_frame.close_binding(parent_local);
                 Some(UpValueData {
                     declaration_location: parent_local.declaration_location.clone(),
                     debug_name: parent_local.debug_name.clone(),
@@ -214,19 +214,16 @@ impl Frame {
     /// Update the frame information to close the slot associated to the
     /// provided name. This function assumes that the binding is present in the
     /// current frame.
-    fn close_binding(&mut self, name: &str) {
+    fn close_binding(&mut self, binding: &mut BindingData) {
         // Update the binding closing kind
-        {
-            let binding = self.bindings.get_mut(name).unwrap();
-            if !binding.is_init {
-                binding.closing_kind = ClosingKind::Unsafe;
-            } else if binding.closing_kind == ClosingKind::None {
-                binding.closing_kind = ClosingKind::Safe;
-            }
+        if !binding.is_init {
+            binding.closing_kind = ClosingKind::Unsafe;
+        } else if binding.closing_kind == ClosingKind::None {
+            binding.closing_kind = ClosingKind::Safe;
         }
 
         // Mark the bound slot as closed
-        self.close_slot(self.bindings.get(name).unwrap().slot);
+        self.close_slot(binding.slot);
     }
 
     // --- Temporary values
@@ -328,7 +325,7 @@ impl Frame {
 /// This type represents a frame slot that is bound to a lexical symbol.
 #[derive(Debug, Clone)]
 pub struct BindingData {
-    /// Where in the source this binding has been declared
+    /// Where in the source this binding has been declared.
     pub declaration_location: SourceSection,
 
     /// Some bindings may have a debug name. This is a name that is going to be
@@ -336,7 +333,7 @@ pub struct BindingData {
     /// it to have different lexical and runtime names.
     pub debug_name: Option<String>,
 
-    /// The frame slot that is bound
+    /// The frame slot that is bound to.
     pub slot: u8,
 
     /// A label corresponding to the instruction from which this binding is
@@ -347,10 +344,10 @@ pub struct BindingData {
     /// available anymore.
     pub death_label: Label,
 
-    /// Whether the slot has been initialized yet
+    /// Whether the slot has been initialized yet.
     pub is_init: bool,
 
-    /// The way this slot should be closed for children frames
+    /// The way this slot should be closed for children frames.
     pub closing_kind: ClosingKind,
 }
 
@@ -434,13 +431,11 @@ impl SlotRange {
         self.last - self.first + 1
     }
 
-    /// Create a new slot range from an existing one. This function arguments
-    /// represents 0-starting index inside this range, meaning that calling
-    /// `<1..5>.sub_range(1, 3)` would result in the range `<2..4>`.
-    pub fn sub_range(&self, from_index: Option<u8>, to_index: Option<u8>) -> SlotRange {
+    /// Create a new slot range from an existing one by providing offsets.
+    pub fn sub_range(&self, start_offset: Option<u8>, end_offset: Option<u8>) -> SlotRange {
         // Get bounds of the new range
-        let first = from_index.unwrap_or(0) + self.first;
-        let last = to_index.map(|i| self.first + i).unwrap_or(self.last);
+        let first = start_offset.unwrap_or(0) + self.first;
+        let last = end_offset.map(|i| self.first + i).unwrap_or(self.last);
 
         // Ensure the bounds are in the range
         assert!(first <= self.last, "Invalid sub-range creation");
@@ -450,6 +445,6 @@ impl SlotRange {
         assert!(first <= last, "Invalid sub-range creation");
 
         // Finally return the new range
-        SlotRange { first, last }
+        Self { first, last }
     }
 }
