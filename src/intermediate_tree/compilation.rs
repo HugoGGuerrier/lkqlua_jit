@@ -132,7 +132,7 @@ impl ExecutionUnit {
                 is_variadic = true;
 
                 // Add module symbols to the current frame
-                declare_locals(ctx, symbols);
+                ctx.declare_locals(symbols);
 
                 // Compile module elements
                 for elem in elements {
@@ -184,7 +184,7 @@ impl ExecutionUnit {
                 let param_identifiers = params.iter().map(|(s, _)| s.clone()).collect::<Vec<_>>();
 
                 // Add function parameters to the current frame
-                declare_locals(ctx, &param_identifiers);
+                ctx.declare_locals(&param_identifiers);
 
                 // Emit instructions to ensure all parameters have a valid and
                 // unique value.
@@ -1600,7 +1600,7 @@ impl Node {
         ctx.frame = current_frame;
 
         // Insert all locals in the frame
-        declare_locals(ctx, local_symbols);
+        ctx.declare_locals(local_symbols);
 
         // Compile the body of the block
         for body_elem in body {
@@ -1755,30 +1755,6 @@ impl ExtendedInstructionBuffer {
     /// compilation context.
     fn cgoto(&mut self, ctx: &CompilationContext, label: Label) {
         self.goto(label, ctx.frame.borrow().peek_next_slot());
-    }
-}
-
-/// Util function to add a collection of symbols in the current frame as local
-/// bindings. This function also checks duplicated declarations and add
-/// corresponding diagnostics in the compilation context.
-fn declare_locals(ctx: &mut CompilationContext, symbols: &Vec<Identifier>) {
-    for symbol in symbols {
-        let maybe_local_slot = ctx.frame.borrow().is_conflicting(&symbol.text);
-        if let Some(previous_binding) = maybe_local_slot {
-            ctx.diagnostics.push(Report::from_error_template_with_hints(
-                &symbol.origin_location,
-                &DUPLICATED_SYMBOL,
-                &vec![&symbol.text],
-                vec![Hint::new(
-                    PREVIOUS_SYMBOL_HINT,
-                    &previous_binding.declaration_location,
-                )],
-            ));
-        } else {
-            ctx.frame
-                .borrow_mut()
-                .bind_local(&symbol.text, &symbol.origin_location);
-        }
     }
 }
 
@@ -2135,6 +2111,31 @@ impl<'a> CompilationContext<'a> {
     /// being compiled.
     fn current_data(&mut self) -> &mut ExecUnitCompilationData {
         self.exec_unit_data_stack.last_mut().unwrap()
+    }
+
+    /// Util function to add a collection of symbols in the current frame as local
+    /// bindings. This function also checks duplicated declarations and add
+    /// corresponding diagnostics in the compilation context.
+    fn declare_locals(&mut self, symbols: &Vec<Identifier>) {
+        for symbol in symbols {
+            let maybe_local_slot = self.frame.borrow().is_conflicting(&symbol.text);
+            if let Some(previous_binding) = maybe_local_slot {
+                self.diagnostics
+                    .push(Report::from_error_template_with_hints(
+                        &symbol.origin_location,
+                        &DUPLICATED_SYMBOL,
+                        &vec![&symbol.text],
+                        vec![Hint::new(
+                            PREVIOUS_SYMBOL_HINT,
+                            &previous_binding.declaration_location,
+                        )],
+                    ));
+            } else {
+                self.frame
+                    .borrow_mut()
+                    .bind_local(&symbol.text, &symbol.origin_location);
+            }
+        }
     }
 
     /// Util function to release all local bindings of the current frame and
