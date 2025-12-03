@@ -6,6 +6,7 @@
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
+    mem,
     rc::Rc,
     u8, usize,
 };
@@ -99,7 +100,7 @@ impl ExecutionUnit {
 
         // Restore the parent frame
         ctx.frame = parent_frame;
-        ctx.current_data().has_child = true;
+        ctx.unit_data.has_child = true;
     }
 
     /// Compile the execution unit and all its children (direct and indirect
@@ -108,13 +109,11 @@ impl ExecutionUnit {
     where
         'a: 'b,
     {
-        // Save the previous execution unit and set `self` as the current one
+        // Save the previous execution unit and its data and update the
+        // compilation context
         let previous_unit = ctx.unit;
         ctx.unit = self;
-
-        // Start by adding a new compilation data in the context
-        ctx.exec_unit_data_stack
-            .push(ExecUnitCompilationData::new());
+        let previous_unit_data = mem::replace(&mut ctx.unit_data, ExecUnitCompilationData::new());
 
         // Create compilation working values
         let mut extended_instructions = ExtendedInstructionBuffer::new();
@@ -147,7 +146,7 @@ impl ExecutionUnit {
                 };
 
                 // Emit instructions to create the module table
-                let empty_table_cst = ctx.current_data().constants.get_empty_table();
+                let empty_table_cst = ctx.unit_data.constants.get_empty_table();
                 extended_instructions.ad(&end_source_section, TDUP, result_tmp, empty_table_cst);
                 for symbol in symbols {
                     let local_slot = ctx.frame.borrow().get_local(&symbol.text).unwrap();
@@ -292,9 +291,10 @@ impl ExecutionUnit {
         // Perform post compilation assertions
         assert!(arg_count <= u8::MAX as usize, "Too many arguments for prototype");
 
-        // Get the data collected during the compilation process by moving the
-        // memory to avoid useless copy.
-        let data = ctx.exec_unit_data_stack.pop().unwrap();
+        // Restore the previous execution unit and get data collected during
+        // compilation.
+        ctx.unit = previous_unit;
+        let data = mem::replace(&mut ctx.unit_data, previous_unit_data);
 
         // Now we collect variable information to create debug data
         let label_map = extended_instructions.label_map();
@@ -365,9 +365,6 @@ impl ExecutionUnit {
             self.full_name(),
             instruction_locations,
         );
-
-        // Finish by restoring the previous compilation context
-        ctx.unit = previous_unit;
     }
 }
 
@@ -857,7 +854,7 @@ impl Node {
 
             // Try to get the numeric constant index as an u8
             if let Some(numeric_cst) = ctx
-                .current_data()
+                .unit_data
                 .constants
                 .try_from_numeric_constant_as_u8(constant_operand)
             {
@@ -1179,11 +1176,11 @@ impl Node {
                             Some((ISNEP, if *constant_bool { PRIM_TRUE } else { PRIM_FALSE }))
                         }
                         ConstantValueVariant::String(s) => {
-                            Some((ISNES, ctx.current_data().constants.get_from_string(s)))
+                            Some((ISNES, ctx.unit_data.constants.get_from_string(s)))
                         }
-                        _ => constant_operand.to_numeric_constant().map(|n| {
-                            (ISNEN, ctx.current_data().constants.get_from_numeric_constant(n))
-                        }),
+                        _ => constant_operand
+                            .to_numeric_constant()
+                            .map(|n| (ISNEN, ctx.unit_data.constants.get_from_numeric_constant(n))),
                     }
                 }
                 (CompOperatorVariant::NotEquals, BranchingKind::IfFalse)
@@ -1193,11 +1190,11 @@ impl Node {
                             Some((ISEQP, if *constant_bool { PRIM_TRUE } else { PRIM_FALSE }))
                         }
                         ConstantValueVariant::String(s) => {
-                            Some((ISEQS, ctx.current_data().constants.get_from_string(s)))
+                            Some((ISEQS, ctx.unit_data.constants.get_from_string(s)))
                         }
-                        _ => constant_operand.to_numeric_constant().map(|n| {
-                            (ISEQN, ctx.current_data().constants.get_from_numeric_constant(n))
-                        }),
+                        _ => constant_operand
+                            .to_numeric_constant()
+                            .map(|n| (ISEQN, ctx.unit_data.constants.get_from_numeric_constant(n))),
                     }
                 }
                 _ => None,
@@ -1372,7 +1369,7 @@ impl Node {
         child_unit.open_frame_and_compile(ctx);
 
         // Add a child constant in the constant table
-        let child_cst = ctx.current_data().constants.get_child();
+        let child_cst = ctx.unit_data.constants.get_child();
 
         // Finally, emit instruction to set place the functional value
         // in the local slot.
@@ -1422,13 +1419,13 @@ impl Node {
         }
 
         // Create the complex constant and duplicate it
-        let table_cst =
-            ctx.current_data()
-                .constants
-                .get_from_complex_constant(ComplexConstant::Table {
-                    array_part: array_constant_elems,
-                    hash_part: hash_constant_elems,
-                });
+        let table_cst = ctx
+            .unit_data
+            .constants
+            .get_from_complex_constant(ComplexConstant::Table {
+                array_part: array_constant_elems,
+                hash_part: hash_constant_elems,
+            });
         output.ad(origin_location, TDUP, result_slot, table_cst);
 
         // Finally place values that cannot be represented with table constants
@@ -1718,7 +1715,7 @@ impl ConstantValue {
                 // Else, we have to create a new numeric constant and load it
                 else if let Some(numeric_constant) = self.to_numeric_constant() {
                     let value_cst = ctx
-                        .current_data()
+                        .unit_data
                         .constants
                         .get_from_numeric_constant(numeric_constant);
                     output.ad(&self.origin_location, KNUM, result_slot, value_cst);
@@ -1731,7 +1728,7 @@ impl ConstantValue {
                 true
             }
             ConstantValueVariant::String(value) => {
-                let value_cst = ctx.current_data().constants.get_from_string(value);
+                let value_cst = ctx.unit_data.constants.get_from_string(value);
                 output.ad(&self.origin_location, KSTR, result_slot, value_cst);
                 true
             }
@@ -1770,7 +1767,7 @@ fn emit_runtime_error(
 
     // Add constants in the current repository
     let message_cst = ctx
-        .current_data()
+        .unit_data
         .constants
         .get_from_string(&runtime_error_instance.to_json_string());
 
@@ -1823,7 +1820,7 @@ fn _access_table_index(
         output.abc(origin_location, immediate_access_op, working_slot, table_slot, index as u8);
     } else if index <= i32::MAX as usize {
         let index_tmp = ctx.frame.borrow_mut().get_tmp();
-        let index_cst = ctx.current_data().constants.get_from_int(index as i32);
+        let index_cst = ctx.unit_data.constants.get_from_int(index as i32);
         output.ad(origin_location, KNUM, index_tmp, index_cst);
         output.abc(origin_location, slot_access_op, working_slot, table_slot, index_tmp);
         ctx.frame.borrow_mut().release_slot(index_tmp);
@@ -1887,7 +1884,7 @@ fn _access_table_field(
     immediate_access_op: u8,
     slot_access_op: u8,
 ) {
-    let member_name_cst = ctx.current_data().constants.get_from_string(member_name);
+    let member_name_cst = ctx.unit_data.constants.get_from_string(member_name);
     if member_name_cst <= u8::MAX as u16 {
         output.abc_maybe_loc(
             maybe_origin_location,
@@ -1918,7 +1915,7 @@ fn emit_global_read(
     result_slot: u8,
     global_name: &str,
 ) {
-    let global_name_cst = ctx.current_data().constants.get_from_string(global_name);
+    let global_name_cst = ctx.unit_data.constants.get_from_string(global_name);
     output.ad_maybe_loc(maybe_origin_location, GGET, result_slot, global_name_cst);
 }
 
@@ -1981,7 +1978,7 @@ fn emit_type_check(
         maybe_origin_location,
         ISEQN,
         actual_tag,
-        ctx.current_data()
+        ctx.unit_data
             .constants
             .get_from_int(expected_type.tag as i32),
     );
@@ -2068,10 +2065,8 @@ struct CompilationContext<'a> {
     /// Execution unit that is currently being compiled.
     unit: &'a ExecutionUnit,
 
-    /// A stack of compilation data, the last element being the current one.
-    /// Each element stores information about the currently compiled execution
-    /// unit (constants, properties, ...).
-    exec_unit_data_stack: Vec<ExecUnitCompilationData>,
+    /// Data collected for the current compilation unit.
+    unit_data: ExecUnitCompilationData,
 
     /// This is the main result of the compilation process, it is filled during
     /// the compilation of execution units (see [`ExecutionUnit::compile`]).
@@ -2095,17 +2090,11 @@ impl<'a> CompilationContext<'a> {
             builtins: get_builtin_bindings().iter().map(|b| b.name).collect(),
             frame: Rc::new(RefCell::new(Frame::new(None))),
             unit,
-            exec_unit_data_stack: Vec::new(),
+            unit_data: ExecUnitCompilationData::new(),
             prototypes: Vec::new(),
             runtime_data: RuntimeData::new(),
             diagnostics: Vec::new(),
         }
-    }
-
-    /// Get a mutable reference to the compilation data of the unit currently
-    /// being compiled.
-    fn current_data(&mut self) -> &mut ExecUnitCompilationData {
-        self.exec_unit_data_stack.last_mut().unwrap()
     }
 
     /// Util function to add a collection of symbols in the current frame as local
@@ -2140,7 +2129,7 @@ impl<'a> CompilationContext<'a> {
         let old_bindings = self.frame.borrow_mut().bindings.drain().collect::<Vec<_>>();
         for (name, mut old_binding) in old_bindings {
             old_binding.death_label = death_label;
-            self.current_data().dead_bindings.insert(name, old_binding);
+            self.unit_data.dead_bindings.insert(name, old_binding);
         }
     }
 }
