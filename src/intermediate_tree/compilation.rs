@@ -91,16 +91,14 @@ impl ExecutionUnit {
         'a: 'b,
     {
         // Open a new semantic frame for this function
-        let parent_frame = ctx.frame.clone();
-        let current_frame = Rc::new(RefCell::new(Frame::new(Some(parent_frame.clone()))));
-        ctx.frame = current_frame;
+        let previous_frame = ctx.frame.clone();
+        ctx.frame = Rc::new(RefCell::new(Frame::new(Some(previous_frame.clone()))));
 
         // Compile the execution unit
         self.internal_compile(ctx);
 
         // Restore the parent frame
-        ctx.frame = parent_frame;
-        ctx.unit_data.has_child = true;
+        ctx.frame = previous_frame;
     }
 
     /// Compile the execution unit and all its children (direct and indirect
@@ -295,6 +293,9 @@ impl ExecutionUnit {
         // compilation.
         ctx.unit = previous_unit;
         let data = mem::replace(&mut ctx.unit_data, previous_unit_data);
+
+        // Tell the parent execution unit it has a child
+        ctx.unit_data.has_child = true;
 
         // Now we collect variable information to create debug data
         let label_map = extended_instructions.label_map();
