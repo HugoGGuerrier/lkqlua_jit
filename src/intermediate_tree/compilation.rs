@@ -2052,10 +2052,10 @@ impl ValueAccess {
         }
     }
 
-    fn release(&self, ctx: &mut CompilationContext) {
+    fn release(self, ctx: &mut CompilationContext) {
         match self {
-            ValueAccess::OwnedTmp(s) => ctx.frame.borrow_mut().release_slot(*s),
-            ValueAccess::Direct(_) | &ValueAccess::BorrowedTmp(_) => (),
+            ValueAccess::OwnedTmp(s) => ctx.frame.borrow_mut().release_slot(s),
+            ValueAccess::Direct(_) | ValueAccess::BorrowedTmp(_) => (),
         }
     }
 }
