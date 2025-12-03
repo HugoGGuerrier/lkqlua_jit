@@ -113,12 +113,8 @@ impl ExecutionUnit {
         ctx.unit = self;
 
         // Start by adding a new compilation data in the context
-        let new_id = ctx
-            .exec_unit_data_stack
-            .last()
-            .map_or(self.name.clone(), |d| self.id(&d.identifier));
         ctx.exec_unit_data_stack
-            .push(ExecUnitCompilationData::new(new_id));
+            .push(ExecUnitCompilationData::new());
 
         // Create compilation working values
         let mut extended_instructions = ExtendedInstructionBuffer::new();
@@ -366,7 +362,7 @@ impl ExecutionUnit {
         // to the current context.
         ctx.runtime_data.add_prototype_data(
             self.origin_location.source,
-            data.identifier,
+            self.full_name(),
             instruction_locations,
         );
 
@@ -1365,13 +1361,12 @@ impl Node {
 
         // Create the child unit identifier
         let child_unit = &ctx.unit.children_units[child_index];
-        let child_unit_id = child_unit.id(&ctx.current_data().identifier);
 
         // Flag the local slot as initialized before compiling the
         // unit to allow the latter to be recursive.
         ctx.frame.borrow_mut().init_local_with_debug_name(
             child_symbol,
-            &child_unit_id,
+            &child_unit.full_name(),
             birth_label,
         );
         child_unit.open_frame_and_compile(ctx);
@@ -2153,16 +2148,14 @@ impl<'a> CompilationContext<'a> {
 /// This type contains all data required to compile an [`ExecutionUnit`] object
 /// into a bytecode [`Prototype`].
 struct ExecUnitCompilationData {
-    identifier: String,
     has_child: bool,
     constants: ConstantRepository,
     dead_bindings: HashMap<String, BindingData>,
 }
 
 impl ExecUnitCompilationData {
-    fn new(identifier: String) -> Self {
+    fn new() -> Self {
         Self {
-            identifier,
             has_child: false,
             constants: ConstantRepository::new(),
             dead_bindings: HashMap::new(),

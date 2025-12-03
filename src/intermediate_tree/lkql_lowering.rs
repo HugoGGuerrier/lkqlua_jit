@@ -41,12 +41,28 @@ impl ExecutionUnit {
         node: &LkqlNode,
         ctx: &mut LoweringContext,
     ) -> Result<Self, Report> {
+        // First, we need to get the name of the currently lowered execution
+        // unit.
+        let name = match &node {
+            LkqlNode::TopLevelList(top_level) => {
+                let unit_path = PathBuf::from(top_level.unit()?.unwrap().filename()?);
+                unit_path.file_stem().unwrap().to_string_lossy().to_string()
+            }
+            LkqlNode::FunDecl(fun_decl) => fun_decl.f_name()?.text()?,
+            LkqlNode::AnonymousFunction(_) => ctx.get_lambda_name(&node).clone(),
+            _ => unreachable!(),
+        };
+
+        // Get the vector with all parent names
+        let parent_units_names = ctx.parent_units_names.clone();
+
         // Iterate over all children execution units to lower them and to
         // associate each one to an index in the children units vector.
         // This needs to be done before node lowering.
         let mut local_units = Vec::new();
         all_local_execution_units(node, &mut local_units)?;
         let mut children_units = Vec::new();
+        ctx.parent_units_names.push(name.clone());
         for unit in &local_units {
             ctx.child_index_map
                 .insert(unit.clone(), children_units.len() as u16);
@@ -56,9 +72,10 @@ impl ExecutionUnit {
                 "Too many children execution units"
             );
         }
+        ctx.parent_units_names.pop();
 
         // Create the variant part of the result
-        let (variant, name) = match &node {
+        let variant = match &node {
             LkqlNode::TopLevelList(top_level) => {
                 // Lower the top level elements
                 let mut module_elements = Vec::new();
@@ -68,34 +85,24 @@ impl ExecutionUnit {
                     }
                 }
 
-                // Get the module name from the node unit's filename
-                let unit_path = PathBuf::from(top_level.unit()?.unwrap().filename()?);
-
                 // Create the resulting module
-                (
-                    ExecutionUnitVariant::Module {
-                        symbols: all_local_symbols(node, ctx)?,
-                        elements: module_elements,
-                    },
-                    unit_path.file_stem().unwrap().to_string_lossy().to_string(),
-                )
+                ExecutionUnitVariant::Module {
+                    symbols: all_local_symbols(node, ctx)?,
+                    elements: module_elements,
+                }
             }
             LkqlNode::FunDecl(_) | LkqlNode::AnonymousFunction(_) => {
                 // Get the function name, parameters and body nodes
-                let (name, params_node, body_node) = match &node {
+                let (params_node, body_node) = match &node {
                     LkqlNode::FunDecl(fun_decl) => match fun_decl.f_fun_expr()? {
-                        LkqlNode::NamedFunction(named_fun) => (
-                            fun_decl.f_name()?.text()?,
-                            named_fun.f_parameters()?,
-                            named_fun.f_body_expr()?,
-                        ),
+                        LkqlNode::NamedFunction(named_fun) => {
+                            (named_fun.f_parameters()?, named_fun.f_body_expr()?)
+                        }
                         _ => unreachable!(),
                     },
-                    LkqlNode::AnonymousFunction(anon_fun) => (
-                        ctx.get_lambda_name(&node).clone(),
-                        anon_fun.f_parameters()?,
-                        anon_fun.f_body_expr()?,
-                    ),
+                    LkqlNode::AnonymousFunction(anon_fun) => {
+                        (anon_fun.f_parameters()?, anon_fun.f_body_expr()?)
+                    }
                     _ => unreachable!(),
                 };
 
@@ -117,13 +124,10 @@ impl ExecutionUnit {
                 }
 
                 // Then create the function execution unit variant
-                (
-                    ExecutionUnitVariant::Function {
-                        params,
-                        body: Node::lower_lkql_node(&body_node, ctx)?,
-                    },
-                    name,
-                )
+                ExecutionUnitVariant::Function {
+                    params,
+                    body: Node::lower_lkql_node(&body_node, ctx)?,
+                }
             }
             _ => unreachable!(),
         };
@@ -133,6 +137,7 @@ impl ExecutionUnit {
             origin_location: SourceSection::from_lkql_node(ctx.lowered_source, node)?,
             name,
             children_units,
+            parent_units_names,
             variant,
         })
     }
@@ -534,6 +539,9 @@ struct LoweringContext {
     /// [`Function`] object.
     child_index_map: HashMap<LkqlNode, u16>,
 
+    /// Names of the parent units of currently lowered execution unit.
+    parent_units_names: Vec<String>,
+
     /// Each lambda (anonymous) function is associated to a unique name.
     lambda_name_map: HashMap<LkqlNode, String>,
     lambda_counter: usize,
@@ -547,6 +555,7 @@ impl LoweringContext {
         Self {
             lowered_source,
             child_index_map: HashMap::new(),
+            parent_units_names: Vec::new(),
             lambda_name_map: HashMap::new(),
             lambda_counter: 0,
             diagnostics: Vec::new(),

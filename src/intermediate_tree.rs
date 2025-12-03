@@ -40,6 +40,10 @@ pub struct ExecutionUnit {
     /// List of children execution units.
     children_units: Vec<ExecutionUnit>,
 
+    /// Names of all direct and indirect parents of this unit. Oldest ancestor
+    /// being the first element in the vector.
+    parent_units_names: Vec<String>,
+
     /// Variant part, containing specific data.
     variant: ExecutionUnitVariant,
 }
@@ -70,18 +74,24 @@ impl Display for ExecutionUnit {
 }
 
 impl ExecutionUnit {
-    pub fn id(&self, previous_part: &str) -> String {
-        format!("{previous_part}.{}", self.name)
+    /// Get the fully qualified name of this execution unit. It is used to
+    /// identify it during the runtime.
+    pub fn full_name(&self) -> String {
+        if self.parent_units_names.is_empty() {
+            self.name.clone()
+        } else {
+            format!("{}.{}", self.parent_units_names.join("."), self.name)
+        }
     }
 
     // --- Pretty printing
 
     fn pretty_print(&self, indent_level: usize) -> String {
-        // Start by getting images of the specific children
+        // Get images of the specific children
         let child_level = indent_level + 1;
         let (name, mut pretty_children) = match &self.variant {
             ExecutionUnitVariant::Module { symbols, elements } => (
-                format!("Module \"{}\"", self.name),
+                format!("Module \"{}\" ({})", self.name, self.full_name()),
                 vec![
                     (
                         "symbols",
@@ -91,7 +101,7 @@ impl ExecutionUnit {
                 ],
             ),
             ExecutionUnitVariant::Function { params, body } => (
-                format!("Function \"{}\"", self.name),
+                format!("Function \"{}\" ({})", self.name, self.full_name()),
                 vec![
                     (
                         "params",
