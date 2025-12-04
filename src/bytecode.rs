@@ -213,9 +213,9 @@
 //!
 //! ### Debug information
 //!
-//! The `DEBUG_INFO` section is a byte array at then end of an constant table
-//! that describe all required data to perform debugging operations on the
-//! current buffer. It is split into 3 parts:
+//! The `DEBUG_INFO` section is a byte array at the end of an constant table
+//! that describes all required data to perform debugging operations on the
+//! current prototype. It is split into 3 parts:
 //!   * It starts with a sequence of line offsets, one for each instruction of
 //!     the prototype. An offset value is representing the difference between
 //!     the line the corresponding instruction is mapping to and the line the

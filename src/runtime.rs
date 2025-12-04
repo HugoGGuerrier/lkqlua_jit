@@ -39,7 +39,7 @@ pub const TYPE_TAG_FIELD: &str = "field@type_tag";
 pub struct RuntimeData {
     /// A map associating to each sources a set of prototype identifiers, each
     /// one being associated to a data storage.
-    pub source_prototypes: HashMap<SourceId, HashMap<String, PrototypeData>>,
+    pub source_prototypes: HashMap<SourceId, Vec<PrototypeData>>,
 }
 
 impl RuntimeData {
@@ -47,23 +47,23 @@ impl RuntimeData {
         Self { source_prototypes: HashMap::new() }
     }
 
-    /// Map the provided prototype identifier to the specified data.
+    /// Associate runtime data to a prototype in the provided source. A new
+    /// identifier is created and returned and may be used to fetch those data
+    /// later.
     pub fn add_prototype_data(
         &mut self,
         source: SourceId,
-        prototype_id: String,
         instruction_locations: Vec<Option<SourceSection>>,
-    ) {
+    ) -> usize {
         // Ensure the source is associated to an existing map
         if !self.source_prototypes.contains_key(&source) {
-            self.source_prototypes.insert(source, HashMap::new());
+            self.source_prototypes.insert(source, Vec::new());
         }
 
         // Then store the provided prototype data
-        self.source_prototypes
-            .get_mut(&source)
-            .unwrap()
-            .insert(prototype_id, PrototypeData { instruction_locations });
+        let prototypes = self.source_prototypes.get_mut(&source).unwrap();
+        prototypes.push(PrototypeData { instruction_locations });
+        prototypes.len() - 1
     }
 
     /// Get the source location associated to the provided program counter in
@@ -71,7 +71,7 @@ impl RuntimeData {
     pub fn location_in_prototype(
         &self,
         source: SourceId,
-        prototype_id: &str,
+        prototype_id: usize,
         program_counter: usize,
     ) -> Option<&SourceSection> {
         self.source_prototypes
@@ -192,7 +192,7 @@ impl RuntimeError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StackTraceElement {
     pub source_name: String,
-    pub prototype_identifier: String,
+    pub prototype_identifier: usize,
     pub program_counter: usize,
 }
 

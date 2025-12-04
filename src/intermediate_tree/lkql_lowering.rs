@@ -41,8 +41,7 @@ impl ExecutionUnit {
         node: &LkqlNode,
         ctx: &mut LoweringContext,
     ) -> Result<Self, Report> {
-        // First, we need to get the name of the currently lowered execution
-        // unit.
+        // First, we get the name of the currently lowered execution unit.
         let name = match &node {
             LkqlNode::TopLevelList(top_level) => {
                 let unit_path = PathBuf::from(top_level.unit()?.unwrap().filename()?);
@@ -53,16 +52,12 @@ impl ExecutionUnit {
             _ => unreachable!(),
         };
 
-        // Get the vector with all parent names
-        let parent_units_names = ctx.parent_units_names.clone();
-
         // Iterate over all children execution units to lower them and to
         // associate each one to an index in the children units vector.
         // This needs to be done before node lowering.
         let mut local_units = Vec::new();
         all_local_execution_units(node, &mut local_units)?;
         let mut children_units = Vec::new();
-        ctx.parent_units_names.push(name.clone());
         for unit in &local_units {
             ctx.child_index_map
                 .insert(unit.clone(), children_units.len() as u16);
@@ -72,7 +67,6 @@ impl ExecutionUnit {
                 "Too many children execution units"
             );
         }
-        ctx.parent_units_names.pop();
 
         // Create the variant part of the result
         let variant = match &node {
@@ -137,7 +131,6 @@ impl ExecutionUnit {
             origin_location: SourceSection::from_lkql_node(ctx.lowered_source, node)?,
             name,
             children_units,
-            parent_units_names,
             variant,
         })
     }
@@ -539,9 +532,6 @@ struct LoweringContext {
     /// [`Function`] object.
     child_index_map: HashMap<LkqlNode, u16>,
 
-    /// Names of the parent units of currently lowered execution unit.
-    parent_units_names: Vec<String>,
-
     /// Each lambda (anonymous) function is associated to a unique name.
     lambda_name_map: HashMap<LkqlNode, String>,
     lambda_counter: usize,
@@ -555,7 +545,6 @@ impl LoweringContext {
         Self {
             lowered_source,
             child_index_map: HashMap::new(),
-            parent_units_names: Vec::new(),
             lambda_name_map: HashMap::new(),
             lambda_counter: 0,
             diagnostics: Vec::new(),

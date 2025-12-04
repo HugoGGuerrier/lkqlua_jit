@@ -3,7 +3,7 @@
 //! This module contains all required elements to run bytecode produced by the
 //! [`crate::intermediate_tree::compilation`] module.
 
-use std::{ffi::c_int, path::PathBuf, str::FromStr};
+use std::ffi::c_int;
 
 use regex::Regex;
 
@@ -123,7 +123,7 @@ impl Engine {
                         .and_then(|source| {
                             runtime_data.location_in_prototype(
                                 source,
-                                &e.prototype_identifier,
+                                e.prototype_identifier,
                                 e.program_counter,
                             )
                         })
@@ -156,17 +156,11 @@ unsafe extern "C" fn handle_error(l: LuaState) -> c_int {
         let maybe_frame = debug_frame(l, level);
         if let Some(mut frame) = maybe_frame {
             if debug_info(l, &mut frame, "S") {
-                if let Some((prototype_name, pc)) = debug_proto_and_pc(l, &mut frame) {
+                if let Some((proto_id, pc)) = debug_proto_and_pc(l, &mut frame) {
                     let source_name = debug_get_source(&frame).unwrap();
-                    let prototype_identifier = if source_name == prototype_name {
-                        let source_path = PathBuf::from_str(source_name.as_str()).unwrap();
-                        String::from(source_path.file_stem().unwrap().to_str().unwrap())
-                    } else {
-                        String::from(prototype_name)
-                    };
                     stack_trace.push(StackTraceElement {
                         source_name,
-                        prototype_identifier,
+                        prototype_identifier: proto_id,
                         // We subtract 1 to the PC because Lua index
                         // instructions from 1.
                         program_counter: pc - 1,

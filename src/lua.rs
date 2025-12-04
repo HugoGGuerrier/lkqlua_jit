@@ -404,17 +404,18 @@ pub fn debug_get_source(ar: &LuaDebug) -> Option<String> {
     }
 }
 
-/// Get the name of the prototype currently being executed and the program
-/// counter inside this prototype. This function return [`None`] if such
-/// information doesn't exists for the current frame.
-pub fn debug_proto_and_pc(l: LuaState, ar: &mut LuaDebug) -> Option<(&'static str, usize)> {
+/// Get the identifier (index) of the prototype currently being executed and
+/// the program counter inside this prototype.
+/// This function returns [`None`] if such information doesn't exists for the
+/// current frame.
+pub fn debug_proto_and_pc(l: LuaState, ar: &mut LuaDebug) -> Option<(usize, usize)> {
     unsafe {
         let mut ext_pc: c_uint = 0;
+        let mut ext_protoid: c_uint = 0;
         let pc_get_res = lua_getpc(l, ar, &mut ext_pc);
-        let ext_proto_name = lua_getprotoname(l, ar);
-        if pc_get_res != 0 && !ext_proto_name.is_null() {
-            let proto_name = CStr::from_ptr(ext_proto_name);
-            Some((proto_name.to_str().unwrap(), ext_pc as usize))
+        let proto_id_get_res = lua_getprotoid(l, ar, &mut ext_protoid);
+        if pc_get_res != 0 && proto_id_get_res != 0 {
+            Some((ext_protoid as usize, ext_pc as usize))
         } else {
             None
         }
@@ -555,6 +556,6 @@ unsafe extern "C" {
     fn lua_getstack(l: LuaState, level: c_int, ar: *mut LuaDebug) -> c_int;
     fn lua_getinfo(l: LuaState, what: *const c_char, ar: *mut LuaDebug) -> c_int;
     fn lua_getpc(l: LuaState, ar: *const LuaDebug, pc: *mut c_uint) -> c_int;
-    fn lua_getprotoname(l: LuaState, ar: *mut LuaDebug) -> *const c_char;
+    fn lua_getprotoid(l: LuaState, ar: *const LuaDebug, pc: *mut c_uint) -> c_int;
     fn lua_getlocal(l: LuaState, ar: *const LuaDebug, n: c_int) -> *const c_char;
 }

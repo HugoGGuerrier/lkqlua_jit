@@ -118,14 +118,6 @@ impl Frame {
         binding.birth_label = birth_label;
     }
 
-    /// Mark a the local value designated by the provided name as initialized.
-    pub fn init_local_with_debug_name(&mut self, name: &str, debug_name: &str, birth_label: Label) {
-        let binding = self.bindings.get_mut(name).unwrap();
-        let _ = binding.debug_name.insert(String::from(debug_name));
-        binding.birth_label = birth_label;
-        binding.is_init = true;
-    }
-
     // --- Up-values
 
     /// Get the up-value associate to the provided name in the current semantic
@@ -153,7 +145,6 @@ impl Frame {
                 parent_frame.close_binding(parent_local);
                 Some(UpValueData {
                     declaration_location: parent_local.declaration_location.clone(),
-                    debug_name: parent_local.debug_name.clone(),
                     index: new_up_value_index,
                     is_safe: parent_local.is_init,
                     target: UpValueTarget::ParentSlot(parent_local.slot),
@@ -163,7 +154,6 @@ impl Frame {
             else if let Some(parent_up_value) = parent_frame.get_up_value(name) {
                 Some(UpValueData {
                     declaration_location: parent_up_value.declaration_location.clone(),
-                    debug_name: parent_up_value.debug_name.clone(),
                     index: new_up_value_index,
                     is_safe: parent_up_value.is_safe,
                     target: UpValueTarget::ParentUpValue(parent_up_value.index),
@@ -328,11 +318,6 @@ pub struct BindingData {
     /// Where in the source this binding has been declared.
     pub declaration_location: SourceSection,
 
-    /// Some bindings may have a debug name. This is a name that is going to be
-    /// used when emitting debug information for this local variable, allowing
-    /// it to have different lexical and runtime names.
-    pub debug_name: Option<String>,
-
     /// The frame slot that is bound to.
     pub slot: u8,
 
@@ -355,7 +340,6 @@ impl BindingData {
     fn new(declaration_location: SourceSection, slot: u8) -> Self {
         Self {
             declaration_location,
-            debug_name: None,
             slot,
             birth_label: usize::MAX,
             death_label: usize::MAX,
@@ -385,11 +369,6 @@ pub struct UpValueData {
     /// Location of the declaration of the value ultimately targeted by this
     /// up-value.
     pub declaration_location: SourceSection,
-
-    /// Some up-values may have a debug name. This is a name that is going to
-    /// be used when emitting debug information for this up-value, allowing it
-    /// to have different lexical and runtime names.
-    pub debug_name: Option<String>,
 
     /// Index of the up-value in the current frame.
     pub index: u8,

@@ -292,7 +292,7 @@ impl ExecutionUnit {
         // Restore the previous execution unit and get data collected during
         // compilation.
         ctx.unit = previous_unit;
-        let data = mem::replace(&mut ctx.unit_data, previous_unit_data);
+        let mut data = mem::replace(&mut ctx.unit_data, previous_unit_data);
 
         // Tell the parent execution unit it has a child
         ctx.unit_data.has_child = true;
@@ -303,7 +303,7 @@ impl ExecutionUnit {
             .dead_bindings
             .iter()
             .map(|(n, b)| VariableData {
-                name: b.debug_name.as_ref().unwrap_or(n).clone(),
+                name: n.clone(),
                 birth_instruction: *label_map.get(&b.birth_label).expect("Unknown label"),
                 death_instruction: *label_map.get(&b.death_label).expect("Unknown label"),
             })
@@ -316,15 +316,20 @@ impl ExecutionUnit {
         let (instructions, instruction_locations) =
             extended_instructions.as_instructions_and_locations(&self.origin_location);
 
+        // We add all these information in the runtime required data
+        let proto_id = ctx
+            .runtime_data
+            .add_prototype_data(self.origin_location.source, instruction_locations);
+        data.constants
+            .numeric_constants
+            .push(NumericConstant::Integer(proto_id as i32));
+
         // Create the bytecode prototype and add it to the current context
         // result.
         match &ctx.frame.borrow().variant {
             FrameVariant::Semantic { maximum_size, up_values, .. } => {
                 // Sort up-values from their index
-                let mut sorted_up_values = up_values
-                    .into_iter()
-                    .map(|(n, uv)| (uv.debug_name.as_ref().unwrap_or(n), uv))
-                    .collect::<Vec<_>>();
+                let mut sorted_up_values = up_values.into_iter().collect::<Vec<_>>();
                 sorted_up_values.sort_by(|(_, uv_1), (_, uv_2)| uv_1.index.cmp(&uv_2.index));
 
                 // Get the prototype first line
@@ -358,14 +363,6 @@ impl ExecutionUnit {
             }
             _ => unreachable!(),
         };
-
-        // Finally, collect runtime data for the current prototype and add it
-        // to the current context.
-        ctx.runtime_data.add_prototype_data(
-            self.origin_location.source,
-            self.full_name(),
-            instruction_locations,
-        );
     }
 }
 
@@ -1362,11 +1359,7 @@ impl Node {
 
         // Flag the local slot as initialized before compiling the
         // unit to allow the latter to be recursive.
-        ctx.frame.borrow_mut().init_local_with_debug_name(
-            child_symbol,
-            &child_unit.full_name(),
-            birth_label,
-        );
+        ctx.frame.borrow_mut().init_local(child_symbol, birth_label);
         child_unit.open_frame_and_compile(ctx);
 
         // Add a child constant in the constant table

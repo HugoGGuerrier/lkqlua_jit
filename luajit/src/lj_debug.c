@@ -5,6 +5,7 @@
 
 #define lj_debug_c
 #define LUA_CORE
+#include <stdio.h>
 
 #include "lj_obj.h"
 #include "lj_err.h"
@@ -580,21 +581,33 @@ LUA_API int lua_getpc(lua_State *L, const lua_Debug *ar, unsigned int *pc)
   return 1;
 }
 
-LUA_API const char* lua_getprotoname(lua_State *L, lua_Debug *ar)
+LUA_API int lua_getprotoid(lua_State *L, const lua_Debug *ar, unsigned int *id)
 {
-  // Filter out unhandled frames, and get the proto id
+  // Filter out unhandled frames
   switch (ar->what[0]) {
     case 'L':
-      if (!lua_getinfo(L, "n", ar)) return 0;
-      if (ar->name) return ar->name;
-
     case 'm':
-      return ar->source;
       break;
 
     default:
-      return NULL;
+      return 0;
   }
+
+  // Then get the proto id
+  TValue *frame = NULL;
+  GCproto *proto;
+  uint32_t offset = (uint32_t)ar->i_ci & 0xffff;
+
+  frame = tvref(L->stack) + offset;
+  proto = funcproto(frame_func(frame));
+  unsigned int knnum = proto->sizekn;
+  if (knnum) {
+    *id = (unsigned int) proto_knumtv(proto, knnum - 1)->n;
+    return 1;
+  }
+
+  // Failure case, there is no result
+  return 0;
 }
 
 #if LJ_HASPROFILE

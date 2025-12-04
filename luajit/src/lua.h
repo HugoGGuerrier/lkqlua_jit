@@ -374,8 +374,18 @@ struct lua_Debug {
 
 /* Custom extensions */
 
+/**
+ * Get the program counter position in the provided debug frame. Returns 1 if
+ * the function succeeded, 0 else.
+ */
 LUA_API int lua_getpc(lua_State *L, const lua_Debug *ar, unsigned int *pc);
-LUA_API const char* lua_getprotoname(lua_State *L, lua_Debug *ar);
+
+/**
+ * Get the identifier of the prototype corresponding to the provided debug
+ * frame. This identifier is stored as the last numeric constant of the
+ * prototype. Returns 1 if the function succeeded, 0 else.
+ */
+LUA_API int lua_getprotoid(lua_State *L, const lua_Debug *ar, unsigned int *id);
 
 /* }====================================================================== */
 
