@@ -5,6 +5,7 @@
 
 use std::{
     cell::{Ref, RefCell, RefMut},
+    cmp,
     collections::HashMap,
     ops::Range,
     rc::Rc,
@@ -234,7 +235,7 @@ impl Frame {
     /// Get a range of contiguous available slots, reserving all of them. This
     /// function panics if there are not enough available slots.
     pub fn reserve_contiguous_slots(&mut self, count: usize) -> SlotRange {
-        self.get_slots(count, true, true)
+        self.get_slots(count, true)
     }
 
     /// Release the provided slot, making it free to use.
@@ -267,26 +268,15 @@ impl Frame {
     }
 
     /// Get the next available slot without flagging it as occupied.
-    pub fn peek_next_slot(&self) -> u8 {
-        match self.variant {
-            FrameVariant::Semantic { occupied_slots: available_slots, .. } => {
-                available_slots
-                    .iter()
-                    .enumerate()
-                    .filter(|s: &(usize, &bool)| !s.1)
-                    .next()
-                    .unwrap()
-                    .0 as u8
-            }
-            FrameVariant::Lexical => self.parent_frame().unwrap().peek_next_slot(),
-        }
+    pub fn peek_next_slot(&mut self) -> u8 {
+        self.get_slots(1, false).first
     }
 
     /// Get a contiguous range of `count` available slots, updating the frame
     /// according to the function arguments.
     /// The returned range's end is exclusive, meaning that it is not reserved
     /// for use.
-    fn get_slots(&mut self, count: usize, reserve: bool, update_size: bool) -> SlotRange {
+    fn get_slots(&mut self, count: usize, update_frame: bool) -> SlotRange {
         match &mut self.variant {
             FrameVariant::Semantic { occupied_slots: available_slots, maximum_size, .. } => {
                 let mut start_bound = 0;
@@ -294,13 +284,11 @@ impl Frame {
                     // We know that `start_bound..(i-1)` slots are available,
                     // we check if this is enough.
                     if i - start_bound == count {
-                        if reserve {
+                        if update_frame {
                             for j in start_bound..i {
                                 available_slots[j] = true;
                             }
-                        }
-                        if update_size && i as u8 > *maximum_size {
-                            *maximum_size = i as u8;
+                            *maximum_size = cmp::max(i as u8, *maximum_size);
                         }
                         return SlotRange { first: start_bound as u8, last: i as u8 - 1 };
                     }

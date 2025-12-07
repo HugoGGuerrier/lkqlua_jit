@@ -1980,7 +1980,7 @@ impl<'a> CompilationContext<'a> {
     /// Add a new `goto` instruction in the instruction buffer with information
     /// about the current frame in the context.
     fn goto(&mut self, label: Label) {
-        let next_available_slot = self.frame.borrow().peek_next_slot();
+        let next_available_slot = self.frame.borrow_mut().peek_next_slot();
         self.instructions.goto(label, next_available_slot);
     }
 
