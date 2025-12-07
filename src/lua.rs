@@ -414,7 +414,7 @@ pub fn debug_proto_and_pc(l: LuaState, ar: &mut LuaDebug) -> Option<(usize, usiz
         let mut ext_protoid: c_uint = 0;
         let pc_get_res = lua_getpc(l, ar, &mut ext_pc);
         let proto_id_get_res = lua_getprotoid(l, ar, &mut ext_protoid);
-        if pc_get_res != 0 && proto_id_get_res != 0 {
+        if pc_get_res != 0 && ext_pc > 0 && proto_id_get_res != 0 {
             Some((ext_protoid as usize, ext_pc as usize))
         } else {
             None
