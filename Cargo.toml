@@ -6,11 +6,23 @@ edition = "2024"
 [dependencies]
 # For now the liblkqllang path is absolute since it hasn't been published
 liblkqllang = { path = "../rust_lkql_bindings" }
-clap = { version = "4.5.37", features = ["derive"]}
+
+# We use clap for CLI argument parsing
+clap = { version = "4.5.37", features = ["derive"] }
+
+# leb128 and num-bigint are used to encore / decode arbitrary sized integers for LuaJIT bytecode
 leb128 = "0.2.5"
-ariadne = { version = "0.5.1", features = ["auto-color"] }
 num-bigint = "0.4.6"
+
+# ariadne is used for beautiful error reporting
+ariadne = { version = "0.5.1", features = ["auto-color"] }
+
+# pretty-hex is used to pretty print raw bytecode
 pretty-hex = "0.4.1"
+
+# We use serde to encode and decode json
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+
+# basic regex support
 regex = "1.11.2"
