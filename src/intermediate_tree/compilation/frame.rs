@@ -198,18 +198,6 @@ impl Frame {
         }
     }
 
-    /// Update the frame information to close the provided slot.
-    fn close_slot(&mut self, slot: u8) {
-        match &mut self.variant {
-            FrameVariant::Semantic { close_from, .. } => {
-                if close_from.is_none() || close_from.unwrap() > slot {
-                    let _ = close_from.insert(slot);
-                }
-            }
-            FrameVariant::Lexical => self.parent_frame_mut().unwrap().close_slot(slot),
-        }
-    }
-
     /// Update the frame information to close the slot associated to the
     /// provided name. This function assumes that the binding is present in the
     /// current frame.
@@ -223,6 +211,18 @@ impl Frame {
 
         // Mark the bound slot as closed
         self.close_slot(binding.slot);
+    }
+
+    /// Update the frame information to close the provided slot.
+    fn close_slot(&mut self, slot: u8) {
+        match &mut self.variant {
+            FrameVariant::Semantic { close_from, .. } => {
+                if close_from.is_none() || close_from.unwrap() > slot {
+                    let _ = close_from.insert(slot);
+                }
+            }
+            FrameVariant::Lexical => self.parent_frame_mut().unwrap().close_slot(slot),
+        }
     }
 
     // --- Temporary values
