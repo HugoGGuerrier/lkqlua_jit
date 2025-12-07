@@ -178,6 +178,14 @@ impl Frame {
         maybe_new_up_value
     }
 
+    /// Get the slot to close from in the current frame.
+    pub fn get_slot_to_close_from(&self) -> Option<u8> {
+        match &self.variant {
+            FrameVariant::Semantic { close_from, .. } => close_from.clone(),
+            FrameVariant::Lexical => self.parent_frame().unwrap().get_slot_to_close_from(),
+        }
+    }
+
     /// Ge the next available up-value index, panicking if there is no more.
     fn next_up_value_index(&self) -> u8 {
         match &self.variant {
