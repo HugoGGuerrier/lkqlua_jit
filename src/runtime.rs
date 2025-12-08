@@ -134,7 +134,7 @@ pub enum FunctionValue {
     /// runtime value.
     /// Inside this expression the table `__uv` is available to access function
     /// up-values.
-    LuaFunction(String),
+    LuaFunction(&'static str),
 }
 
 impl FunctionValue {

@@ -50,7 +50,7 @@ impl BuiltinType {
         self.push_representation_tables(l);
         self.index_method
             .as_ref()
-            .unwrap_or(&FunctionValue::LuaFunction(GENERIC_INDEX.to_string()))
+            .unwrap_or(&FunctionValue::LuaFunction(GENERIC_INDEX))
             .push_on_stack(l, 3);
     }
 
