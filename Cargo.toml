@@ -26,3 +26,6 @@ serde_json = "1.0"
 
 # basic regex support
 regex = "1.11.2"
+
+# We use format to support constant string formatting
+const_format = { version = "0.2.35", features = ["fmt"] }
