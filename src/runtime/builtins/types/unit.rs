@@ -20,6 +20,7 @@ pub const TYPE: BuiltinType = BuiltinType {
     tag: 0,
     fields: &[("img", BuiltinTypeField::Property(FunctionValue::CFunction(lkql_img)))],
     overloads: &[(OverloadTarget::ToString, FunctionValue::CFunction(unit_tostring))],
+    index_method: None,
     register_function: register_metatable_in_globals,
 };
 

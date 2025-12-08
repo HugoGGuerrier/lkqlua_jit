@@ -18,6 +18,7 @@ pub const TYPE: BuiltinType = BuiltinType {
     tag: bool::TYPE.tag + 1,
     fields: &[("img", BuiltinTypeField::Property(FunctionValue::CFunction(lkql_img)))],
     overloads: &[],
+    index_method: None,
     register_function: register_metatable,
 };
 

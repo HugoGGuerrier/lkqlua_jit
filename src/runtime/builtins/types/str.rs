@@ -31,6 +31,7 @@ pub const TYPE: BuiltinType = BuiltinType {
         ),
     ],
     overloads: &[],
+    index_method: None,
     register_function: register_metatable,
 };
 

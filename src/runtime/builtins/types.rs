@@ -31,43 +31,27 @@ pub struct BuiltinType {
     /// Fields in the type.
     pub fields: &'static [(&'static str, BuiltinTypeField)],
 
-    /// Maps used to define custom behavior for the type regarding language
-    /// constructions.
+    /// List of built-in behaviors to overload for this type.
     pub overloads: &'static [(OverloadTarget, FunctionValue)],
+
+    /// A functional value that is going to be used as the `__index`
+    /// meta-method of the type. If this is [`None`], the [`GENERIC_INDEX`]
+    /// function is used.
+    pub index_method: Option<FunctionValue>,
 
     /// The function to call to register this type in a given Lua state.
     pub register_function: MetatableRegisteringFunction,
 }
 
 impl BuiltinType {
-    /// String for the generic index function Lua source.
-    const GENERIC_INDEX: &str = "function (self, field)
-        -- Check in fields
-        local res = __uv[1][field]
-        if res ~= nil then
-            return res
-        end
-
-        -- Check in properties
-        res = __uv[2][field]
-        if res ~= nil then
-            return res(nil, self)
-        end
-
-        -- Check in methods
-        res = __uv[3][field]
-        if res ~= nil then
-            return res
-        end
-
-        return nil
-    end";
-
-    /// Push a function on the stack corresponding to the `__index` meta-method
+    /// Push a function on the stack to be used as the `__index` meta-method
     /// for this built-in type.
     pub fn create_index_method(&self, l: LuaState) {
         self.push_representation_tables(l);
-        FunctionValue::LuaFunction(String::from(Self::GENERIC_INDEX)).push_on_stack(l, 3);
+        self.index_method
+            .as_ref()
+            .unwrap_or(&FunctionValue::LuaFunction(GENERIC_INDEX.to_string()))
+            .push_on_stack(l, 3);
     }
 
     /// Create Lua tables representing at run-time all parts of this built-in
@@ -176,6 +160,30 @@ impl OverloadTarget {
 pub type MetatableRegisteringFunction = fn(LuaState, &'static BuiltinType);
 
 // ----- Support functions -----
+
+/// Lua function used as generic value indexing function.
+const GENERIC_INDEX: &str = "function (self, field)
+    -- Check in type fields
+    local res = __uv[1][field]
+    if res ~= nil then
+        return res
+    end
+
+    -- Check in type properties
+    res = __uv[2][field]
+    if res ~= nil then
+        return res(nil, self)
+    end
+
+    -- Check in type methods
+    res = __uv[3][field]
+    if res ~= nil then
+        return res
+    end
+
+    -- Nothing has been found
+    return nil
+end";
 
 /// This is the generic meta-table registering function, it places the
 /// meta-table on the top of the stack in a global field named from the type's
