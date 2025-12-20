@@ -4,11 +4,10 @@
 //! values.
 
 use crate::{
-    lua::{LuaState, push_table, set_field, set_global},
-    runtime::{
-        FunctionValue, RuntimeValue, TYPE_NAME_FIELD, TYPE_TAG_FIELD,
-        builtins::utils::metatable_global_field,
+    lua::{
+        LuaState, get_top, push_integer, push_string, push_table, set_field, set_global, set_top,
     },
+    runtime::{FunctionValue, LuaValue, RuntimeValue, TYPE_NAME_FIELD, TYPE_TAG_FIELD},
 };
 
 pub mod bool;
@@ -19,95 +18,228 @@ pub mod str;
 pub mod tuple;
 pub mod unit;
 
-/// This type represents an LKQL built-in type with all its information.
+/// This enumeration represents an LKQL built-in type.
+///
+/// An LKQL type may be either mono or polymorphic. This means that a type can
+/// have multiple implementations, while staying the same type to the user.
 #[derive(Debug)]
-pub struct BuiltinType {
-    /// Name of the type as it should be displayed to the user.
-    pub name: &'static str,
+pub enum BuiltinType {
+    Monomorphic {
+        /// Tag of the type, its unique identifier for optimized type checking.
+        tag: isize,
 
-    /// Tag of the type, its unique identifier for optimized type checking.
-    pub tag: isize,
+        /// Sole implementation of the type.
+        implementation: TypeImplementation,
+    },
 
-    /// Fields in the type.
-    pub fields: &'static [(&'static str, BuiltinTypeField)],
+    Polymorphic {
+        /// Tag of the type, its unique identifier for optimized type checking.
+        tag: isize,
 
-    /// List of built-in behaviors to overload for this type.
-    pub overloads: &'static [(OverloadTarget, FunctionValue)],
+        /// Base implementation containing the common behaviors of the type.
+        /// This may be overridden by type specializations.
+        /// The name defined in this implementation is used to display the type
+        /// to the users.
+        base_implementation: TypeImplementation,
 
-    /// A functional value that is going to be used as the `__index`
-    /// meta-method of the type. If this is [`None`], the [`GENERIC_INDEX`]
-    /// function is used.
-    pub index_method: Option<FunctionValue>,
-
-    /// The function to call to register this type in a given Lua state.
-    pub register_function: MetatableRegisteringFunction,
+        /// An array of all type specializations (implementations).
+        specializations: &'static [TypeImplementation],
+    },
 }
 
 impl BuiltinType {
-    /// Push a function on the stack to be used as the `__index` meta-method
-    /// for this built-in type.
-    pub fn create_index_method(&self, l: LuaState) {
-        self.push_representation_tables(l);
-        self.index_method
-            .as_ref()
-            .unwrap_or(&FunctionValue::LuaFunction(GENERIC_INDEX))
-            .push_on_stack(l, 3);
+    /// Get the type name to display to the language users.
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            BuiltinType::Monomorphic { implementation, .. } => implementation.name,
+            BuiltinType::Polymorphic { base_implementation, .. } => base_implementation.name,
+        }
     }
 
-    /// Create Lua tables representing at run-time all parts of this built-in
-    /// type:
-    ///   * The first one being a table of all static fields.
-    ///   * The second one is the properties table, all functions in this one
-    ///     are automatically executed when accessed.
-    ///   * The third one is the methods table.
-    /// This function push tables in this order on the stack meaning that the
-    /// new top of the stack is the method table of the type.
-    fn push_representation_tables(&self, l: LuaState) {
+    pub const fn tag(&self) -> isize {
+        match self {
+            BuiltinType::Monomorphic { tag, .. } => *tag,
+            BuiltinType::Polymorphic { tag, .. } => *tag,
+        }
+    }
+
+    /// Place all Lua values required to support this type at run-time in the
+    /// provided Lua execution context.
+    pub fn place_in_lua_context(&self, l: LuaState) {
+        let top = get_top(l);
+        match self {
+            BuiltinType::Monomorphic { implementation, .. } => {
+                // Create a new table that is going to be the type meta-table
+                push_table(l, 0, implementation.overloads.len() as i32 + 1);
+
+                // Then create the "__index" meta-method for the type
+                self.prepare_field_tables(l);
+                implementation.fill_field_tables(l);
+                implementation.create_index_method(l);
+                set_field(l, -2, "__index");
+
+                // Then place all overloads in the meta-table
+                implementation.push_overloads(l);
+
+                // Finally register the type implementation in the Lua
+                // execution context.
+                let reg_fun = implementation
+                    .registering_function
+                    .unwrap_or(register_metatable_in_globals);
+                reg_fun(l, implementation);
+
+                set_top(l, top);
+            }
+            BuiltinType::Polymorphic { base_implementation, specializations, .. } => {
+                for specialization in *specializations {
+                    // Create a new table that is going to be the meta-table
+                    push_table(l, 0, base_implementation.overloads.len() as i32 + 1);
+
+                    // Create field tables and override it with specializations
+                    self.prepare_field_tables(l);
+                    base_implementation.fill_field_tables(l);
+                    specialization.fill_field_tables(l);
+
+                    // Then create the "__index" meta-method
+                    if specialization.index_method.is_some() {
+                        specialization.create_index_method(l);
+                    } else {
+                        base_implementation.create_index_method(l);
+                    }
+                    set_field(l, -2, "__index");
+
+                    // Place all overloads in the meta-table
+                    base_implementation.push_overloads(l);
+                    specialization.push_overloads(l);
+
+                    // Finally, register the meta-table in the context
+                    let reg_fun = specialization
+                        .registering_function
+                        .or(base_implementation.registering_function)
+                        .unwrap_or(register_metatable_in_globals);
+                    reg_fun(l, specialization);
+                    set_top(l, top);
+                }
+            }
+        }
+    }
+
+    /// Place at the top of the Lua stack, in this order:
+    ///   * A table that is going to contain all value fields of the type
+    ///   * A table that is going to contain all properties of the type
+    ///   * A table that is going to contain all methods of the type
+    /// This function pre-fill some of those table with already known values,
+    /// but main content is going to be [`TypeImplementation`] specific.
+    fn prepare_field_tables(&self, l: LuaState) {
+        // Create the value field table
+        push_table(l, 0, 2);
+
+        // Store the type tag
+        push_integer(l, self.tag());
+        set_field(l, -2, TYPE_TAG_FIELD);
+
+        // Store the type display name
+        push_string(l, self.display_name());
+        set_field(l, -2, TYPE_NAME_FIELD);
+
+        // Create the properties table
+        push_table(l, 0, 0);
+
+        // Create the methods table
+        push_table(l, 0, 0);
+    }
+}
+
+/// This type represents an implementation of a built-in type that accepts
+/// multiple implementations.
+/// All behaviors defined in this type are going to override ones defined in
+/// the associated [`BuiltinType`] instance.
+#[derive(Debug)]
+pub struct TypeImplementation {
+    /// Specific name of the implementation.
+    pub name: &'static str,
+
+    /// Fields specific to this implementation.
+    pub fields: &'static [(&'static str, TypeField)],
+
+    /// List of built-in behaviors to overload for this implementation.
+    pub overloads: &'static [(OverloadTarget, FunctionValue)],
+
+    /// Specific indexing meta-method for this implementation. If [`None`], the
+    /// [`GENERIC_INDEX`] is going to be used.
+    pub index_method: Option<FunctionValue>,
+
+    /// Function used to store the implementation Lua representation in a given
+    /// Lua execution context.
+    /// If [`None`], the [`register_metatable_in_globals`] function is going to
+    /// be used.
+    pub registering_function: Option<MetatableRegisteringFunction>,
+}
+
+impl TypeImplementation {
+    /// Get the
+    pub fn global_field_name(&self) -> String {
+        format!("type@{}", self.name)
+    }
+
+    /// Fill tables containing fields of this type implementation. This
+    /// function assumes that there are at least 3 tables on the top of the
+    /// stack, in this order (from bottom to top):
+    ///   * The one that contains value fields
+    ///   * The one that contains properties
+    ///   * The one that contains methods
+    fn fill_field_tables(&self, l: LuaState) {
         // Split static values, properties and methods
         let mut static_fields = Vec::new();
         let mut properties = Vec::new();
         let mut methods = Vec::new();
         for (name, field) in self.fields {
             match field {
-                BuiltinTypeField::Value(runtime_value) => {
+                TypeField::Value(runtime_value) => {
                     static_fields.push((name, runtime_value.clone()))
                 }
-                BuiltinTypeField::Property(function) => properties.push((name, function)),
-                BuiltinTypeField::Method(function) => methods.push((name, function)),
+                TypeField::Property(function) => properties.push((name, function)),
+                TypeField::Method(function) => methods.push((name, function)),
             }
         }
 
-        // Add synthetic fields in the type representation
-        static_fields.push((&TYPE_TAG_FIELD, RuntimeValue::Integer(self.tag)));
-        static_fields.push((&TYPE_NAME_FIELD, RuntimeValue::String(String::from(self.name))));
-
-        // Create the static values table
-        push_table(l, 0, static_fields.len() as i32);
-        for (name, value) in static_fields {
+        // Then fill field tables
+        fn push_field<T: LuaValue>(l: LuaState, table_index: i32, name: &str, value: &T) {
             value.push_on_stack(l);
-            set_field(l, -2, name);
+            set_field(l, table_index - 1, name);
         }
+        static_fields
+            .iter()
+            .for_each(|(n, v)| push_field(l, -3, n, v));
+        properties
+            .iter()
+            .for_each(|(n, v)| push_field(l, -2, n, *v));
+        methods.iter().for_each(|(n, v)| push_field(l, -1, n, *v));
+    }
 
-        // Create the properties table
-        push_table(l, 0, properties.len() as i32);
-        for (name, property) in properties {
-            property.push_on_stack(l, 0);
-            set_field(l, -2, name);
-        }
+    /// Push a function on the stack to be used as the `__index` meta-method
+    /// for this type implementation.
+    fn create_index_method(&self, l: LuaState) {
+        self.index_method
+            .as_ref()
+            .unwrap_or(&FunctionValue::LuaFunction(GENERIC_INDEX))
+            .push_on_stack_with_uv(l, 3);
+    }
 
-        // Create the methods table
-        push_table(l, 0, methods.len() as i32);
-        for (name, method) in methods {
-            method.push_on_stack(l, 0);
-            set_field(l, -2, name);
+    /// Push all overloads meta-methods of this type implementation in the
+    /// table at the top of the Lua stack.
+    fn push_overloads(&self, l: LuaState) {
+        for (target, function) in self.overloads {
+            function.push_on_stack(l);
+            set_field(l, -2, target.metamethod_name());
         }
     }
 }
 
 /// This type represents a field in a built-in type.
 #[derive(Debug)]
-pub enum BuiltinTypeField {
-    /// If the field is a constant value.
+pub enum TypeField {
+    /// If the field is a value.
     Value(RuntimeValue),
 
     /// If the field is computed value.
@@ -154,10 +286,11 @@ impl OverloadTarget {
     }
 }
 
-/// This type represents a function that register a type meta-table in the
-/// provided Lua state. This function should assume that the type meta-table is
-/// currently on the top of the stack.
-pub type MetatableRegisteringFunction = fn(LuaState, &'static BuiltinType);
+/// This type represents a function that register a type implementation
+/// meta-table in the provided Lua execution context.
+/// This function should assume that the type meta-table is currently on the
+/// top of the stack.
+pub type MetatableRegisteringFunction = fn(LuaState, &TypeImplementation);
 
 // ----- Support functions -----
 
@@ -186,8 +319,9 @@ const GENERIC_INDEX: &str = "function (self, field)
 end";
 
 /// This is the generic meta-table registering function, it places the
-/// meta-table on the top of the stack in a global field named from the type's
-/// name.
-pub fn register_metatable_in_globals(l: LuaState, builtin_type: &'static BuiltinType) {
-    set_global(l, &metatable_global_field(builtin_type.name));
+/// meta-table on the top of the stack in a global field named from the type
+/// precise name (the type name in case of a single implementation type, the
+/// name of the implementation otherwise).
+pub fn register_metatable_in_globals(l: LuaState, type_implementation: &TypeImplementation) {
+    set_global(l, &type_implementation.global_field_name());
 }

@@ -41,8 +41,7 @@ use crate::{
         DynamicError, DynamicErrorArg, RuntimeData, TYPE_NAME_FIELD, TYPE_TAG_FIELD,
         builtins::{
             UNIT_VALUE_NAME, get_builtin_bindings,
-            types::{self, BuiltinType},
-            utils::metatable_global_field,
+            types::{self, BuiltinType, TypeImplementation},
         },
     },
     sources::{SourceRepository, SourceSection},
@@ -782,12 +781,12 @@ impl Node {
                 Self::compile_table(ctx, result_slot, &self.origin_location, elements, &Vec::new());
 
                 // Then set the meta-table of this new table
-                let type_name = match &self.variant {
-                    NodeVariant::TupleLiteral(_) => types::tuple::TYPE.name,
-                    NodeVariant::ListLiteral(_) => types::list::TYPE.name,
+                let type_impl = match &self.variant {
+                    NodeVariant::TupleLiteral(_) => &types::tuple::IMPLEMENTATION,
+                    NodeVariant::ListLiteral(_) => &types::list::IMPLEMENTATION,
                     _ => unreachable!(),
                 };
-                emit_set_metatable(ctx, Some(&self.origin_location), result_slot, type_name);
+                emit_set_metatable(ctx, Some(&self.origin_location), result_slot, type_impl);
             }
             NodeVariant::ObjectLiteral(items) => {
                 Self::compile_table(ctx, result_slot, &self.origin_location, &Vec::new(), items);
@@ -795,7 +794,7 @@ impl Node {
                     ctx,
                     Some(&self.origin_location),
                     result_slot,
-                    types::obj::TYPE.name,
+                    &types::obj::IMPLEMENTATION,
                 );
             }
 
@@ -1819,7 +1818,7 @@ fn emit_set_metatable(
     ctx: &mut CompilationContext,
     maybe_origin_location: Option<&SourceSection>,
     table_slot: u8,
-    type_name: &str,
+    type_implementation: &TypeImplementation,
 ) {
     // Get slots for the call
     let call_slots = ctx.frame.borrow_mut().reserve_contiguous_slots(4);
@@ -1836,7 +1835,7 @@ fn emit_set_metatable(
         ctx,
         maybe_origin_location,
         call_slots.last,
-        &metatable_global_field(type_name),
+        &type_implementation.global_field_name(),
     );
     ctx.instructions
         .abc_maybe_loc(maybe_origin_location, CALL, call_slots.first, 1, 3);
@@ -1870,7 +1869,7 @@ fn emit_type_check(
         actual_tag,
         ctx.unit_data
             .constants
-            .get_from_int(expected_type.tag as i32),
+            .get_from_int(expected_type.tag() as i32),
     );
     ctx.goto(next_label);
     ctx.frame.borrow_mut().release_slot(actual_tag);
@@ -1884,7 +1883,7 @@ fn emit_type_check(
         maybe_origin_location,
         &WRONG_TYPE,
         &vec![
-            DynamicErrorArg::Static(String::from(expected_type.name)),
+            DynamicErrorArg::Static(String::from(expected_type.display_name())),
             DynamicErrorArg::LocalValue(actual_name),
         ],
     );

@@ -10,33 +10,29 @@ use crate::{
         FunctionValue,
         builtins::{
             functions::lkql_img,
-            types::{BuiltinType, BuiltinTypeField, int},
+            types::{BuiltinType, TypeField, TypeImplementation, int},
             utils::get_string_param,
         },
     },
 };
 
-pub const TYPE: BuiltinType = BuiltinType {
+pub const TYPE: BuiltinType =
+    BuiltinType::Monomorphic { tag: int::TYPE.tag() + 1, implementation: IMPLEMENTATION };
+
+pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
     name: "Str",
-    tag: int::TYPE.tag + 1,
     fields: &[
-        ("img", BuiltinTypeField::Property(FunctionValue::CFunction(lkql_img))),
-        (
-            "base_name",
-            BuiltinTypeField::Method(FunctionValue::CFunction(str_base_name)),
-        ),
-        (
-            "starts_with",
-            BuiltinTypeField::Method(FunctionValue::CFunction(str_starts_with)),
-        ),
+        ("img", TypeField::Property(FunctionValue::CFunction(lkql_img))),
+        ("base_name", TypeField::Method(FunctionValue::CFunction(str_base_name))),
+        ("starts_with", TypeField::Method(FunctionValue::CFunction(str_starts_with))),
     ],
     overloads: &[],
     index_method: None,
-    register_function: register_metatable,
+    registering_function: Some(register_metatable),
 };
 
 /// Register the meta-table in the provided Lua state.
-pub fn register_metatable(l: LuaState, _: &'static BuiltinType) {
+pub fn register_metatable(l: LuaState, _: &TypeImplementation) {
     push_string(l, "");
     copy_value(l, -2);
     set_metatable(l, -2);

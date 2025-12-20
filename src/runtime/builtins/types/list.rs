@@ -10,20 +10,20 @@ use crate::{
         FunctionValue,
         builtins::{
             functions::lkql_img,
-            types::{
-                BuiltinType, BuiltinTypeField, OverloadTarget, register_metatable_in_globals, tuple,
-            },
+            types::{BuiltinType, OverloadTarget, TypeField, TypeImplementation, tuple},
         },
     },
 };
 
-pub const TYPE: BuiltinType = BuiltinType {
+pub const TYPE: BuiltinType =
+    BuiltinType::Monomorphic { tag: tuple::TYPE.tag() + 1, implementation: IMPLEMENTATION };
+
+pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
     name: "List",
-    tag: tuple::TYPE.tag + 1,
-    fields: &[("img", BuiltinTypeField::Property(FunctionValue::CFunction(lkql_img)))],
+    fields: &[("img", TypeField::Property(FunctionValue::CFunction(lkql_img)))],
     overloads: &[(OverloadTarget::ToString, FunctionValue::CFunction(list_tostring))],
     index_method: None,
-    register_function: register_metatable_in_globals,
+    registering_function: None,
 };
 
 /// Overload of "__tostring" for the "List" type

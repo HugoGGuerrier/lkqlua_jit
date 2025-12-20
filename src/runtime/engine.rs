@@ -13,13 +13,13 @@ use crate::{
     lua::{
         LuaState, close_lua_state, debug_frame, debug_get_local, debug_get_source, debug_info,
         debug_proto_and_pc, get_string, get_top, load_buffer, new_lua_state, open_lua_libs, pop,
-        push_c_function, push_string, push_table, push_user_data, remove_value, safe_call,
-        set_field, set_global, set_top, to_string,
+        push_c_function, push_string, push_user_data, remove_value, safe_call, set_global,
+        to_string,
     },
     report::Report,
     runtime::{
-        CONTEXT_GLOBAL_NAME, DynamicError, DynamicErrorArg, ERROR_VALUE, RuntimeData, RuntimeError,
-        StackTraceElement,
+        CONTEXT_GLOBAL_NAME, DynamicError, DynamicErrorArg, ERROR_VALUE, LuaValue, RuntimeData,
+        RuntimeError, StackTraceElement,
         builtins::{get_builtin_bindings, get_builtin_types},
     },
     sources::SourceId,
@@ -48,21 +48,7 @@ impl Engine {
 
         // Create all built-in types and store them
         for builtin_type in get_builtin_types() {
-            // Then create the type meta-table
-            push_table(lua_state, 0, builtin_type.overloads.len() as i32 + 1);
-            builtin_type.create_index_method(lua_state);
-            set_field(lua_state, -2, "__index");
-
-            // Create overloading functions
-            for (target, function) in builtin_type.overloads {
-                function.push_on_stack(lua_state, 0);
-                set_field(lua_state, -2, target.metamethod_name());
-            }
-
-            // Finally register the meta-table in the current Lua state and
-            // save the type struct in this engine.
-            (builtin_type.register_function)(lua_state, builtin_type);
-            set_top(lua_state, 0);
+            builtin_type.place_in_lua_context(lua_state);
         }
 
         // Bind all built-in values to their names

@@ -15,12 +15,6 @@ use crate::{
     },
 };
 
-/// Get the name of the global field where the meta-table of the type
-/// designated by the provided name is stored in.
-pub fn metatable_global_field(type_name: &str) -> String {
-    return format!("type@{}", type_name);
-}
-
 // ----- Parameter reading functions -----
 
 /// Given a Lua state, get the value of the parameter designated by the
@@ -146,14 +140,14 @@ extern "C" fn check_param_type(
     expected_type: &BuiltinType,
 ) {
     let param_type_tag = get_type_tag(l, value_index);
-    if param_type_tag != expected_type.tag {
+    if param_type_tag != expected_type.tag() {
         let param_type_name = get_type_name(l, value_index);
         raise_error(
             l,
             &DynamicError {
                 template_id: WRONG_ARG_TYPE.id,
                 message_args: vec![
-                    DynamicErrorArg::Static(String::from(expected_type.name)),
+                    DynamicErrorArg::Static(String::from(expected_type.display_name())),
                     DynamicErrorArg::Static(String::from(param_name)),
                     DynamicErrorArg::Static(String::from(param_type_name)),
                 ],

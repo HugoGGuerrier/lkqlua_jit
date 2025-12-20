@@ -10,18 +10,19 @@ use crate::{
         FunctionValue,
         builtins::{
             functions::lkql_img,
-            types::{BuiltinType, BuiltinTypeField, OverloadTarget, register_metatable_in_globals},
+            types::{BuiltinType, OverloadTarget, TypeField, TypeImplementation},
         },
     },
 };
 
-pub const TYPE: BuiltinType = BuiltinType {
+pub const TYPE: BuiltinType = BuiltinType::Monomorphic { tag: 0, implementation: IMPLEMENTATION };
+
+pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
     name: "Unit",
-    tag: 0,
-    fields: &[("img", BuiltinTypeField::Property(FunctionValue::CFunction(lkql_img)))],
+    fields: &[("img", TypeField::Property(FunctionValue::CFunction(lkql_img)))],
     overloads: &[(OverloadTarget::ToString, FunctionValue::CFunction(unit_tostring))],
     index_method: None,
-    register_function: register_metatable_in_globals,
+    registering_function: None,
 };
 
 /// Overload of "__tostring" for the "Unit" type

@@ -8,22 +8,24 @@ use crate::{
         FunctionValue,
         builtins::{
             functions::lkql_img,
-            types::{BuiltinType, BuiltinTypeField, bool},
+            types::{BuiltinType, TypeField, TypeImplementation, bool},
         },
     },
 };
 
-pub const TYPE: BuiltinType = BuiltinType {
+pub const TYPE: BuiltinType =
+    BuiltinType::Monomorphic { tag: bool::TYPE.tag() + 1, implementation: IMPLEMENTATION };
+
+pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
     name: "Int",
-    tag: bool::TYPE.tag + 1,
-    fields: &[("img", BuiltinTypeField::Property(FunctionValue::CFunction(lkql_img)))],
+    fields: &[("img", TypeField::Property(FunctionValue::CFunction(lkql_img)))],
     overloads: &[],
     index_method: None,
-    register_function: register_metatable,
+    registering_function: Some(register_metatable),
 };
 
 /// Register the meta-table in the provided Lua state.
-pub fn register_metatable(l: LuaState, _: &'static BuiltinType) {
+pub fn register_metatable(l: LuaState, _: &TypeImplementation) {
     push_number(l, 0f64);
     copy_value(l, -2);
     set_metatable(l, -2);

@@ -95,6 +95,14 @@ pub struct PrototypeData {
     pub instruction_locations: Vec<Option<SourceSection>>,
 }
 
+/// This trait is used to generalize the Lua value concept for all types that
+/// may represent one.
+pub trait LuaValue {
+    /// Place the Lua value represented by the instance of this trait on the
+    /// provided Lua state stack (at the top).
+    fn push_on_stack(&self, l: LuaState);
+}
+
 /// This type represents a runtime value that can be pushed on a Lua state
 /// stack.
 #[derive(Debug, Clone)]
@@ -108,13 +116,12 @@ pub enum RuntimeValue {
     FromBuilder(RuntimeValueBuilder),
 }
 
-impl RuntimeValue {
-    /// Push the value on the top of the stack in the provided Lua state.
-    pub fn push_on_stack(&self, l: LuaState) {
+impl LuaValue for RuntimeValue {
+    fn push_on_stack(&self, l: LuaState) {
         match self {
             RuntimeValue::Integer(i) => push_integer(l, *i),
             RuntimeValue::String(s) => push_string(l, &s),
-            RuntimeValue::Function(f) => f.push_on_stack(l, 0),
+            RuntimeValue::Function(f) => f.push_on_stack_with_uv(l, 0),
             RuntimeValue::FromBuilder(builder) => builder(l),
         }
     }
@@ -137,11 +144,17 @@ pub enum FunctionValue {
     LuaFunction(&'static str),
 }
 
+impl LuaValue for FunctionValue {
+    fn push_on_stack(&self, l: LuaState) {
+        self.push_on_stack_with_uv(l, 0);
+    }
+}
+
 impl FunctionValue {
     /// Place the runtime value representing this function on the top of the
     /// stack. Also, consider `up_value_count` as the number of values already
     /// on the stack to pop and place as function up-values.
-    pub fn push_on_stack(&self, l: LuaState, up_value_count: u8) {
+    pub fn push_on_stack_with_uv(&self, l: LuaState, up_value_count: u8) {
         match self {
             FunctionValue::CFunction(function) => push_c_closure(l, *function, up_value_count),
             FunctionValue::LuaFunction(source) => {

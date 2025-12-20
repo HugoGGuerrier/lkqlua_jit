@@ -407,7 +407,7 @@ impl Node {
                 "CheckType",
                 vec![
                     ("expression", expression.pretty_print(child_level)),
-                    ("expected_type", expected_type.name.to_string()),
+                    ("expected_type", expected_type.display_name().to_string()),
                 ],
             ),
             NodeVariant::NullLiteral => ("NullLiteral", vec![]),

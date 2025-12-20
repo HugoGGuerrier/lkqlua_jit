@@ -12,7 +12,6 @@ use crate::{
         builtins::{
             functions::{lkql_img, lkql_print},
             types::BuiltinType,
-            utils::metatable_global_field,
         },
     },
 };
@@ -25,7 +24,7 @@ pub mod utils;
 pub const UNIT_VALUE_NAME: &str = "value@unit";
 pub fn create_unit_value(l: LuaState) {
     push_table(l, 0, 0);
-    get_global(l, &metatable_global_field(types::unit::TYPE.name));
+    get_global(l, &types::unit::IMPLEMENTATION.global_field_name());
     set_metatable(l, -2);
 }
 
@@ -55,10 +54,12 @@ pub fn get_builtin_types() -> Vec<&'static BuiltinType> {
     let mut known_tags = HashMap::new();
     let mut b = |t: &'static BuiltinType| -> &'static BuiltinType {
         // Ensure the type tag is unique
-        if let Some(previous) = known_tags.insert(t.tag, t.name) {
+        if let Some(previous) = known_tags.insert(t.tag(), t.display_name()) {
             panic!(
                 "Multiple built-in types with the tag {}: {} and {}",
-                t.tag, t.name, previous
+                t.tag(),
+                t.display_name(),
+                previous
             );
         }
 
