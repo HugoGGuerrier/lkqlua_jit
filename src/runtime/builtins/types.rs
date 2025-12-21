@@ -5,7 +5,7 @@
 
 use crate::{
     lua::{
-        LuaState, get_top, push_integer, push_string, push_table, set_field, set_global, set_top,
+        LuaState, dump_stack, get_top, push_integer, push_string, push_table, set_field, set_global, set_top
     },
     runtime::{FunctionValue, LuaValue, RuntimeValue, TYPE_NAME_FIELD, TYPE_TAG_FIELD},
 };
@@ -15,6 +15,7 @@ pub mod int;
 pub mod list;
 pub mod obj;
 pub mod str;
+pub mod stream;
 pub mod tuple;
 pub mod unit;
 

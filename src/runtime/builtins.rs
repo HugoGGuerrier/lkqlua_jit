@@ -74,6 +74,7 @@ pub fn get_builtin_types() -> Vec<&'static BuiltinType> {
         b(&types::str::TYPE),
         b(&types::tuple::TYPE),
         b(&types::list::TYPE),
+        b(&types::stream::TYPE),
         b(&types::obj::TYPE),
     ]
 }
