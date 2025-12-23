@@ -10,6 +10,7 @@ use crate::{
         FunctionValue,
         builtins::{
             functions::lkql_img,
+            traits,
             types::{
                 BuiltinType, OverloadTarget, TypeField, TypeImplementation, TypeImplementationKind,
                 tuple,
@@ -20,13 +21,16 @@ use crate::{
 
 pub const TYPE: BuiltinType = BuiltinType {
     tag: tuple::TYPE.tag + 1,
-    traits: &[],
+    traits: &[&traits::indexable::TRAIT],
     implementation_kind: TypeImplementationKind::Monomorphic { implementation: IMPLEMENTATION },
 };
 
 pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
     name: "List",
-    fields: &[("img", TypeField::Property(FunctionValue::CFunction(lkql_img)))],
+    fields: &[
+        ("img", TypeField::Property(FunctionValue::CFunction(lkql_img))),
+        ("get", TypeField::Method(traits::indexable::DEFAULT_INDEXABLE_GET)),
+    ],
     overloads: &[(OverloadTarget::ToString, FunctionValue::CFunction(list_tostring))],
     index_method: None,
     registering_function: None,
