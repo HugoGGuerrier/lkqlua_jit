@@ -18,7 +18,10 @@ use std::{
     hash::Hash,
 };
 
-use crate::{runtime::builtins::types::BuiltinType, sources::SourceSection};
+use crate::{
+    runtime::builtins::{traits::BuiltinTrait, types::BuiltinType},
+    sources::SourceSection,
+};
 
 pub mod compilation;
 pub mod constant_eval;
@@ -241,6 +244,10 @@ pub enum NodeVariant {
         expression: Box<Node>,
         expected_type: &'static BuiltinType,
     },
+    CheckTrait {
+        expression: Box<Node>,
+        required_trait: &'static BuiltinTrait,
+    },
 
     // --- Literals
     NullLiteral,
@@ -401,6 +408,13 @@ impl Node {
                 vec![
                     ("expression", expression.pretty_print(child_level)),
                     ("expected_type", expected_type.display_name().to_string()),
+                ],
+            ),
+            NodeVariant::CheckTrait { expression, required_trait } => (
+                "CheckTrait",
+                vec![
+                    ("expression", expression.pretty_print(child_level)),
+                    ("required_trait", required_trait.name.to_string()),
                 ],
             ),
             NodeVariant::NullLiteral => ("NullLiteral", vec![]),

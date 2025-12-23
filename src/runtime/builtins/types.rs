@@ -5,9 +5,13 @@
 
 use crate::{
     lua::{
-        LuaState, get_top, push_integer, push_string, push_table, set_field, set_global, set_top,
+        LuaState, get_top, push_bool, push_integer, push_string, push_table, set_field, set_global,
+        set_top,
     },
-    runtime::{FunctionValue, LuaValue, RuntimeValue, TYPE_NAME_FIELD, TYPE_TAG_FIELD},
+    runtime::{
+        FunctionValue, LuaValue, RuntimeValue, TYPE_NAME_FIELD, TYPE_TAG_FIELD,
+        builtins::traits::BuiltinTrait,
+    },
 };
 
 pub mod bool;
@@ -18,24 +22,24 @@ pub mod str;
 pub mod tuple;
 pub mod unit;
 
-/// This enumeration represents an LKQL built-in type.
-///
+/// This type represents an LKQL built-in type.
+#[derive(Debug)]
+pub struct BuiltinType {
+    pub tag: isize,
+    pub traits: &'static [&'static BuiltinTrait],
+    pub implementation_kind: TypeImplementationKind,
+}
+
+/// This type represents the way a built-in type is implemented.
 /// An LKQL type may be either mono or polymorphic. This means that a type can
 /// have multiple implementations, while staying the same type to the user.
 #[derive(Debug)]
-pub enum BuiltinType {
+pub enum TypeImplementationKind {
     Monomorphic {
-        /// Tag of the type, its unique identifier for optimized type checking.
-        tag: isize,
-
-        /// Sole implementation of the type.
         implementation: TypeImplementation,
     },
 
     Polymorphic {
-        /// Tag of the type, its unique identifier for optimized type checking.
-        tag: isize,
-
         /// Base implementation containing the common behaviors of the type.
         /// This may be overridden by type specializations.
         /// The name defined in this implementation is used to display the type
@@ -50,16 +54,11 @@ pub enum BuiltinType {
 impl BuiltinType {
     /// Get the type name to display to the language users.
     pub fn display_name(&self) -> &'static str {
-        match self {
-            BuiltinType::Monomorphic { implementation, .. } => implementation.name,
-            BuiltinType::Polymorphic { base_implementation, .. } => base_implementation.name,
-        }
-    }
-
-    pub const fn tag(&self) -> isize {
-        match self {
-            BuiltinType::Monomorphic { tag, .. } => *tag,
-            BuiltinType::Polymorphic { tag, .. } => *tag,
+        match &self.implementation_kind {
+            TypeImplementationKind::Monomorphic { implementation } => implementation.name,
+            TypeImplementationKind::Polymorphic { base_implementation, .. } => {
+                base_implementation.name
+            }
         }
     }
 
@@ -67,8 +66,8 @@ impl BuiltinType {
     /// provided Lua execution context.
     pub fn place_in_lua_context(&self, l: LuaState) {
         let top = get_top(l);
-        match self {
-            BuiltinType::Monomorphic { implementation, .. } => {
+        match &self.implementation_kind {
+            TypeImplementationKind::Monomorphic { implementation } => {
                 // Create a new table that is going to be the type meta-table
                 push_table(l, 0, implementation.overloads.len() as i32 + 1);
 
@@ -90,7 +89,7 @@ impl BuiltinType {
 
                 set_top(l, top);
             }
-            BuiltinType::Polymorphic { base_implementation, specializations, .. } => {
+            TypeImplementationKind::Polymorphic { base_implementation, specializations } => {
                 for specialization in *specializations {
                     // Create a new table that is going to be the meta-table
                     push_table(l, 0, base_implementation.overloads.len() as i32 + 1);
@@ -135,12 +134,18 @@ impl BuiltinType {
         push_table(l, 0, 2);
 
         // Store the type tag
-        push_integer(l, self.tag());
+        push_integer(l, self.tag);
         set_field(l, -2, TYPE_TAG_FIELD);
 
         // Store the type display name
         push_string(l, self.display_name());
         set_field(l, -2, TYPE_NAME_FIELD);
+
+        // Store the type implemented traits
+        for tr in self.traits {
+            push_bool(l, true);
+            set_field(l, -2, &tr.runtime_field());
+        }
 
         // Create the properties table
         push_table(l, 0, 0);

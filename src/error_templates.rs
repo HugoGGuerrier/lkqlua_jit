@@ -77,12 +77,19 @@ pub const WRONG_ARG_TYPE: ErrorTemplate = ErrorTemplate {
     message_template: "Expecting a \"{}\" for the parameter \"{}\", got a \"{}\"",
 };
 
+/// Error when a trait is missing from a type.
+pub const MISSING_TRAIT: ErrorTemplate = ErrorTemplate {
+    id: WRONG_ARG_TYPE.id + 1,
+    title: "Missing required trait",
+    message_template: "Trait \"{}\" is required, the type \"{}\" isn't implementing it",
+};
+
 // --- Misc errors
 
 /// Error coming from the Lua engine and that cannot be mapped to a more
 /// precise error.
 pub const LUA_ENGINE_ERROR: ErrorTemplate = ErrorTemplate {
-    id: WRONG_ARG_TYPE.id + 1,
+    id: MISSING_TRAIT.id + 1,
     title: "Error from the Lua engine",
     message_template: "{}",
 };
@@ -101,6 +108,7 @@ pub const ERROR_TEMPLATE_REPOSITORY: &[&ErrorTemplate] = &[
     &UNKNOWN_MEMBER,
     &WRONG_TYPE,
     &WRONG_ARG_TYPE,
+    &MISSING_TRAIT,
     &LUA_ENGINE_ERROR,
 ];
 

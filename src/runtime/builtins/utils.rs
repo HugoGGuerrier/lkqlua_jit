@@ -140,7 +140,7 @@ extern "C" fn check_param_type(
     expected_type: &BuiltinType,
 ) {
     let param_type_tag = get_type_tag(l, value_index);
-    if param_type_tag != expected_type.tag() {
+    if param_type_tag != expected_type.tag {
         let param_type_name = get_type_name(l, value_index);
         raise_error(
             l,

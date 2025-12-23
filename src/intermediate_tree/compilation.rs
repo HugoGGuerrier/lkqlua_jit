@@ -23,7 +23,7 @@ use crate::{
         op_codes::*,
     },
     error_templates::{
-        DUPLICATED_SYMBOL, ErrorTemplate, INDEX_OUT_OF_BOUNDS, NO_VALUE_FOR_PARAM,
+        DUPLICATED_SYMBOL, ErrorTemplate, INDEX_OUT_OF_BOUNDS, MISSING_TRAIT, NO_VALUE_FOR_PARAM,
         POS_AND_NAMED_VALUE_FOR_PARAM, PREVIOUS_SYMBOL_HINT, UNKNOWN_MEMBER, UNKNOWN_SYMBOL,
         WRONG_TYPE,
     },
@@ -41,6 +41,7 @@ use crate::{
         DynamicError, DynamicErrorArg, RuntimeData, TYPE_NAME_FIELD, TYPE_TAG_FIELD,
         builtins::{
             UNIT_SINGLETON_GLOBAL_NAME, get_builtin_bindings,
+            traits::BuiltinTrait,
             types::{self, BuiltinType, TypeImplementation},
         },
     },
@@ -764,6 +765,13 @@ impl Node {
                 // Then emit type checking instructions
                 emit_type_check(ctx, Some(&self.origin_location), result_slot, expected_type);
             }
+            NodeVariant::CheckTrait { expression, required_trait } => {
+                // Compile the expression in the result slot
+                expression.compile_as_value(ctx, result_slot);
+
+                // Then emit trait checking instructions
+                emit_trait_check(ctx, Some(&self.origin_location), result_slot, required_trait);
+            }
 
             // --- Non-trivial literals
             NodeVariant::TupleLiteral(elements) | NodeVariant::ListLiteral(elements) => {
@@ -942,13 +950,14 @@ impl Node {
             }
 
             NodeVariant::CheckType { expression, expected_type } => {
-                // Compile the expression as an access
                 let res = expression.compile_as_access(ctx, already_reserved_slot);
-
-                // Check the type of the nested expression
                 emit_type_check(ctx, Some(&self.origin_location), res.slot(), expected_type);
+                res
+            }
 
-                // Return the nested expression's result
+            NodeVariant::CheckTrait { expression, required_trait } => {
+                let res = expression.compile_as_access(ctx, already_reserved_slot);
+                emit_trait_check(ctx, Some(&self.origin_location), res.slot(), required_trait);
                 res
             }
             _ => fallback(ctx, already_reserved_slot, self),
@@ -1841,7 +1850,7 @@ fn emit_set_metatable(
 
 /// Emit instructions to check that the type of the value stored in the
 /// `actual_value` slot is corresponding to `expected_type`. If types don't
-/// a runtime error is raised.
+/// match a runtime error is raised.
 fn emit_type_check(
     ctx: &mut CompilationContext,
     maybe_origin_location: Option<&SourceSection>,
@@ -1864,7 +1873,7 @@ fn emit_type_check(
         actual_tag,
         ctx.unit_data
             .constants
-            .get_from_int(expected_type.tag() as i32),
+            .get_from_int(expected_type.tag as i32),
     );
     ctx.goto(next_label);
     ctx.frame.borrow_mut().release_slot(actual_tag);
@@ -1885,6 +1894,49 @@ fn emit_type_check(
     ctx.frame.borrow_mut().release_slot(actual_name);
 
     // Finally label the next instruction
+    ctx.instructions.label(next_label);
+}
+
+/// Emit instructions to check that the value stored in the `value_slot` slot
+/// is implementing the required built-in trait. If not, a runtime error is
+/// raised.
+fn emit_trait_check(
+    ctx: &mut CompilationContext,
+    maybe_origin_location: Option<&SourceSection>,
+    value_slot: u8,
+    required_trait: &BuiltinTrait,
+) {
+    // Create the label for the next instruction
+    let next_label = ctx.instructions.new_label();
+
+    // Then get the field corresponding to the trait name in the traits table
+    let trait_res = ctx.frame.borrow_mut().get_tmp();
+    emit_table_member_read(
+        ctx,
+        maybe_origin_location,
+        trait_res,
+        value_slot,
+        &required_trait.runtime_field(),
+    );
+    ctx.instructions
+        .ad_maybe_loc(maybe_origin_location, IST, 0, trait_res as u16);
+    ctx.goto(next_label);
+    ctx.frame.borrow_mut().release_slot(trait_res);
+
+    // Emit instructions to raise a runtime error
+    let type_name = ctx.frame.borrow_mut().get_tmp();
+    emit_table_member_read(ctx, maybe_origin_location, type_name, value_slot, TYPE_NAME_FIELD);
+    emit_runtime_error(
+        ctx,
+        maybe_origin_location,
+        &MISSING_TRAIT,
+        &vec![
+            DynamicErrorArg::Static(String::from(required_trait.name)),
+            DynamicErrorArg::LocalValue(type_name),
+        ],
+    );
+
+    // Finally label the next instructions
     ctx.instructions.label(next_label);
 }
 
