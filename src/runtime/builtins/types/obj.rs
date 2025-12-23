@@ -10,13 +10,19 @@ use crate::{
         FunctionValue,
         builtins::{
             functions::lkql_img,
-            types::{BuiltinType, OverloadTarget, TypeField, TypeImplementation, list},
+            types::{
+                BuiltinType, OverloadTarget, TypeField, TypeImplementation, TypeImplementationKind,
+                list,
+            },
         },
     },
 };
 
-pub const TYPE: BuiltinType =
-    BuiltinType::Monomorphic { tag: list::TYPE.tag() + 1, implementation: IMPLEMENTATION };
+pub const TYPE: BuiltinType = BuiltinType {
+    tag: list::TYPE.tag + 1,
+    traits: &[],
+    implementation_kind: TypeImplementationKind::Monomorphic { implementation: IMPLEMENTATION },
+};
 
 pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
     name: "Object",

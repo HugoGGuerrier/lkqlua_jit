@@ -8,13 +8,16 @@ use crate::{
         FunctionValue,
         builtins::{
             functions::lkql_img,
-            types::{BuiltinType, TypeField, TypeImplementation, bool},
+            types::{BuiltinType, TypeField, TypeImplementation, TypeImplementationKind, bool},
         },
     },
 };
 
-pub const TYPE: BuiltinType =
-    BuiltinType::Monomorphic { tag: bool::TYPE.tag() + 1, implementation: IMPLEMENTATION };
+pub const TYPE: BuiltinType = BuiltinType {
+    tag: bool::TYPE.tag + 1,
+    traits: &[],
+    implementation_kind: TypeImplementationKind::Monomorphic { implementation: IMPLEMENTATION },
+};
 
 pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
     name: "Int",

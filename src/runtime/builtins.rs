@@ -17,6 +17,7 @@ use crate::{
 };
 
 pub mod functions;
+pub mod traits;
 pub mod types;
 pub mod utils;
 
@@ -54,13 +55,25 @@ pub fn get_builtin_types() -> Vec<&'static BuiltinType> {
     let mut known_tags = HashMap::new();
     let mut b = |t: &'static BuiltinType| -> &'static BuiltinType {
         // Ensure the type tag is unique
-        if let Some(previous) = known_tags.insert(t.tag(), t.display_name()) {
+        if let Some(previous) = known_tags.insert(t.tag, t.display_name()) {
             panic!(
                 "Multiple built-in types with the tag {}: {} and {}",
-                t.tag(),
+                t.tag,
                 t.display_name(),
                 previous
             );
+        }
+
+        // Check that the type is correcly implementing its required traits
+        for tr in t.traits {
+            if let Err(missing) = tr.check_type(t) {
+                panic!(
+                    "Missing fields in {} (or one of its implementation): {}. Required by trait {}",
+                    t.display_name(),
+                    missing.join(" & "),
+                    tr.name
+                );
+            }
         }
 
         // Then just return the built-in type

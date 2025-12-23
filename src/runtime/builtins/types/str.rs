@@ -10,14 +10,17 @@ use crate::{
         FunctionValue,
         builtins::{
             functions::lkql_img,
-            types::{BuiltinType, TypeField, TypeImplementation, int},
+            types::{BuiltinType, TypeField, TypeImplementation, TypeImplementationKind, int},
             utils::get_string_param,
         },
     },
 };
 
-pub const TYPE: BuiltinType =
-    BuiltinType::Monomorphic { tag: int::TYPE.tag() + 1, implementation: IMPLEMENTATION };
+pub const TYPE: BuiltinType = BuiltinType {
+    tag: int::TYPE.tag + 1,
+    traits: &[],
+    implementation_kind: TypeImplementationKind::Monomorphic { implementation: IMPLEMENTATION },
+};
 
 pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
     name: "Str",

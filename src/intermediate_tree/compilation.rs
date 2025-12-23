@@ -23,7 +23,7 @@ use crate::{
         op_codes::*,
     },
     error_templates::{
-        DUPLICATED_SYMBOL, ErrorTemplate, INDEX_OUT_OF_BOUNDS, NO_VALUE_FOR_PARAM,
+        DUPLICATED_SYMBOL, ErrorTemplate, INDEX_OUT_OF_BOUNDS, MISSING_TRAIT, NO_VALUE_FOR_PARAM,
         POS_AND_NAMED_VALUE_FOR_PARAM, PREVIOUS_SYMBOL_HINT, UNKNOWN_MEMBER, UNKNOWN_SYMBOL,
         WRONG_TYPE,
     },
@@ -39,8 +39,10 @@ use crate::{
     report::{Hint, Report},
     runtime::{
         DynamicError, DynamicErrorArg, RuntimeData, TYPE_NAME_FIELD, TYPE_TAG_FIELD,
+        TYPE_TRAITS_FIELD,
         builtins::{
             UNIT_VALUE_NAME, get_builtin_bindings,
+            traits::BuiltinTrait,
             types::{self, BuiltinType, TypeImplementation},
         },
     },
@@ -1846,7 +1848,7 @@ fn emit_set_metatable(
 
 /// Emit instructions to check that the type of the value stored in the
 /// `actual_value` slot is corresponding to `expected_type`. If types don't
-/// a runtime error is raised.
+/// match a runtime error is raised.
 fn emit_type_check(
     ctx: &mut CompilationContext,
     maybe_origin_location: Option<&SourceSection>,
@@ -1869,7 +1871,7 @@ fn emit_type_check(
         actual_tag,
         ctx.unit_data
             .constants
-            .get_from_int(expected_type.tag() as i32),
+            .get_from_int(expected_type.tag as i32),
     );
     ctx.goto(next_label);
     ctx.frame.borrow_mut().release_slot(actual_tag);
@@ -1890,6 +1892,48 @@ fn emit_type_check(
     ctx.frame.borrow_mut().release_slot(actual_name);
 
     // Finally label the next instruction
+    ctx.instructions.label(next_label);
+}
+
+/// Emit instructions to check that the value stored in the `value_slot` slot
+/// is implementing the required built-in trait. If not, a runtime error is
+/// raised.
+fn emit_trait_check(
+    ctx: &mut CompilationContext,
+    maybe_origin_location: Option<&SourceSection>,
+    value_slot: u8,
+    required_trait: &BuiltinTrait,
+) {
+    // Create the label for the next instruction
+    let next_label = ctx.instructions.new_label();
+
+    // Emit instructions to get the table containing all implemented traits
+    let traits = ctx.frame.borrow_mut().get_tmp();
+    emit_table_member_read(ctx, maybe_origin_location, traits, value_slot, TYPE_TRAITS_FIELD);
+
+    // Then get the field corresponding to the trait name in the traits table
+    let trait_res = ctx.frame.borrow_mut().get_tmp();
+    emit_table_member_read(ctx, maybe_origin_location, trait_res, traits, required_trait.name);
+    ctx.instructions
+        .ad_maybe_loc(maybe_origin_location, ISEQP, trait_res, PRIM_TRUE);
+    ctx.goto(next_label);
+    ctx.frame.borrow_mut().release_slot(traits);
+    ctx.frame.borrow_mut().release_slot(trait_res);
+
+    // Emit instructions to raise a runtime error
+    let type_name = ctx.frame.borrow_mut().get_tmp();
+    emit_table_member_read(ctx, maybe_origin_location, type_name, value_slot, TYPE_NAME_FIELD);
+    emit_runtime_error(
+        ctx,
+        maybe_origin_location,
+        &MISSING_TRAIT,
+        &vec![
+            DynamicErrorArg::Static(String::from(required_trait.name)),
+            DynamicErrorArg::LocalValue(type_name),
+        ],
+    );
+
+    // Finally label the next instructions
     ctx.instructions.label(next_label);
 }
 

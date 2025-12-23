@@ -33,6 +33,10 @@ pub const TYPE_NAME_FIELD: &str = "field@type_name";
 /// Pseudo-field to use to get the tag of the type of a value.
 pub const TYPE_TAG_FIELD: &str = "field@type_tag";
 
+/// Pseudo-field in a type meta-table that contains all traits implemented by
+/// the type.
+pub const TYPE_TRAITS_FIELD: &str = "field@traits";
+
 /// This type contains all information collected during the compilation and
 /// that may be required during the execution phase.
 #[derive(Debug)]
