@@ -10,6 +10,7 @@ use crate::{
         FunctionValue,
         builtins::{
             functions::lkql_img,
+            traits,
             types::{
                 BuiltinType, OverloadTarget, TypeField, TypeImplementation, TypeImplementationKind,
                 str,
@@ -20,7 +21,7 @@ use crate::{
 
 pub const TYPE: BuiltinType = BuiltinType {
     tag: str::TYPE.tag + 1,
-    traits: &[],
+    traits: &[&traits::indexable::TRAIT],
     implementation_kind: TypeImplementationKind::Monomorphic { implementation: IMPLEMENTATION },
 };
 

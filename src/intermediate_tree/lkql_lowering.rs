@@ -11,7 +11,7 @@ use crate::{
         MiscOperatorVariant, Node, NodeVariant,
     },
     report::{Hint, Report},
-    runtime::builtins::types,
+    runtime::builtins::{traits, types},
     sources::{SourceId, SourceSection},
 };
 
@@ -256,7 +256,12 @@ impl Node {
                     _ => unreachable!(),
                 };
                 NodeVariant::IndexExpr {
-                    indexed_val: Box::new(Self::lower_lkql_node(&coll_expr?, ctx)?),
+                    indexed_val: Box::new(Self::lower_lkql_node(&coll_expr?, ctx)?.with_wrapper(
+                        |indexed_val| NodeVariant::CheckTrait {
+                            expression: Box::new(indexed_val),
+                            required_trait: &traits::indexable::TRAIT,
+                        },
+                    )),
                     index: Box::new(Self::lower_lkql_node(&index?, ctx)?.with_wrapper(|i| {
                         NodeVariant::CheckType {
                             expression: Box::new(i),

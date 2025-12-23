@@ -7,6 +7,8 @@ use crate::runtime::{
     builtins::types::{BuiltinType, OverloadTarget, TypeField, TypeImplementationKind},
 };
 
+pub mod indexable;
+
 /// This type represents an LKQL built-in trait. A trait represents a set of
 /// constraints that can be applied to a built-in type. A type may implements
 /// multiple traits in the same time.
