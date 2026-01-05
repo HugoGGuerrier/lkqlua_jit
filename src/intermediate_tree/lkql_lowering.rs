@@ -11,11 +11,14 @@ use crate::{
         MiscOperatorVariant, Node, NodeVariant,
     },
     report::{Hint, Report},
-    runtime::builtins::{traits, types},
+    runtime::builtins::{
+        traits,
+        types::{self},
+    },
     sources::{SourceId, SourceSection},
 };
 
-use liblkqllang::{BaseFunction, LkqlNode};
+use liblkqllang::{BaseFunction, Exception, LkqlNode};
 
 impl ExecutionUnit {
     /// Lower the provided LKQL node as an intermediate [`ExecutionUnit`]. The
@@ -48,13 +51,14 @@ impl ExecutionUnit {
                 unit_path.file_stem().unwrap().to_string_lossy().to_string()
             }
             LkqlNode::FunDecl(fun_decl) => fun_decl.f_name()?.text()?,
-            LkqlNode::AnonymousFunction(_) => ctx.get_lambda_name(&node).clone(),
+            LkqlNode::AnonymousFunction(_) => ctx.next_lambda_name(),
+            LkqlNode::ListComprehension(_) => ctx.next_lazy_comp_name(),
             _ => unreachable!(),
         };
 
         // Iterate over all children execution units to lower them and to
         // associate each one to an index in the children units vector.
-        // This needs to be done before node lowering.
+        // This needs to be done before the lowering of the unit itself.
         let mut local_units = Vec::new();
         all_local_execution_units(node, &mut local_units)?;
         let mut children_units = Vec::new();
@@ -122,6 +126,46 @@ impl ExecutionUnit {
                     params,
                     body: Node::lower_lkql_node(&body_node, ctx)?,
                 }
+            }
+            LkqlNode::ListComprehension(list_comp) => {
+                // Get the collection bindings in the list comprehension, those
+                // are going to be the parameters of the created function
+                let collection_bindings: Result<Vec<Identifier>, Report> = list_comp
+                    .f_generators()?
+                    .into_iter()
+                    .map(|n| -> Result<Identifier, Report> {
+                        match n? {
+                            Some(LkqlNode::ListCompAssoc(assoc)) => {
+                                Ok(Identifier::from_lkql_node(&assoc.f_binding_name()?, ctx)?)
+                            }
+                            _ => unreachable!(),
+                        }
+                    })
+                    .collect();
+
+                // Create the intermediate node representing the body of the
+                // function.
+                let current_loc = SourceSection::from_lkql_node(ctx.lowered_source, node)?;
+                let body = match list_comp.f_guard()? {
+                    Some(guard) => Node {
+                        origin_location: current_loc.clone(),
+                        variant: NodeVariant::IfExpr {
+                            condition: Box::new(Node::lower_lkql_node(&guard, ctx)?),
+                            consequence: Box::new(Node::lower_lkql_node(
+                                &list_comp.f_expr()?,
+                                ctx,
+                            )?),
+                            alternative: Box::new(Node {
+                                origin_location: current_loc,
+                                variant: NodeVariant::NilLiteral,
+                            }),
+                        },
+                    },
+                    None => Node::lower_lkql_node(&list_comp.f_expr()?, ctx)?,
+                };
+
+                // Then return the new function execution unit variant
+                ExecutionUnitVariant::RawCallable { params: collection_bindings?, body }
             }
             _ => unreachable!(),
         };
@@ -319,6 +363,29 @@ impl Node {
             LkqlNode::BlockBodyExpr(body_expr) => {
                 return Self::lower_lkql_node(&body_expr.f_expr()?, ctx);
             }
+
+            // --- List comprehension
+            LkqlNode::ListComprehension(list_comp) => NodeVariant::LazyComprehension {
+                source_iterables: list_comp
+                    .f_generators()?
+                    .into_iter()
+                    .map(|n| -> Result<Option<LkqlNode>, Exception> {
+                        Ok(match n? {
+                            Some(LkqlNode::ListCompAssoc(assoc)) => Some(assoc.f_coll_expr()?),
+                            None => None,
+                            _ => unreachable!(),
+                        })
+                    })
+                    .map(|n| Self::lower_lkql_node(&n?.unwrap(), ctx))
+                    .map(|n| {
+                        Ok(n?.with_wrapper(|coll_expr| NodeVariant::CheckTrait {
+                            expression: Box::new(coll_expr),
+                            required_trait: &traits::iterable::TRAIT,
+                        }))
+                    })
+                    .collect::<Result<_, Report>>()?,
+                body_index: *ctx.child_index_map.get(&node).unwrap(),
+            },
 
             // --- Binary operation
             LkqlNode::ArithBinOp(arith_bin_op) => NodeVariant::ArithBinOp {
@@ -529,9 +596,12 @@ struct LoweringContext {
     /// [`Function`] object.
     child_index_map: HashMap<LkqlNode, u16>,
 
-    /// Each lambda (anonymous) function is associated to a unique name.
-    lambda_name_map: HashMap<LkqlNode, String>,
+    /// Counter of encountered lambdas, used for naming them.
     lambda_counter: usize,
+
+    /// Counter of encountered list comprehension, used for naming their
+    /// execution units.
+    lazy_comp_counter: usize,
 
     /// The list of diagnostics emitted during the lowering.
     diagnostics: Vec<Report>,
@@ -542,21 +612,25 @@ impl LoweringContext {
         Self {
             lowered_source,
             child_index_map: HashMap::new(),
-            lambda_name_map: HashMap::new(),
             lambda_counter: 0,
+            lazy_comp_counter: 0,
             diagnostics: Vec::new(),
         }
     }
 
-    /// Get the name associated to the provided anonymous function node.
-    fn get_lambda_name(&mut self, node: &LkqlNode) -> &String {
-        assert!(matches!(node, LkqlNode::AnonymousFunction(_)));
-        if !self.lambda_name_map.contains_key(node) {
-            self.lambda_name_map
-                .insert(node.clone(), format!("<lambda_{}>", self.lambda_counter));
-            self.lambda_counter += 1;
-        }
-        self.lambda_name_map.get(node).unwrap()
+    /// Get the next available lambda name, incrementing the counter.
+    fn next_lambda_name(&mut self) -> String {
+        let res = format!("<lambda_{}>", self.lambda_counter);
+        self.lambda_counter += 1;
+        res
+    }
+
+    /// Get the next available list comprehension name, incrementing the
+    /// counter.
+    fn next_lazy_comp_name(&mut self) -> String {
+        let res = format!("<lazy_comprehension_{}>", self.lazy_comp_counter);
+        self.lazy_comp_counter += 1;
+        res
     }
 }
 
@@ -571,20 +645,21 @@ impl LoweringContext {
 ///   * [`LkqlNode::SelectorDecl`]
 ///   * [`LkqlNode::AnonymousFunction`]
 ///   * [`LkqlNode::ListComprehension`]
+///   * [`LkqlNode::BlockExpr`]
 fn all_local_decls(node: &LkqlNode, output: &mut Vec<LkqlNode>) -> Result<(), Report> {
     for maybe_child in node {
         if let Some(child) = maybe_child? {
             match child {
                 LkqlNode::TopLevelList(_) => (),
-                LkqlNode::AnonymousFunction(_) => (),
-                LkqlNode::ListComprehension(_) => (),
-                LkqlNode::BlockExpr(_) => (),
                 LkqlNode::ValDecl(_) => {
                     all_local_decls(&child, output)?;
                     output.push(child);
                 }
                 LkqlNode::FunDecl(_) => output.push(child),
                 LkqlNode::SelectorDecl(_) => output.push(child),
+                LkqlNode::AnonymousFunction(_)
+                | LkqlNode::ListComprehension(_)
+                | LkqlNode::BlockExpr(_) => (),
                 _ => all_local_decls(&child, output)?,
             }
         }
@@ -629,11 +704,11 @@ fn all_local_execution_units(node: &LkqlNode, output: &mut Vec<LkqlNode>) -> Res
     for maybe_child in node {
         if let Some(child) = maybe_child? {
             match child {
-                LkqlNode::TopLevelList(_) => output.push(child),
-                LkqlNode::AnonymousFunction(_) => output.push(child),
-                LkqlNode::ListComprehension(_) => output.push(child),
-                LkqlNode::FunDecl(_) => output.push(child),
-                LkqlNode::SelectorDecl(_) => output.push(child),
+                LkqlNode::TopLevelList(_)
+                | LkqlNode::FunDecl(_)
+                | LkqlNode::SelectorDecl(_)
+                | LkqlNode::AnonymousFunction(_)
+                | LkqlNode::ListComprehension(_) => output.push(child),
                 _ => all_local_execution_units(&child, output)?,
             }
         }

@@ -5,22 +5,14 @@
 //! their bytecode representations. Such a tree represents the semantics of a
 //! program in an arborescent way while being low enough to easily compile to
 //! LuaJIT bytecode.
-//!
-//! There a several transformations done while compiling to an intermediate
-//! tree:
-//!   * Declarations and initializations are split
-//!   * Variable reading kinds are precised (param access, local access, ...)
-//!   * Function expressions are removed, all lambdas are node forward
-//!     declared.
-
-use std::{
-    fmt::{Debug, Display},
-    hash::Hash,
-};
 
 use crate::{
     runtime::builtins::{traits::BuiltinTrait, types::BuiltinType},
     sources::SourceSection,
+};
+use std::{
+    fmt::{Debug, Display},
+    hash::Hash,
 };
 
 pub mod compilation;
@@ -48,6 +40,9 @@ pub struct ExecutionUnit {
 }
 
 pub enum ExecutionUnitVariant {
+    /// This variant represents an LKQL module. This execution unit perform all
+    /// semantics of its elements and return a table associating each symbol of
+    /// the module to its value.
     Module {
         /// All symbols declared in this module, those are used to fill the
         /// result table and compute the frame size.
@@ -56,12 +51,29 @@ pub enum ExecutionUnitVariant {
         /// All elements of the module (declarations and expressions).
         elements: Vec<Node>,
     },
+
+    /// This variant represents a function callable by the user directly in the
+    /// language. This callable value implies some runtime checks and a
+    /// specific calling convention. See [`Node::compile_as_value`] for more
+    /// information.
     Function {
         /// Function parameters, each one being optionally associated to a
         /// default value.
         params: Vec<(Identifier, Option<Node>)>,
 
         /// The body of the function, representing its semantics.
+        body: Node,
+    },
+
+    /// This variant is like [`ExecutionUnitVariant::Function`] but without any
+    /// additional semantics than getting called and returning a result. It
+    /// doesn't perform any runtime checks.
+    RawCallable {
+        /// Parameters of the execution unit, there is no possibility to
+        /// provide default value for them.
+        params: Vec<Identifier>,
+
+        /// The body of the callable, result of its execution.
         body: Node,
     },
 }
@@ -108,6 +120,16 @@ impl ExecutionUnit {
                                 .collect(),
                             child_level,
                         ),
+                    ),
+                    ("body", body.pretty_print(child_level)),
+                ],
+            ),
+            ExecutionUnitVariant::RawCallable { params, body } => (
+                format!("RawCallable \"{}\"", self.name),
+                vec![
+                    (
+                        "params",
+                        format!("{:?}", params.iter().map(|i| &i.text).collect::<Vec<_>>()),
                     ),
                     ("body", body.pretty_print(child_level)),
                 ],
@@ -184,11 +206,9 @@ pub enum NodeVariant {
         body: Vec<Node>,
         val: Box<Node>,
     },
-
-    // --- Lazy sequence creation
-    LazySeqExpr {
-        source_seq: Box<Node>,
-        next_fun: Box<Node>,
+    LazyComprehension {
+        source_iterables: Vec<Node>,
+        body_index: u16,
     },
 
     // --- Binary operations
@@ -250,6 +270,7 @@ pub enum NodeVariant {
     },
 
     // --- Literals
+    NilLiteral,
     NullLiteral,
     UnitLiteral,
     BoolLiteral(bool),
@@ -334,11 +355,11 @@ impl Node {
                     ("val", val.pretty_print(child_level)),
                 ],
             ),
-            NodeVariant::LazySeqExpr { source_seq, next_fun } => (
-                "LazySeqExpr",
+            NodeVariant::LazyComprehension { source_iterables, body_index } => (
+                "LazyComprehension",
                 vec![
-                    ("source_seq", source_seq.pretty_print(child_level)),
-                    ("next_fun", next_fun.pretty_print(child_level)),
+                    ("source_iterables", Self::pretty_print_vec(source_iterables, child_level)),
+                    ("body_index", body_index.to_string()),
                 ],
             ),
             NodeVariant::ArithBinOp { left, operator, right } => (
@@ -417,6 +438,7 @@ impl Node {
                     ("required_trait", required_trait.name.to_string()),
                 ],
             ),
+            NodeVariant::NilLiteral => ("NilLiteral", vec![]),
             NodeVariant::NullLiteral => ("NullLiteral", vec![]),
             NodeVariant::UnitLiteral => ("UnitLiteral", vec![]),
             NodeVariant::BoolLiteral(value) => ("BoolLiteral", vec![("value", value.to_string())]),

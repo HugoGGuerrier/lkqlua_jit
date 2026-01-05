@@ -12,14 +12,14 @@ use crate::{
             functions::lkql_img,
             types::{
                 BuiltinType, OverloadTarget, TypeField, TypeImplementation, TypeImplementationKind,
-                list,
+                stream,
             },
         },
     },
 };
 
 pub const TYPE: BuiltinType = BuiltinType {
-    tag: list::TYPE.tag + 1,
+    tag: stream::TYPE.tag + 1,
     traits: &[],
     implementation_kind: TypeImplementationKind::Monomorphic { implementation: IMPLEMENTATION },
 };

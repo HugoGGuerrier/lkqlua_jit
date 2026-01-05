@@ -42,7 +42,7 @@ use crate::{
         builtins::{
             UNIT_SINGLETON_GLOBAL_NAME, get_builtin_bindings,
             traits::BuiltinTrait,
-            types::{self, BuiltinType, TypeImplementation},
+            types::{self, BuiltinType, TypeImplementation, stream::lazy_comprehension},
         },
     },
     sources::{SourceRepository, SourceSection},
@@ -256,6 +256,23 @@ impl ExecutionUnit {
                 }
 
                 // The compile the body as a returning node
+                body.compile_as_function_body(ctx);
+            }
+            ExecutionUnitVariant::RawCallable { params, body } => {
+                // Store the argument count
+                arg_count = params.len();
+
+                // Declare all parameters as locals and initialize them
+                ctx.declare_locals(&params);
+                let birth_label = ctx.instructions.new_label();
+                for param in params {
+                    ctx.frame.borrow_mut().init_local(&param.text, birth_label);
+                }
+
+                // Emit the birth label for parameters
+                ctx.instructions.label(birth_label);
+
+                // Finally compile the body of the function
                 body.compile_as_function_body(ctx);
             }
         };
@@ -523,8 +540,75 @@ impl Node {
                 ctx.frame = parent_frame;
             }
 
-            // --- Lazy sequence creation
-            NodeVariant::LazySeqExpr { .. } => todo!(),
+            // --- Lazy comprehension
+            NodeVariant::LazyComprehension { source_iterables, body_index } => {
+                // First load the empty table that is going to be the result
+                ctx.instructions.ad(
+                    &self.origin_location,
+                    TDUP,
+                    result_slot,
+                    ctx.unit_data.constants.get_empty_table(),
+                );
+
+                // Then compile all source iterables, placing them in a table
+                // in the same order.
+                let collections_table_slot = ctx.frame.borrow_mut().get_tmp();
+                let collection_slot = ctx.frame.borrow_mut().get_tmp();
+                ctx.instructions.ad(
+                    &self.origin_location,
+                    TDUP,
+                    collections_table_slot,
+                    ctx.unit_data.constants.get_empty_table(),
+                );
+                for (i, collection) in source_iterables.iter().enumerate() {
+                    let collection_access =
+                        collection.compile_as_access(ctx, Some(collection_slot));
+                    emit_table_index_write(
+                        ctx,
+                        &self.origin_location,
+                        collection_access.slot(),
+                        collections_table_slot,
+                        i + 1,
+                    );
+                    collection_access.release(ctx);
+                }
+
+                // Place the table with all source collections in the resulting
+                // value.
+                emit_table_member_write(
+                    ctx,
+                    Some(&self.origin_location),
+                    collections_table_slot,
+                    result_slot,
+                    lazy_comprehension::COLLECTIONS_FIELD,
+                );
+                ctx.frame.borrow_mut().release_slot(collection_slot);
+                ctx.frame.borrow_mut().release_slot(collections_table_slot);
+
+                // Get the child execution unit representing the comprehension
+                // body and place it in the result.
+                let body_name = &ctx.unit.children_units[*body_index as usize].name;
+                ctx.frame
+                    .borrow_mut()
+                    .bind_local(body_name, &self.origin_location);
+                Self::compile_child_unit(ctx, &self.origin_location, *body_index as usize);
+                let body_binding = ctx.frame.borrow().get_local(body_name).unwrap();
+                emit_table_member_write(
+                    ctx,
+                    Some(&self.origin_location),
+                    body_binding.slot,
+                    result_slot,
+                    lazy_comprehension::BODY_FIELD,
+                );
+
+                // Finally set the meta-table of the resulting value
+                emit_set_metatable(
+                    ctx,
+                    Some(&self.origin_location),
+                    result_slot,
+                    &types::stream::lazy_comprehension::SPECIALIZATION,
+                );
+            }
 
             // --- Binary operations
             NodeVariant::ArithBinOp { left, operator, right } => {
@@ -794,6 +878,12 @@ impl Node {
                     result_slot,
                     &types::obj::IMPLEMENTATION,
                 );
+            }
+
+            // --- Nil literal needs a special compilation process
+            NodeVariant::NilLiteral => {
+                ctx.instructions
+                    .ad(&self.origin_location, KPRI, result_slot, PRIM_NIL);
             }
 
             // --- All trivial literal nodes should've been compiled by now
@@ -1272,6 +1362,11 @@ impl Node {
 
                 // Finally, restore the previous frame as the current one
                 ctx.frame = parent_frame;
+            }
+
+            // In the case of a `nil` literal, return nothing
+            NodeVariant::NilLiteral => {
+                ctx.instructions.ad(&self.origin_location, RET0, 0, 1);
             }
 
             // In all other cases, just get an access to the value and return

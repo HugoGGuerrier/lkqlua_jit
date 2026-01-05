@@ -19,6 +19,7 @@ pub mod int;
 pub mod list;
 pub mod obj;
 pub mod str;
+pub mod stream;
 pub mod tuple;
 pub mod unit;
 
