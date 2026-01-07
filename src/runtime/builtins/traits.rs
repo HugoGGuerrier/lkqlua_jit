@@ -8,6 +8,7 @@ use crate::runtime::{
 };
 
 pub mod indexable;
+pub mod iterable;
 pub mod sized;
 
 /// This type represents an LKQL built-in trait. A trait represents a set of

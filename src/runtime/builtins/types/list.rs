@@ -10,7 +10,11 @@ use crate::{
         FunctionValue,
         builtins::{
             functions::lkql_img,
-            traits::{self, sized::DEFAULT_SIZED_LENGTH},
+            traits::{
+                indexable,
+                iterable::{self, ITERATOR_FIELD},
+                sized::{self, DEFAULT_SIZED_LENGTH},
+            },
             types::{
                 BuiltinType, OverloadTarget, TypeField, TypeImplementation, TypeImplementationKind,
                 tuple,
@@ -21,7 +25,7 @@ use crate::{
 
 pub const TYPE: BuiltinType = BuiltinType {
     tag: tuple::TYPE.tag + 1,
-    traits: &[&traits::indexable::TRAIT, &traits::sized::TRAIT],
+    traits: &[&indexable::TRAIT, &iterable::TRAIT, &sized::TRAIT],
     implementation_kind: TypeImplementationKind::Monomorphic { implementation: IMPLEMENTATION },
 };
 
@@ -30,11 +34,30 @@ pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
     fields: &[
         ("img", TypeField::Property(FunctionValue::CFunction(lkql_img))),
         ("length", TypeField::Property(DEFAULT_SIZED_LENGTH)),
+        (
+            ITERATOR_FIELD,
+            TypeField::Property(FunctionValue::LuaFunction(LIST_ITERATOR)),
+        ),
     ],
     overloads: &[(OverloadTarget::ToString, FunctionValue::CFunction(list_tostring))],
     index_method: None,
     registering_function: None,
 };
+
+/// Lua source that represents the "field@iterator" property on the "List"
+/// type.
+const LIST_ITERATOR: &str = "function (_, self)
+    local size = #self
+    local cursor = 0
+    return function ()
+        if cursor < size then
+            cursor = cursor + 1
+            return self[cursor]
+        else
+            return nil
+        end
+    end
+end";
 
 /// Overload of "__tostring" for the "List" type
 #[unsafe(no_mangle)]
