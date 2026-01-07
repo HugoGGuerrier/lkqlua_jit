@@ -10,6 +10,7 @@ use crate::{
         FunctionValue,
         builtins::{
             functions::lkql_img,
+            traits::{self, sized::DEFAULT_SIZED_LENGTH},
             types::{BuiltinType, TypeField, TypeImplementation, TypeImplementationKind, int},
             utils::get_string_param,
         },
@@ -18,7 +19,7 @@ use crate::{
 
 pub const TYPE: BuiltinType = BuiltinType {
     tag: int::TYPE.tag + 1,
-    traits: &[],
+    traits: &[&traits::sized::TRAIT],
     implementation_kind: TypeImplementationKind::Monomorphic { implementation: IMPLEMENTATION },
 };
 
@@ -26,6 +27,7 @@ pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
     name: "Str",
     fields: &[
         ("img", TypeField::Property(FunctionValue::CFunction(lkql_img))),
+        ("length", TypeField::Property(DEFAULT_SIZED_LENGTH)),
         ("base_name", TypeField::Method(FunctionValue::CFunction(str_base_name))),
         ("starts_with", TypeField::Method(FunctionValue::CFunction(str_starts_with))),
     ],

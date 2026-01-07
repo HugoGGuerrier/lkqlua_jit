@@ -8,6 +8,7 @@ use crate::runtime::{
 };
 
 pub mod indexable;
+pub mod sized;
 
 /// This type represents an LKQL built-in trait. A trait represents a set of
 /// constraints that can be applied to a built-in type. A type may implements
