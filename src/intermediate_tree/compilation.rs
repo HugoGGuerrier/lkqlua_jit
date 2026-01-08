@@ -40,7 +40,7 @@ use crate::{
     runtime::{
         DynamicError, DynamicErrorArg, RuntimeData, TYPE_NAME_FIELD, TYPE_TAG_FIELD,
         builtins::{
-            UNIT_VALUE_NAME, get_builtin_bindings,
+            UNIT_SINGLETON_GLOBAL_NAME, get_builtin_bindings,
             types::{self, BuiltinType, TypeImplementation},
         },
     },
@@ -469,7 +469,7 @@ impl Node {
                         ctx,
                         Some(&self.origin_location),
                         result_slot,
-                        UNIT_VALUE_NAME,
+                        UNIT_SINGLETON_GLOBAL_NAME,
                     );
                 } else {
                     emit_runtime_error(
@@ -1552,7 +1552,7 @@ impl Node {
             .ad(origin_location, ISNEP, result_slot, PRIM_NIL);
         ctx.goto(next_label);
         if is_safe {
-            emit_global_read(ctx, Some(origin_location), result_slot, UNIT_VALUE_NAME);
+            emit_global_read(ctx, Some(origin_location), result_slot, UNIT_SINGLETON_GLOBAL_NAME);
         } else {
             emit_runtime_error(
                 ctx,
@@ -1580,7 +1580,12 @@ impl ConstantValue {
                 true
             }
             ConstantValueVariant::Unit => {
-                emit_global_read(ctx, Some(&self.origin_location), result_slot, UNIT_VALUE_NAME);
+                emit_global_read(
+                    ctx,
+                    Some(&self.origin_location),
+                    result_slot,
+                    UNIT_SINGLETON_GLOBAL_NAME,
+                );
                 true
             }
             ConstantValueVariant::Bool(value) => {

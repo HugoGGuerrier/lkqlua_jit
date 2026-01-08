@@ -21,7 +21,7 @@ pub mod types;
 pub mod utils;
 
 /// Name of the binding leading to the "Unit" singleton.
-pub const UNIT_VALUE_NAME: &str = "value@unit";
+pub const UNIT_SINGLETON_GLOBAL_NAME: &str = "value@unit";
 pub fn create_unit_value(l: LuaState) {
     push_table(l, 0, 0);
     get_global(l, &types::unit::IMPLEMENTATION.global_field_name());
@@ -44,7 +44,7 @@ pub fn get_builtin_bindings() -> Vec<BuiltinBinding> {
     vec![
         b("print", RuntimeValue::Function(FunctionValue::CFunction(lkql_print))),
         b("img", RuntimeValue::Function(FunctionValue::CFunction(lkql_img))),
-        b(UNIT_VALUE_NAME, RuntimeValue::FromBuilder(create_unit_value)),
+        b(UNIT_SINGLETON_GLOBAL_NAME, RuntimeValue::FromBuilder(create_unit_value)),
     ]
 }
 
