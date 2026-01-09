@@ -675,13 +675,8 @@ impl Node {
                 ctx.instructions.label(birth_label);
                 ctx.frame.borrow_mut().init_local(&symbol.text, birth_label);
             }
-            NodeVariant::InitLocalFun { symbol, child_index } => {
-                Self::compile_child_unit(
-                    ctx,
-                    &self.origin_location,
-                    &symbol.text,
-                    *child_index as usize,
-                );
+            NodeVariant::InitLocalFun(child_index) => {
+                Self::compile_child_unit(ctx, &self.origin_location, *child_index as usize);
             }
             NodeVariant::ReadSymbol(identifier) => {
                 // First try getting the symbol in the local frame
@@ -749,12 +744,7 @@ impl Node {
                     .bind_local(lambda_name, &self.origin_location);
 
                 // Compile the child unit
-                Self::compile_child_unit(
-                    ctx,
-                    &self.origin_location,
-                    lambda_name,
-                    *child_index as usize,
-                );
+                Self::compile_child_unit(ctx, &self.origin_location, *child_index as usize);
 
                 // Finally move the lambda value in the result slot
                 let lambda_binding = ctx.frame.borrow().get_local(lambda_name).unwrap();
@@ -1293,21 +1283,21 @@ impl Node {
     fn compile_child_unit(
         ctx: &mut CompilationContext,
         origin_location: &SourceSection,
-        child_symbol: &str,
         child_index: usize,
     ) {
         // Create the birth label of the local variable
         let birth_label = ctx.instructions.new_label();
 
-        // Get the slot to place the functional value in
-        let binding_slot = ctx.frame.borrow().get_local(child_symbol).unwrap();
-
-        // Create the child unit identifier
+        // Retrieve the child execution unit and its name
         let child_unit = &ctx.unit.children_units[child_index];
+        let child_name = &child_unit.name;
+
+        // Get the slot to place the functional value in
+        let binding_slot = ctx.frame.borrow().get_local(child_name).unwrap();
 
         // Flag the local slot as initialized before compiling the
         // unit to allow the latter to be recursive.
-        ctx.frame.borrow_mut().init_local(child_symbol, birth_label);
+        ctx.frame.borrow_mut().init_local(child_name, birth_label);
         child_unit.open_frame_and_compile(ctx);
 
         // Add a child constant in the constant table

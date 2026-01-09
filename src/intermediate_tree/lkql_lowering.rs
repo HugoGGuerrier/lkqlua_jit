@@ -148,15 +148,7 @@ impl Node {
                 val: Box::new(Self::lower_lkql_node(&val_decl.f_value()?, ctx)?),
             },
             LkqlNode::FunDecl(_) | LkqlNode::SelectorDecl(_) => {
-                let id_node = match node {
-                    LkqlNode::FunDecl(fun_decl) => fun_decl.f_name()?,
-                    LkqlNode::SelectorDecl(selector_decl) => selector_decl.f_name()?,
-                    _ => unreachable!(),
-                };
-                NodeVariant::InitLocalFun {
-                    symbol: Identifier::from_lkql_node(&id_node, ctx)?,
-                    child_index: *ctx.child_index_map.get(node).unwrap(),
-                }
+                NodeVariant::InitLocalFun(*ctx.child_index_map.get(node).unwrap())
             }
 
             // --- Function call

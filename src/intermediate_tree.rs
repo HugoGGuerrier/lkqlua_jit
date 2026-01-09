@@ -228,10 +228,7 @@ pub enum NodeVariant {
     },
     /// Special local symbol initialization for function-like values. This node
     /// must be used for recursion and debug purposes.
-    InitLocalFun {
-        symbol: Identifier,
-        child_index: u16,
-    },
+    InitLocalFun(u16),
     ReadSymbol(Identifier),
 
     // --- Lambda function access
@@ -390,13 +387,9 @@ impl Node {
                     ("val", val.pretty_print(child_level)),
                 ],
             ),
-            NodeVariant::InitLocalFun { symbol, child_index } => (
-                "InitLocalFun",
-                vec![
-                    ("symbol", format!("\"{}\"", symbol.text)),
-                    ("child_index", child_index.to_string()),
-                ],
-            ),
+            NodeVariant::InitLocalFun(child_index) => {
+                ("InitLocalFun", vec![("child_index", child_index.to_string())])
+            }
             NodeVariant::ReadSymbol(symbol) => {
                 ("ReadSymbol", vec![("symbol", format!("\"{}\"", symbol.text))])
             }
