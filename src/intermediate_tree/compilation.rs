@@ -148,9 +148,7 @@ impl ExecutionUnit {
                 };
 
                 // Emit instructions to create the module table
-                let empty_table_cst = ctx.unit_data.constants.get_empty_table();
-                ctx.instructions
-                    .ad(&end_source_section, TDUP, result_tmp, empty_table_cst);
+                emit_new_table(ctx, &end_source_section, result_tmp, 0, symbols.len() as u32);
                 for symbol in symbols {
                     let local_slot = ctx.frame.borrow().get_local(&symbol.text).unwrap();
                     emit_table_member_write(
@@ -543,22 +541,18 @@ impl Node {
             // --- Lazy comprehension
             NodeVariant::LazyComprehension { source_iterables, body_index } => {
                 // First load the empty table that is going to be the result
-                ctx.instructions.ad(
-                    &self.origin_location,
-                    TDUP,
-                    result_slot,
-                    ctx.unit_data.constants.get_empty_table(),
-                );
+                emit_new_table(ctx, &self.origin_location, result_slot, 0, 7);
 
                 // Then compile all source iterables, placing them in a table
                 // in the same order.
                 let collections_table_slot = ctx.frame.borrow_mut().get_tmp();
                 let collection_slot = ctx.frame.borrow_mut().get_tmp();
-                ctx.instructions.ad(
+                emit_new_table(
+                    ctx,
                     &self.origin_location,
-                    TDUP,
                     collections_table_slot,
-                    ctx.unit_data.constants.get_empty_table(),
+                    source_iterables.len() as u16,
+                    0,
                 );
                 for (i, collection) in source_iterables.iter().enumerate() {
                     let collection_access =
@@ -1454,16 +1448,27 @@ impl Node {
             }
         }
 
-        // Create the complex constant and duplicate it
-        let table_cst = ctx
-            .unit_data
-            .constants
-            .get_from_complex_constant(ComplexConstant::Table {
-                array_part: array_constant_elems,
-                hash_part: hash_constant_elems,
-            });
-        ctx.instructions
-            .ad(origin_location, TDUP, result_slot, table_cst);
+        // Emit instruction to create a new table or copy the constant one if
+        // the table has constant parts.
+        if !array_constant_elems.is_empty() || !hash_constant_elems.is_empty() {
+            let table_cst =
+                ctx.unit_data
+                    .constants
+                    .get_from_complex_constant(ComplexConstant::Table {
+                        array_part: array_constant_elems,
+                        hash_part: hash_constant_elems,
+                    });
+            ctx.instructions
+                .ad(origin_location, TDUP, result_slot, table_cst);
+        } else {
+            emit_new_table(
+                ctx,
+                origin_location,
+                result_slot,
+                array_part_nodes.len() as u16,
+                hash_part_nodes.len() as u32,
+            );
+        }
 
         // Finally place values that cannot be represented with table constants
         // in the table.
@@ -1899,6 +1904,28 @@ fn _access_table_field(
     }
 }
 
+/// Util function used to generate an instruction to create a new table and
+/// store it in the provided slot.
+fn emit_new_table(
+    ctx: &mut CompilationContext,
+    origin_location: &SourceSection,
+    result_slot: u8,
+    array_size: u16,
+    hash_size: u32,
+) {
+    // Ensure the required array size is lower than 2^11
+    assert!(array_size <= 2 ^ 11, "Maximum \"array_size\" exceeded: {array_size}");
+
+    // Then get the real hash size
+    let real_hash_size = (hash_size as f64).log2().ceil() as u16;
+
+    // Compute the "D" operand for the new instruction
+    let d = (real_hash_size << 11) | array_size;
+
+    // Then emit the instruction
+    ctx.instructions.ad(origin_location, TNEW, result_slot, d);
+}
+
 /// Util function used to generate a global table reading.
 fn emit_global_read(
     ctx: &mut CompilationContext,
@@ -2216,17 +2243,14 @@ impl ConstantRepository {
         self.get_from_complex_constant(ComplexConstant::String(String::from(value)))
     }
 
-    /// Get the index of the constant representing the empty table.
-    fn get_empty_table(&mut self) -> u16 {
-        self.get_from_complex_constant(ComplexConstant::Table {
-            array_part: Vec::new(),
-            hash_part: Vec::new(),
-        })
-    }
-
     /// More generic function to get the index of a complex constant.
     fn get_from_complex_constant(&mut self, constant: ComplexConstant) -> u16 {
-        Self::get_or_add_constant(constant, &mut self.complex_constants)
+        match constant {
+            ComplexConstant::Table { .. } => {
+                Self::add_constant(constant, &mut self.complex_constants)
+            }
+            _ => Self::get_or_add_constant(constant, &mut self.complex_constants),
+        }
     }
 
     /// More generic function to get the index of a numeric constant.
