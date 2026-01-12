@@ -2,9 +2,9 @@
 //!
 //! This module contains all types and working values for built-in traits.
 
-use crate::runtime::{
-    FunctionValue,
+use crate::{
     builtins::types::{BuiltinType, OverloadTarget, TypeField, TypeImplementationKind},
+    runtime::FunctionValue,
 };
 
 pub mod indexable;

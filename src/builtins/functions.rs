@@ -4,17 +4,18 @@
 
 use crate::{
     ExecutionContext,
+    builtins::utils::{get_bool_param, get_param},
     lua::{
         LuaState, get_global, get_string, get_top, get_type, get_user_data, pop, push_string,
         to_string,
     },
-    runtime::{
-        CONTEXT_GLOBAL_NAME, DEFAULT_VALUE_IMAGE,
-        builtins::utils::{get_bool_param, get_param},
-    },
+    runtime::CONTEXT_GLOBAL_NAME,
 };
 use std::ffi::c_int;
 use std::io::Write;
+
+/// The default image of a value when the latter doesn't define one.
+const DEFAULT_VALUE_IMAGE: &str = "<lkql_value>";
 
 /// The "print" function
 #[unsafe(no_mangle)]

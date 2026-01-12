@@ -4,7 +4,7 @@
 //! any required field because all values are technically indexable. This trait
 //! is only used for runtime checking.
 
-use crate::runtime::builtins::traits::BuiltinTrait;
+use crate::builtins::traits::BuiltinTrait;
 
 pub const TRAIT: BuiltinTrait =
     BuiltinTrait { name: "Indexable", required_overloads: &[], required_fields: &[] };

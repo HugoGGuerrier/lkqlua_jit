@@ -13,23 +13,13 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-pub mod builtins;
 pub mod engine;
-
-/// The default image of a value when the latter doesn't define one.
-pub const DEFAULT_VALUE_IMAGE: &str = "<lkql_value>";
 
 /// String to represents an erroneous runtime value.
 pub const ERROR_VALUE: &str = "##ERROR##";
 
 /// Name of the global value where the LKQL execution context is stored.
 pub const CONTEXT_GLOBAL_NAME: &str = "value@execution_context";
-
-/// Pseudo-field to use to get the name of the type of a value.
-pub const TYPE_NAME_FIELD: &str = "field@type_name";
-
-/// Pseudo-field to use to get the tag of the type of a value.
-pub const TYPE_TAG_FIELD: &str = "field@type_tag";
 
 /// This type contains all information collected during the compilation and
 /// that may be required during the execution phase.

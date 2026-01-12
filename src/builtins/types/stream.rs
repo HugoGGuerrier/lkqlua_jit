@@ -5,22 +5,20 @@
 //! you can find all implementations of it in submodules.
 
 use crate::{
-    lua::{LuaState, push_string},
-    runtime::{
-        FunctionValue,
-        builtins::{
-            functions::lkql_img,
-            traits::{
-                indexable,
-                iterable::{self, ITERATOR_FIELD},
-                sized,
-            },
-            types::{
-                BuiltinType, OverloadTarget, TypeField, TypeImplementation, TypeImplementationKind,
-                list,
-            },
+    builtins::{
+        functions::lkql_img,
+        traits::{
+            indexable,
+            iterable::{self, ITERATOR_FIELD},
+            sized,
+        },
+        types::{
+            BuiltinType, OverloadTarget, TypeField, TypeImplementation, TypeImplementationKind,
+            list,
         },
     },
+    lua::{LuaState, push_string},
+    runtime::FunctionValue,
 };
 use const_format::formatcp;
 use std::ffi::c_int;

@@ -2,6 +2,10 @@
 //! to an intermediate representation.
 
 use crate::{
+    builtins::{
+        traits,
+        types::{self},
+    },
     error_templates::{POS_AFTER_NAMED_ARGUMENT, PREVIOUS_NAMED_ARG_HINT},
     intermediate_tree::{
         ArithOperator, ArithOperatorVariant, CompOperator, CompOperatorVariant, ExecutionUnit,
@@ -9,10 +13,6 @@ use crate::{
         MiscOperatorVariant, Node, NodeVariant,
     },
     report::{Hint, Report},
-    runtime::builtins::{
-        traits,
-        types::{self},
-    },
     sources::{SourceId, SourceSection},
 };
 use liblkqllang::{BaseFunction, Exception, LkqlNode};

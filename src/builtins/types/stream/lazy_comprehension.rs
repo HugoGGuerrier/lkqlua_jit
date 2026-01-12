@@ -4,12 +4,12 @@
 //! LKQL type. This implementation generates a new stream by processing other
 //! iterables with a body function.
 
-use crate::runtime::{
-    FunctionValue,
+use crate::{
     builtins::{
         traits::iterable::ITERATOR_FIELD,
         types::{TypeField, TypeImplementation, stream::INTERNAL_NEXT_FIELD},
     },
+    runtime::FunctionValue,
 };
 use const_format::formatcp;
 

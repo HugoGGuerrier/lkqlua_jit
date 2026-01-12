@@ -3,16 +3,14 @@
 //! This module defines the LKQL "Unit" type.
 
 use crate::{
-    lua::{LuaState, push_string},
-    runtime::{
-        FunctionValue,
-        builtins::{
-            functions::lkql_img,
-            types::{
-                BuiltinType, OverloadTarget, TypeField, TypeImplementation, TypeImplementationKind,
-            },
+    builtins::{
+        functions::lkql_img,
+        types::{
+            BuiltinType, OverloadTarget, TypeField, TypeImplementation, TypeImplementationKind,
         },
     },
+    lua::{LuaState, push_string},
+    runtime::FunctionValue,
 };
 use std::ffi::c_int;
 

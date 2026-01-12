@@ -18,6 +18,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+pub mod builtins;
 pub mod bytecode;
 pub mod error_templates;
 pub mod intermediate_tree;

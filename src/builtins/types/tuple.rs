@@ -3,18 +3,15 @@
 //! This module defines the LKQL "Tuple" type.
 
 use crate::{
-    lua::{LuaState, get_field, get_index, get_length, get_string, push_string, set_top},
-    runtime::{
-        FunctionValue,
-        builtins::{
-            functions::lkql_img,
-            traits,
-            types::{
-                BuiltinType, OverloadTarget, TypeField, TypeImplementation, TypeImplementationKind,
-                str,
-            },
+    builtins::{
+        functions::lkql_img,
+        traits,
+        types::{
+            BuiltinType, OverloadTarget, TypeField, TypeImplementation, TypeImplementationKind, str,
         },
     },
+    lua::{LuaState, get_field, get_index, get_length, get_string, push_string, set_top},
+    runtime::FunctionValue,
 };
 use std::ffi::c_int;
 

@@ -4,14 +4,12 @@
 //! values.
 
 use crate::{
+    builtins::traits::BuiltinTrait,
     lua::{
         LuaState, get_top, push_bool, push_integer, push_string, push_table, set_field, set_global,
         set_top,
     },
-    runtime::{
-        FunctionValue, LuaValue, RuntimeValue, TYPE_NAME_FIELD, TYPE_TAG_FIELD,
-        builtins::traits::BuiltinTrait,
-    },
+    runtime::{FunctionValue, LuaValue, RuntimeValue},
 };
 
 pub mod bool;
@@ -22,6 +20,12 @@ pub mod str;
 pub mod stream;
 pub mod tuple;
 pub mod unit;
+
+/// Pseudo-field to use to get the name of the type of a value.
+pub const TYPE_NAME_FIELD: &str = "field@type_name";
+
+/// Pseudo-field to use to get the tag of the type of a value.
+pub const TYPE_TAG_FIELD: &str = "field@type_tag";
 
 /// This type represents an LKQL built-in type.
 #[derive(Debug)]

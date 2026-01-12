@@ -3,17 +3,15 @@
 //! This module defines the LKQL "Object" type.
 
 use crate::{
-    lua::{LuaState, get_field, get_next_pair, get_string, pop, push_nil, push_string},
-    runtime::{
-        FunctionValue,
-        builtins::{
-            functions::lkql_img,
-            types::{
-                BuiltinType, OverloadTarget, TypeField, TypeImplementation, TypeImplementationKind,
-                stream,
-            },
+    builtins::{
+        functions::lkql_img,
+        types::{
+            BuiltinType, OverloadTarget, TypeField, TypeImplementation, TypeImplementationKind,
+            stream,
         },
     },
+    lua::{LuaState, get_field, get_next_pair, get_string, pop, push_nil, push_string},
+    runtime::FunctionValue,
 };
 use std::ffi::c_int;
 

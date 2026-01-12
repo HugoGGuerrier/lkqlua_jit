@@ -4,6 +4,14 @@
 //! tree into a [`crate::bytecode::BytecodeBuffer`].
 
 use crate::{
+    builtins::{
+        UNIT_SINGLETON_GLOBAL_NAME, get_builtin_bindings,
+        traits::BuiltinTrait,
+        types::{
+            self, BuiltinType, TYPE_NAME_FIELD, TYPE_TAG_FIELD, TypeImplementation,
+            stream::lazy_comprehension,
+        },
+    },
     bytecode::{
         self, BytecodeBuffer, ComplexConstant, JUMP_BIASING, NumericConstant, PRIM_FALSE, PRIM_NIL,
         PRIM_TRUE, Prototype, TableConstantElement, VariableData,
@@ -27,14 +35,7 @@ use crate::{
         constant_eval::{ConstantValue, ConstantValueVariant},
     },
     report::{Hint, Report},
-    runtime::{
-        DynamicError, DynamicErrorArg, RuntimeData, TYPE_NAME_FIELD, TYPE_TAG_FIELD,
-        builtins::{
-            UNIT_SINGLETON_GLOBAL_NAME, get_builtin_bindings,
-            traits::BuiltinTrait,
-            types::{self, BuiltinType, TypeImplementation, stream::lazy_comprehension},
-        },
-    },
+    runtime::{DynamicError, DynamicErrorArg, RuntimeData},
     sources::{SourceRepository, SourceSection},
 };
 use num_bigint::BigInt;

@@ -4,14 +4,12 @@
 //! element of the LKQL language (functions and types).
 
 use crate::{
-    lua::{LuaState, get_global, push_table, set_metatable},
-    runtime::{
-        FunctionValue, RuntimeValue,
-        builtins::{
-            functions::{lkql_img, lkql_print},
-            types::BuiltinType,
-        },
+    builtins::{
+        functions::{lkql_img, lkql_print},
+        types::BuiltinType,
     },
+    lua::{LuaState, get_global, push_table, set_metatable},
+    runtime::{FunctionValue, RuntimeValue},
 };
 use std::collections::HashMap;
 

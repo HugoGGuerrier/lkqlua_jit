@@ -6,7 +6,7 @@
 //! Iterators are represented by functional values that are called to get the
 //! "next" element in the source iterable.
 
-use crate::runtime::builtins::traits::{BuiltinTrait, RequiredField};
+use crate::builtins::traits::{BuiltinTrait, RequiredField};
 
 /// Name of the field to access to get an iterator for a value.
 pub const ITERATOR_FIELD: &str = "field@iterator";

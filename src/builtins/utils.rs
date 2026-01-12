@@ -4,15 +4,13 @@
 //! runtime values.
 
 use crate::{
+    builtins::types::{self, BuiltinType, TYPE_NAME_FIELD, TYPE_TAG_FIELD},
     error_templates::{NO_VALUE_FOR_PARAM, POS_AND_NAMED_VALUE_FOR_PARAM, WRONG_ARG_TYPE},
     lua::{
         LuaState, LuaType, get_boolean, get_field, get_integer, get_string, get_top, get_type,
         is_nil, pop, raise_error,
     },
-    runtime::{
-        DynamicError, DynamicErrorArg, TYPE_NAME_FIELD, TYPE_TAG_FIELD,
-        builtins::types::{self, BuiltinType},
-    },
+    runtime::{DynamicError, DynamicErrorArg},
 };
 
 // ----- Parameter reading functions -----

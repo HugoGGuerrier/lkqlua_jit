@@ -3,16 +3,14 @@
 //! This module defines the LKQL "Str" type.
 
 use crate::{
-    lua::{LuaState, copy_value, get_string, get_top, push_bool, push_string, set_metatable},
-    runtime::{
-        FunctionValue,
-        builtins::{
-            functions::lkql_img,
-            traits::{self, sized::DEFAULT_SIZED_LENGTH},
-            types::{BuiltinType, TypeField, TypeImplementation, TypeImplementationKind, int},
-            utils::get_string_param,
-        },
+    builtins::{
+        functions::lkql_img,
+        traits::{self, sized::DEFAULT_SIZED_LENGTH},
+        types::{BuiltinType, TypeField, TypeImplementation, TypeImplementationKind, int},
+        utils::get_string_param,
     },
+    lua::{LuaState, copy_value, get_string, get_top, push_bool, push_string, set_metatable},
+    runtime::FunctionValue,
 };
 use std::{ffi::c_int, path::PathBuf, str::FromStr};
 

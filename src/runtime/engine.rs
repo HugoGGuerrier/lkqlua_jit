@@ -5,6 +5,7 @@
 
 use crate::{
     ExecutionContext,
+    builtins::{get_builtin_bindings, get_builtin_types},
     error_templates::{ERROR_TEMPLATE_REPOSITORY, LUA_ENGINE_ERROR},
     lua::{
         LuaState, close_lua_state, debug_frame, debug_get_local, debug_get_source, debug_info,
@@ -16,7 +17,6 @@ use crate::{
     runtime::{
         CONTEXT_GLOBAL_NAME, DynamicError, DynamicErrorArg, ERROR_VALUE, LuaValue, RuntimeData,
         RuntimeError, StackTraceElement,
-        builtins::{get_builtin_bindings, get_builtin_types},
     },
     sources::SourceId,
 };

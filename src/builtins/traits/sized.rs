@@ -4,9 +4,9 @@
 //! implementing types define a `length` method that return the "size" of it.
 //! It also require overloading on the "__len" Lua meta-method.
 
-use crate::runtime::{
-    FunctionValue,
+use crate::{
     builtins::traits::{BuiltinTrait, RequiredField},
+    runtime::FunctionValue,
 };
 
 pub const TRAIT: BuiltinTrait = BuiltinTrait {

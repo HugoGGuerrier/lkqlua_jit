@@ -7,7 +7,7 @@
 //! LuaJIT bytecode.
 
 use crate::{
-    runtime::builtins::{traits::BuiltinTrait, types::BuiltinType},
+    builtins::{traits::BuiltinTrait, types::BuiltinType},
     sources::SourceSection,
 };
 use std::{

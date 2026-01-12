@@ -3,22 +3,20 @@
 //! This module defines the LKQL "List" type.
 
 use crate::{
-    lua::{LuaState, get_field, get_index, get_length, get_string, push_string, set_top},
-    runtime::{
-        FunctionValue,
-        builtins::{
-            functions::lkql_img,
-            traits::{
-                indexable,
-                iterable::{self, ITERATOR_FIELD},
-                sized::{self, DEFAULT_SIZED_LENGTH},
-            },
-            types::{
-                BuiltinType, OverloadTarget, TypeField, TypeImplementation, TypeImplementationKind,
-                tuple,
-            },
+    builtins::{
+        functions::lkql_img,
+        traits::{
+            indexable,
+            iterable::{self, ITERATOR_FIELD},
+            sized::{self, DEFAULT_SIZED_LENGTH},
+        },
+        types::{
+            BuiltinType, OverloadTarget, TypeField, TypeImplementation, TypeImplementationKind,
+            tuple,
         },
     },
+    lua::{LuaState, get_field, get_index, get_length, get_string, push_string, set_top},
+    runtime::FunctionValue,
 };
 use std::ffi::c_int;
 
