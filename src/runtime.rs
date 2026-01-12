@@ -3,10 +3,6 @@
 //! This module host all data structures that are required to store information
 //! during runtime and communicate with the LuaJIT engine.
 
-use std::collections::HashMap;
-
-use serde::{Deserialize, Serialize};
-
 use crate::{
     lua::{
         LuaCFunction, LuaState, call, get_top, load_lua_code, move_top_value, push_c_closure,
@@ -14,6 +10,8 @@ use crate::{
     },
     sources::{SourceId, SourceSection},
 };
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 pub mod builtins;
 pub mod engine;

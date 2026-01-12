@@ -2,8 +2,6 @@
 //!
 //! This module defines the LKQL "List" type.
 
-use std::ffi::c_int;
-
 use crate::{
     lua::{LuaState, get_field, get_index, get_length, get_string, push_string, set_top},
     runtime::{
@@ -22,6 +20,7 @@ use crate::{
         },
     },
 };
+use std::ffi::c_int;
 
 pub const TYPE: BuiltinType = BuiltinType {
     tag: tuple::TYPE.tag + 1,

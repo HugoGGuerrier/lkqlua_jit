@@ -1,8 +1,6 @@
 //! This module contains all required operations to lower an LKQL parse source
 //! to an intermediate representation.
 
-use std::{collections::HashMap, path::PathBuf};
-
 use crate::{
     error_templates::{POS_AFTER_NAMED_ARGUMENT, PREVIOUS_NAMED_ARG_HINT},
     intermediate_tree::{
@@ -17,8 +15,8 @@ use crate::{
     },
     sources::{SourceId, SourceSection},
 };
-
 use liblkqllang::{BaseFunction, Exception, LkqlNode};
+use std::{collections::HashMap, path::PathBuf};
 
 impl ExecutionUnit {
     /// Lower the provided LKQL node as an intermediate [`ExecutionUnit`]. The

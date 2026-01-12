@@ -7,12 +7,11 @@
 //! This extended bytecode can be easily translated into a LuaJIT compatible
 //! instruction buffer.
 
-use std::collections::HashMap;
-
 use crate::{
     bytecode::{Instruction, op_codes::JMP},
     sources::SourceSection,
 };
+use std::collections::HashMap;
 
 /// This type represents a buffer of extended instructions, it owns a
 /// [`Vec<ExtendedInstruction>`] that contains all instruction of the buffer.

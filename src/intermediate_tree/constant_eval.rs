@@ -3,8 +3,6 @@
 //! This module contains all required entities to evaluate an [`Node`] as a
 //! constant value.
 
-use num_bigint::BigInt;
-
 use crate::{
     bytecode::{ComplexConstant, NumericConstant, TableConstantElement},
     intermediate_tree::{
@@ -13,6 +11,7 @@ use crate::{
     },
     sources::SourceSection,
 };
+use num_bigint::BigInt;
 
 impl Node {
     /// Try to evaluate this node as a constant value, returning it if this is

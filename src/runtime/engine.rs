@@ -3,10 +3,6 @@
 //! This module contains all required elements to run bytecode produced by the
 //! [`crate::intermediate_tree::compilation`] module.
 
-use std::ffi::c_int;
-
-use regex::Regex;
-
 use crate::{
     ExecutionContext,
     error_templates::{ERROR_TEMPLATE_REPOSITORY, LUA_ENGINE_ERROR},
@@ -24,6 +20,8 @@ use crate::{
     },
     sources::SourceId,
 };
+use regex::Regex;
+use std::ffi::c_int;
 
 /// This type represents an engine to execute the bytecode generate by the
 /// [`crate::intermediate_tree::compilation`] module.

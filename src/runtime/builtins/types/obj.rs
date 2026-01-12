@@ -2,8 +2,6 @@
 //!
 //! This module defines the LKQL "Object" type.
 
-use std::ffi::c_int;
-
 use crate::{
     lua::{LuaState, get_field, get_next_pair, get_string, pop, push_nil, push_string},
     runtime::{
@@ -17,6 +15,7 @@ use crate::{
         },
     },
 };
+use std::ffi::c_int;
 
 pub const TYPE: BuiltinType = BuiltinType {
     tag: stream::TYPE.tag + 1,

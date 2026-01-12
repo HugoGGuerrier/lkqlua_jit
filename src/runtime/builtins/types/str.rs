@@ -2,8 +2,6 @@
 //!
 //! This module defines the LKQL "Str" type.
 
-use std::{ffi::c_int, path::PathBuf, str::FromStr};
-
 use crate::{
     lua::{LuaState, copy_value, get_string, get_top, push_bool, push_string, set_metatable},
     runtime::{
@@ -16,6 +14,7 @@ use crate::{
         },
     },
 };
+use std::{ffi::c_int, path::PathBuf, str::FromStr};
 
 pub const TYPE: BuiltinType = BuiltinType {
     tag: int::TYPE.tag + 1,

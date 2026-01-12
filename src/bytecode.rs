@@ -242,14 +242,12 @@
 //!         index difference from the birth instruction.
 //!     The variable information section is always terminated by a `0` byte.
 
-pub mod extended_bytecode;
-pub mod op_codes;
-
+use crate::bytecode::op_codes::JMP;
+use leb128;
 use std::{fmt::Display, io::Write};
 
-use leb128;
-
-use crate::bytecode::op_codes::JMP;
+pub mod extended_bytecode;
+pub mod op_codes;
 
 // ----- Header related constants -----
 

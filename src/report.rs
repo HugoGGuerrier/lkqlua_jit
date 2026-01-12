@@ -3,16 +3,14 @@
 //! This module contains all required components to create, emit and display
 //! reports.
 
-use std::io::Write;
-
+use crate::sources::{Location, SourceRepository};
 use crate::{
     error_templates::ErrorTemplate,
     sources::{SourceId, SourceSection},
 };
 use ariadne::{self, Label, StdoutFmt};
 use liblkqllang::Diagnostic;
-
-use crate::sources::{Location, SourceRepository};
+use std::io::Write;
 
 const INFO_KIND_COLOR: ariadne::Color = ariadne::Color::BrightCyan;
 const WARNING_KIND_COLOR: ariadne::Color = ariadne::Color::BrightYellow;

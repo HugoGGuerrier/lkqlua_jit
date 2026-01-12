@@ -2,10 +2,6 @@
 //!
 //! This module contains all LKQL built-in functions and utils for them.
 
-use std::ffi::c_int;
-
-use std::io::Write;
-
 use crate::{
     ExecutionContext,
     lua::{
@@ -17,6 +13,8 @@ use crate::{
         builtins::utils::{get_bool_param, get_param},
     },
 };
+use std::ffi::c_int;
+use std::io::Write;
 
 /// The "print" function
 #[unsafe(no_mangle)]

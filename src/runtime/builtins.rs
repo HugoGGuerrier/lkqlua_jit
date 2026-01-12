@@ -3,8 +3,6 @@
 //! This module contains information and implementation for every built-in
 //! element of the LKQL language (functions and types).
 
-use std::collections::HashMap;
-
 use crate::{
     lua::{LuaState, get_global, push_table, set_metatable},
     runtime::{
@@ -15,6 +13,7 @@ use crate::{
         },
     },
 };
+use std::collections::HashMap;
 
 pub mod functions;
 pub mod traits;

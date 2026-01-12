@@ -3,6 +3,7 @@
 //! This module contains all required entities to represents frames during the
 //! compilation process.
 
+use crate::{bytecode::extended_bytecode::Label, sources::SourceSection};
 use std::{
     cell::{Ref, RefCell, RefMut},
     cmp,
@@ -10,8 +11,6 @@ use std::{
     ops::Range,
     rc::Rc,
 };
-
-use crate::{bytecode::extended_bytecode::Label, sources::SourceSection};
 
 /// This type represents the concept of framing in the intermediate tree. This
 /// is where local variables and up-values lives.

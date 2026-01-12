@@ -2,8 +2,6 @@
 //!
 //! This module defines the LKQL "Unit" type.
 
-use std::ffi::c_int;
-
 use crate::{
     lua::{LuaState, push_string},
     runtime::{
@@ -16,6 +14,7 @@ use crate::{
         },
     },
 };
+use std::ffi::c_int;
 
 pub const TYPE: BuiltinType = BuiltinType {
     tag: 0,

@@ -3,6 +3,12 @@
 //! The library entry point of the LKQL engine, here you can find all required
 //! stuff to parse, compile and execute LKQL sources.
 
+use crate::{
+    intermediate_tree::ExecutionUnit, report::Report, runtime::engine::Engine,
+    sources::SourceRepository,
+};
+use clap::ValueEnum;
+use pretty_hex::PrettyHex;
 use std::{
     collections::HashSet,
     fs::File,
@@ -10,14 +16,6 @@ use std::{
     os::fd::FromRawFd,
     path::Path,
     time::{Duration, Instant},
-};
-
-use clap::ValueEnum;
-use pretty_hex::PrettyHex;
-
-use crate::{
-    intermediate_tree::ExecutionUnit, report::Report, runtime::engine::Engine,
-    sources::SourceRepository,
 };
 
 pub mod bytecode;

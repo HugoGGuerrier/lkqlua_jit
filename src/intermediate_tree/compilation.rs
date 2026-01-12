@@ -3,16 +3,6 @@
 //! This module contains all required operations to compile any intermediate
 //! tree into a [`crate::bytecode::BytecodeBuffer`].
 
-use std::{
-    cell::RefCell,
-    collections::{HashMap, HashSet},
-    mem,
-    rc::Rc,
-    u8, usize,
-};
-
-use num_bigint::BigInt;
-
 use crate::{
     bytecode::{
         self, BytecodeBuffer, ComplexConstant, JUMP_BIASING, NumericConstant, PRIM_FALSE, PRIM_NIL,
@@ -46,6 +36,14 @@ use crate::{
         },
     },
     sources::{SourceRepository, SourceSection},
+};
+use num_bigint::BigInt;
+use std::{
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+    mem,
+    rc::Rc,
+    u8, usize,
 };
 
 pub mod frame;
