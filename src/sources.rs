@@ -1,10 +1,8 @@
 //! # Abstract sources module
 //!
-//! This module contains all utils to create and manipulate abstract sources.
-//! This is used to factorize all operations on sources processed by the
-//! compiler.
-//!
-//! This module provide a [`SourceRepository`] type to store and cache analyzed
+//! This module contains all components required to create and manipulate
+//! abstract sources.
+//! This module provide a [`SourceRepository`] type to load, retrieve and parse
 //! sources.
 
 use crate::report::Report;
@@ -13,7 +11,8 @@ use liblkqllang::{AnalysisContext, AnalysisUnit, LkqlNode, SourceLocation};
 use std::{collections::HashMap, env::current_dir, fmt::Display, fs, ops::Range, path::Path};
 
 /// This structure is the main entry point of abstract source handling, it
-/// holds all created sources, associating each one to its identifier.
+/// holds all created sources, associating each one from its name to its
+/// identifier.
 #[derive(Debug)]
 pub struct SourceRepository {
     lkql_context: AnalysisContext,
@@ -83,7 +82,7 @@ impl SourceRepository {
         let mut canonical_path = current_dir()?.canonicalize()?;
         canonical_path.push(name);
         let source_name = canonical_path.to_string_lossy().to_string();
-        self.add_source(source_name, || Ok::<String, Report>(String::from(content)), update)
+        self.add_source(source_name, || Ok::<_, Report>(String::from(content)), update)
     }
 
     /// Internal function for adding sources.
@@ -122,10 +121,18 @@ impl SourceRepository {
         self.sources.get(source_id)
     }
 
-    /// Get a reference to the source in this repo that has the provided name,
+    /// Get a reference to the source object associated to the provided name,
     /// if any.
+    pub fn get_source_by_name(&self, source_name: &str) -> Option<&Source> {
+        self.source_name_map
+            .get(source_name)
+            .and_then(|id| self.get_source_by_id(*id))
+    }
+
+    /// Get the source identifier associated to the provided source name, if
+    /// any.
     pub fn get_id_by_name(&self, source_name: &str) -> Option<SourceId> {
-        self.source_name_map.get(source_name).cloned()
+        self.source_name_map.get(source_name).copied()
     }
 
     /// Parse the source designated by the provided identifier using the LKQL
@@ -162,11 +169,10 @@ impl SourceRepository {
     }
 }
 
-/// A source identifier is just a string.
+/// A source identifier is just an unsigned integer.
 pub type SourceId = usize;
 
-/// This type represents the abstract concept of a source, this can be any
-/// buffer.
+/// This type represent a source
 #[derive(Debug)]
 pub struct Source {
     /// Name of the source, either the absolute path of the file, or the
