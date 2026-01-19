@@ -299,7 +299,7 @@ pub const PRIM_TRUE: u16 = 2;
 /// This structure represents an executable bytecode buffer, structured as
 /// specified in the [`bytecode`](mod@self) module.
 #[derive(Debug)]
-pub struct BytecodeBuffer {
+pub struct BytecodeUnit {
     /// Function prototypes, the last one is considered as the main.
     pub prototypes: Vec<Prototype>,
 
@@ -307,7 +307,7 @@ pub struct BytecodeBuffer {
     pub source_name: String,
 }
 
-impl Display for BytecodeBuffer {
+impl Display for BytecodeUnit {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for (i, proto) in self.prototypes.iter().enumerate() {
             write!(f, "##### Prototype #{i} #####\n\n{}", proto)?;
@@ -319,7 +319,7 @@ impl Display for BytecodeBuffer {
     }
 }
 
-impl BytecodeBuffer {
+impl BytecodeUnit {
     /// Encode the bytecode described by [`self`] in the provided output
     /// buffer.
     pub fn encode(&self, output_buffer: &mut Vec<u8>) {

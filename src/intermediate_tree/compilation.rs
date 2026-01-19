@@ -13,7 +13,7 @@ use crate::{
         },
     },
     bytecode::{
-        self, BytecodeBuffer, ComplexConstant, JUMP_BIASING, NumericConstant, PRIM_FALSE, PRIM_NIL,
+        self, BytecodeUnit, ComplexConstant, JUMP_BIASING, NumericConstant, PRIM_FALSE, PRIM_NIL,
         PRIM_TRUE, Prototype, TableConstantElement, VariableData,
         extended_bytecode::{
             ExtendedInstruction, ExtendedInstructionBuffer, ExtendedInstructionVariant, Label,
@@ -58,7 +58,7 @@ impl ExecutionUnit {
     pub fn compile(
         &self,
         source_repo: &SourceRepository,
-    ) -> Result<(BytecodeBuffer, RuntimeData), Report> {
+    ) -> Result<(BytecodeUnit, RuntimeData), Report> {
         // Open the initial compilation context and create the prototypes vector
         let mut compile_context = CompilationContext::new(self);
 
@@ -68,7 +68,7 @@ impl ExecutionUnit {
         // Then return the success result
         if compile_context.diagnostics.is_empty() {
             Ok((
-                BytecodeBuffer {
+                BytecodeUnit {
                     prototypes: compile_context.prototypes,
                     source_name: source_repo
                         .get_source_by_id(self.origin_location.source)
