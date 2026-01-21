@@ -5,11 +5,11 @@
 use crate::{
     ExecutionContext,
     builtins::utils::{get_bool_param, get_param},
+    engine::CONTEXT_GLOBAL_NAME,
     lua::{
         LuaState, get_global, get_string, get_top, get_type, get_user_data, pop, push_string,
         to_string,
     },
-    runtime::CONTEXT_GLOBAL_NAME,
 };
 use std::ffi::c_int;
 use std::io::Write;

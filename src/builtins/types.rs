@@ -5,11 +5,11 @@
 
 use crate::{
     builtins::traits::BuiltinTrait,
+    engine::{FunctionValue, LuaValue, RuntimeValue},
     lua::{
         LuaState, get_top, push_bool, push_integer, push_string, push_table, set_field, set_global,
         set_top,
     },
-    runtime::{FunctionValue, LuaValue, RuntimeValue},
 };
 
 pub mod bool;

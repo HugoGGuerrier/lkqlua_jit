@@ -6,7 +6,7 @@
 
 use crate::{
     builtins::traits::{BuiltinTrait, RequiredField},
-    runtime::FunctionValue,
+    engine::FunctionValue,
 };
 
 pub const TRAIT: BuiltinTrait = BuiltinTrait {

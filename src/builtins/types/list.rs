@@ -15,8 +15,8 @@ use crate::{
             tuple,
         },
     },
+    engine::FunctionValue,
     lua::{LuaState, get_field, get_index, get_length, get_string, push_string, set_top},
-    runtime::FunctionValue,
 };
 use std::ffi::c_int;
 

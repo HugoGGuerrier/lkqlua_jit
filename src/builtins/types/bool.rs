@@ -7,8 +7,8 @@ use crate::{
         functions::lkql_img,
         types::{BuiltinType, TypeField, TypeImplementation, TypeImplementationKind, unit},
     },
+    engine::FunctionValue,
     lua::{LuaState, copy_value, push_bool, set_metatable},
-    runtime::FunctionValue,
 };
 
 pub const TYPE: BuiltinType = BuiltinType {

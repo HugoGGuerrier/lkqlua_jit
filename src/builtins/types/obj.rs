@@ -10,8 +10,8 @@ use crate::{
             stream,
         },
     },
+    engine::FunctionValue,
     lua::{LuaState, get_field, get_next_pair, get_string, pop, push_nil, push_string},
-    runtime::FunctionValue,
 };
 use std::ffi::c_int;
 

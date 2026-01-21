@@ -9,8 +9,8 @@ use crate::{
             BuiltinType, OverloadTarget, TypeField, TypeImplementation, TypeImplementationKind,
         },
     },
+    engine::FunctionValue,
     lua::{LuaState, push_string},
-    runtime::FunctionValue,
 };
 use std::ffi::c_int;
 
