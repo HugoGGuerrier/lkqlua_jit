@@ -22,9 +22,9 @@ use crate::{
         op_codes::*,
     },
     errors::{
-        DUPLICATED_SYMBOL, ErrorTemplate, INDEX_OUT_OF_BOUNDS, MISSING_TRAIT, NO_VALUE_FOR_PARAM,
-        POS_AND_NAMED_VALUE_FOR_PARAM, PREVIOUS_SYMBOL_HINT, UNKNOWN_MEMBER, UNKNOWN_SYMBOL,
-        WRONG_TYPE,
+        DUPLICATED_SYMBOL, ErrorInstance, ErrorInstanceArg, ErrorTemplate, INDEX_OUT_OF_BOUNDS,
+        MISSING_TRAIT, NO_VALUE_FOR_PARAM, POS_AND_NAMED_VALUE_FOR_PARAM, PREVIOUS_SYMBOL_HINT,
+        UNKNOWN_MEMBER, UNKNOWN_SYMBOL, WRONG_TYPE,
     },
     intermediate_tree::{
         ArithOperator, ArithOperatorVariant, CompOperator, CompOperatorVariant, ExecutionUnit,
@@ -36,7 +36,6 @@ use crate::{
         constant_eval::{ConstantValue, ConstantValueVariant},
     },
     report::{Hint, Report},
-    runtime::{DynamicError, DynamicErrorArg},
     sources::SourceSection,
 };
 use num_bigint::BigInt;
@@ -209,7 +208,7 @@ impl ExecutionUnit {
                             ctx,
                             None,
                             &NO_VALUE_FOR_PARAM,
-                            &vec![DynamicErrorArg::Static(param_id.text.clone())],
+                            &vec![ErrorInstanceArg::Static(param_id.text.clone())],
                         );
                     }
 
@@ -231,7 +230,7 @@ impl ExecutionUnit {
                         ctx,
                         None,
                         &POS_AND_NAMED_VALUE_FOR_PARAM,
-                        &vec![DynamicErrorArg::Static(param_id.text.clone())],
+                        &vec![ErrorInstanceArg::Static(param_id.text.clone())],
                     );
 
                     // Label the next instruction
@@ -462,7 +461,7 @@ impl Node {
                         ctx,
                         Some(&index.origin_location),
                         &INDEX_OUT_OF_BOUNDS,
-                        &vec![DynamicErrorArg::LocalValue(index_access.slot())],
+                        &vec![ErrorInstanceArg::LocalValue(index_access.slot())],
                     );
                 }
 
@@ -756,7 +755,7 @@ impl Node {
                                 ctx,
                                 Some(&identifier.origin_location),
                                 &UNKNOWN_SYMBOL,
-                                &vec![DynamicErrorArg::Static(identifier.text.clone())],
+                                &vec![ErrorInstanceArg::Static(identifier.text.clone())],
                             );
                             ctx.instructions.label(next_label);
                         }
@@ -1627,7 +1626,7 @@ impl Node {
                 ctx,
                 Some(&suffix.origin_location),
                 &UNKNOWN_MEMBER,
-                &vec![DynamicErrorArg::Static(suffix.text.clone())],
+                &vec![ErrorInstanceArg::Static(suffix.text.clone())],
             );
         }
 
@@ -1723,11 +1722,11 @@ fn emit_runtime_error(
     ctx: &mut CompilationContext,
     maybe_error_location: Option<&SourceSection>,
     error_template: &ErrorTemplate,
-    message_args: &Vec<DynamicErrorArg>,
+    message_args: &Vec<ErrorInstanceArg>,
 ) {
     // Create the runtime error instance object
     let runtime_error_instance =
-        DynamicError { template_id: error_template.id, message_args: message_args.clone() };
+        ErrorInstance { template_id: error_template.id, message_args: message_args.clone() };
 
     // Add constants in the current repository
     let message_cst = ctx
@@ -1979,8 +1978,8 @@ fn emit_type_check(
         maybe_origin_location,
         &WRONG_TYPE,
         &vec![
-            DynamicErrorArg::Static(String::from(expected_type.display_name())),
-            DynamicErrorArg::LocalValue(actual_name),
+            ErrorInstanceArg::Static(String::from(expected_type.display_name())),
+            ErrorInstanceArg::LocalValue(actual_name),
         ],
     );
     ctx.frame.borrow_mut().release_slot(actual_name);
@@ -2023,8 +2022,8 @@ fn emit_trait_check(
         maybe_origin_location,
         &MISSING_TRAIT,
         &vec![
-            DynamicErrorArg::Static(String::from(required_trait.name)),
-            DynamicErrorArg::LocalValue(type_name),
+            ErrorInstanceArg::Static(String::from(required_trait.name)),
+            ErrorInstanceArg::LocalValue(type_name),
         ],
     );
 

@@ -5,12 +5,14 @@
 
 use crate::{
     builtins::types::{self, BuiltinType, TYPE_NAME_FIELD, TYPE_TAG_FIELD},
-    errors::{NO_VALUE_FOR_PARAM, POS_AND_NAMED_VALUE_FOR_PARAM, WRONG_ARG_TYPE},
+    errors::{
+        ErrorInstance, ErrorInstanceArg, NO_VALUE_FOR_PARAM, POS_AND_NAMED_VALUE_FOR_PARAM,
+        WRONG_ARG_TYPE,
+    },
     lua::{
         LuaState, LuaType, get_boolean, get_field, get_integer, get_string, get_top, get_type,
         is_nil, pop, raise_error,
     },
-    runtime::{DynamicError, DynamicErrorArg},
 };
 
 // ----- Parameter reading functions -----
@@ -94,7 +96,7 @@ fn get_param_safe(
     param_count: i32,
     index: i32,
     name: &str,
-) -> Result<i32, DynamicError> {
+) -> Result<i32, ErrorInstance> {
     // Get the whether the parameter has a positional and a named value
     let has_pos_value = index <= param_count;
     let has_named_value = {
@@ -107,9 +109,9 @@ fn get_param_safe(
     // Then perform value checks
     if has_pos_value {
         if has_named_value {
-            Err(DynamicError {
+            Err(ErrorInstance {
                 template_id: POS_AND_NAMED_VALUE_FOR_PARAM.id,
-                message_args: vec![DynamicErrorArg::Static(String::from(name))],
+                message_args: vec![ErrorInstanceArg::Static(String::from(name))],
             })
         } else {
             Ok(index + 1)
@@ -118,9 +120,9 @@ fn get_param_safe(
         if has_named_value {
             Ok(get_top(l))
         } else {
-            Err(DynamicError {
+            Err(ErrorInstance {
                 template_id: NO_VALUE_FOR_PARAM.id,
-                message_args: vec![DynamicErrorArg::Static(String::from(name))],
+                message_args: vec![ErrorInstanceArg::Static(String::from(name))],
             })
         }
     }
@@ -142,12 +144,12 @@ extern "C" fn check_param_type(
         let param_type_name = get_type_name(l, value_index);
         raise_error(
             l,
-            &DynamicError {
+            &ErrorInstance {
                 template_id: WRONG_ARG_TYPE.id,
                 message_args: vec![
-                    DynamicErrorArg::Static(String::from(expected_type.display_name())),
-                    DynamicErrorArg::Static(String::from(param_name)),
-                    DynamicErrorArg::Static(String::from(param_type_name)),
+                    ErrorInstanceArg::Static(String::from(expected_type.display_name())),
+                    ErrorInstanceArg::Static(String::from(param_name)),
+                    ErrorInstanceArg::Static(String::from(param_type_name)),
                 ],
             }
             .to_json_string(),

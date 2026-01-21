@@ -4,6 +4,8 @@
 //! It is used to centralize and provide a unique endpoint for error object
 //! creation.
 
+use serde::{Deserialize, Serialize};
+
 // ----- Error templates -----
 
 // --- Symbol errors
@@ -160,6 +162,37 @@ impl ErrorTemplate {
         // Finally return the result
         res
     }
+}
+
+/// This type represents an instantiation an [`ErrorTemplate`], it carries all
+/// arguments for its associated template that can be runtime values.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ErrorInstance {
+    pub template_id: usize,
+    pub message_args: Vec<ErrorInstanceArg>,
+}
+
+impl ErrorInstance {
+    /// Get an error instance from a serialized JSON string.
+    pub fn from_json(json: &str) -> Option<Self> {
+        serde_json::from_str::<Self>(json).ok()
+    }
+
+    /// Serialize this error instance as JSON.
+    pub fn to_json_string(&self) -> String {
+        serde_json::to_string(self).unwrap()
+    }
+}
+
+/// This type represents an argument for an error instance.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ErrorInstanceArg {
+    /// The argument is known at compile time.
+    Static(String),
+
+    /// The argument value is in a frame slot at execution time. This slot
+    /// should be 0-indexed.
+    LocalValue(u8),
 }
 
 // ----- Testing -----

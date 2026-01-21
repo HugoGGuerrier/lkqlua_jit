@@ -130,35 +130,3 @@ pub struct StackTraceElement {
     pub prototype_identifier: usize,
     pub program_counter: usize,
 }
-
-/// This type is used to represent a dynamic instantiation of an
-/// [`crate::errors::ErrorTemplate`]. It is used to provide dynamic values as
-/// parameters of the instantiated template.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DynamicError {
-    pub template_id: usize,
-    pub message_args: Vec<DynamicErrorArg>,
-}
-
-impl DynamicError {
-    /// Get a runtime error instance from a serialized JSON string.
-    pub fn from_json(json: &str) -> Option<Self> {
-        serde_json::from_str::<Self>(json).ok()
-    }
-
-    /// Get this runtime error serialized as JSON.
-    pub fn to_json_string(&self) -> String {
-        serde_json::to_string(self).unwrap()
-    }
-}
-
-/// This type represents a dynamic argument for an error template.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum DynamicErrorArg {
-    /// The argument is known at compile time.
-    Static(String),
-
-    /// The argument value is in a frame slot at execution time. This slot
-    /// should be 0-indexed.
-    LocalValue(u8),
-}

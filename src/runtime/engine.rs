@@ -6,7 +6,7 @@
 use crate::{
     ExecutionContext,
     builtins::{get_builtin_bindings, get_builtin_types},
-    errors::{ERROR_TEMPLATE_REPOSITORY, LUA_ENGINE_ERROR},
+    errors::{ERROR_TEMPLATE_REPOSITORY, ErrorInstance, ErrorInstanceArg, LUA_ENGINE_ERROR},
     lua::{
         LuaState, close_lua_state, debug_frame, debug_get_local, debug_get_source, debug_info,
         debug_proto_and_pc, get_string, get_top, load_buffer, new_lua_state, open_lua_libs, pop,
@@ -14,10 +14,7 @@ use crate::{
         to_string,
     },
     report::Report,
-    runtime::{
-        CONTEXT_GLOBAL_NAME, DynamicError, DynamicErrorArg, ERROR_VALUE, LuaValue, RuntimeError,
-        StackTraceElement,
-    },
+    runtime::{CONTEXT_GLOBAL_NAME, ERROR_VALUE, LuaValue, RuntimeError, StackTraceElement},
     sources::SourceId,
 };
 use regex::Regex;
@@ -172,7 +169,8 @@ unsafe extern "C" fn handle_error(l: LuaState) -> c_int {
     };
 
     // Then process the message part to get the runtime error instance
-    let runtime_error = if let Some(runtime_error_instance) = DynamicError::from_json(error_message)
+    let runtime_error = if let Some(runtime_error_instance) =
+        ErrorInstance::from_json(error_message)
     {
         // If the message can be parsed as an error instance, we have to fetch
         // message arguments.
@@ -180,8 +178,8 @@ unsafe extern "C" fn handle_error(l: LuaState) -> c_int {
             .message_args
             .into_iter()
             .map(|a| match a {
-                DynamicErrorArg::Static(s) => s,
-                DynamicErrorArg::LocalValue(index) => {
+                ErrorInstanceArg::Static(s) => s,
+                ErrorInstanceArg::LocalValue(index) => {
                     if let Some(_) =
                         debug_get_local(l, current_frame.as_ref().unwrap(), 1 + index as i32)
                     {
