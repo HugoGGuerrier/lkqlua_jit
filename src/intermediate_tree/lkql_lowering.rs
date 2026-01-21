@@ -317,7 +317,14 @@ impl Node {
             // --- In clause
             LkqlNode::InClause(in_clause) => NodeVariant::InClause {
                 value: Box::new(Self::lower_lkql_node(&in_clause.f_value_expr()?, ctx)?),
-                collection: Box::new(Self::lower_lkql_node(&in_clause.f_list_expr()?, ctx)?),
+                collection: Box::new(
+                    Self::lower_lkql_node(&in_clause.f_list_expr()?, ctx)?.with_wrapper(|n| {
+                        NodeVariant::CheckTrait {
+                            expression: Box::new(n),
+                            required_trait: &traits::iterable::TRAIT,
+                        }
+                    }),
+                ),
             },
 
             // --- If expression

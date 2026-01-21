@@ -6,7 +6,7 @@
 use crate::{
     builtins::{
         UNIT_SINGLETON_GLOBAL_NAME, get_builtin_bindings,
-        traits::BuiltinTrait,
+        traits::{BuiltinTrait, iterable::ITERATOR_FIELD},
         types::{
             self, BuiltinType, TYPE_NAME_FIELD, TYPE_TAG_FIELD, TypeImplementation,
             stream::lazy_comprehension,
@@ -471,7 +471,48 @@ impl Node {
                 // Label the next instruction
                 ctx.instructions.label(next_label);
             }
-            NodeVariant::InClause { .. } => todo!(),
+            NodeVariant::InClause { value, collection } => {
+                // First compile the value to look for
+                let value_access = value.compile_as_access(ctx, None);
+
+                // First compile the iterable value
+                let iterable_access = collection.compile_as_access(ctx, None);
+
+                // Set the result to "true" by default
+                ctx.instructions
+                    .ad(&self.origin_location, KPRI, result_slot, PRIM_TRUE);
+
+                // Then emit the iteration code
+                let next_label = ctx.instructions.new_label();
+                let success_label = ctx.instructions.new_label();
+                emit_iteration(
+                    ctx,
+                    &self.origin_location,
+                    iterable_access.slot(),
+                    next_label,
+                    |ctx, variant_slot| {
+                        ctx.instructions.ad(
+                            &self.origin_location,
+                            ISEQV,
+                            value_access.slot(),
+                            variant_slot as u16,
+                        );
+                        ctx.goto(success_label);
+                    },
+                );
+
+                // Label the next instruction
+                ctx.instructions.label(next_label);
+
+                // Emit instruction to set the result to "false"
+                ctx.instructions
+                    .ad(&self.origin_location, KPRI, result_slot, PRIM_FALSE);
+                ctx.instructions.label(success_label);
+
+                // Release slots
+                value_access.release(ctx);
+                iterable_access.release(ctx);
+            }
             NodeVariant::IfExpr { condition, consequence, alternative } => {
                 // Create required labels
                 let alternative_label = ctx.instructions.new_label();
@@ -1714,6 +1755,53 @@ impl ConstantValue {
 
 // ----- Compilation helpers -----
 
+/// Helper function to emit an iteration on an iterable value provided in a
+/// slot.
+fn emit_iteration<F>(
+    ctx: &mut CompilationContext,
+    origin_location: &SourceSection,
+    iterable_slot: u8,
+    next_label: Label,
+    body_provider: F,
+) where
+    F: Fn(&mut CompilationContext, u8),
+{
+    // Start by allocating two slots to work with
+    let iterator_tmp = ctx.frame.borrow_mut().get_tmp();
+    let variant_tmp = ctx.frame.borrow_mut().get_tmp();
+
+    // Create a label to flag the loop start
+    let loop_start = ctx.instructions.new_label();
+
+    // Get the iterator for the provided iterable value
+    emit_table_member_read(ctx, Some(origin_location), iterator_tmp, iterable_slot, ITERATOR_FIELD);
+
+    // Declare the loop
+    ctx.instructions.label(loop_start);
+    ctx.loop_(next_label);
+
+    // Then make the loop variant progress
+    ctx.instructions
+        .ad(origin_location, MOV, variant_tmp, iterator_tmp as u16);
+    ctx.instructions
+        .abc(origin_location, CALL, variant_tmp, 2, 1);
+
+    // Check that the loop is not ended
+    ctx.instructions
+        .ad(origin_location, ISEQP, variant_tmp, PRIM_NIL);
+    ctx.goto(next_label);
+
+    // Then, emit the loop body
+    body_provider(ctx, variant_tmp);
+
+    // Finally, emit the instruction that loops back
+    ctx.goto(loop_start);
+
+    // Release temporary slots
+    ctx.frame.borrow_mut().release_slot(iterator_tmp);
+    ctx.frame.borrow_mut().release_slot(variant_tmp);
+}
+
 /// Emit required instructions to raise a runtime error during the program
 /// execution.
 /// For now this function call the `error` Lua built-in with a simple text
@@ -2115,6 +2203,13 @@ impl<'a> CompilationContext<'a> {
     fn goto(&mut self, label: Label) {
         let next_available_slot = self.frame.borrow_mut().peek_next_slot();
         self.instructions.goto(label, next_available_slot);
+    }
+
+    /// Add a new `loop` instruction in the instruction buffer with information
+    /// about the current frame in the context.
+    fn loop_(&mut self, label: Label) {
+        let next_available_slot = self.frame.borrow_mut().peek_next_slot();
+        self.instructions.loop_(label, next_available_slot);
     }
 
     /// Util function to add a collection of symbols in the current frame as local

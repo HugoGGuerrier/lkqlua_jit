@@ -10,7 +10,8 @@
 use crate::{
     bytecode::{
         BytecodeUnit, ComplexConstant, Instruction, NumericConstant, Prototype, UpValue,
-        VariableData, op_codes::JMP,
+        VariableData,
+        op_codes::{JMP, LOOP},
     },
     sources::{SourceId, SourceRepository, SourceSection},
 };
@@ -168,6 +169,12 @@ impl ExtendedInstructionBuffer {
         self.add_instruction(None, ExtendedInstructionVariant::Goto { label, next_available_slot });
     }
 
+    /// Shortcut to add an [`ExtendedInstructionVariant::Loop`] instruction to
+    /// the buffer.
+    pub fn loop_(&mut self, label: Label, next_available_slot: u8) {
+        self.add_instruction(None, ExtendedInstructionVariant::Loop { label, next_available_slot });
+    }
+
     /// Shortcut to add a label in the buffer. This label is applying to the
     /// next instruction to be added to this buffer.
     pub fn label(&mut self, label: Label) {
@@ -279,7 +286,8 @@ impl ExtendedInstructionBuffer {
                     instructions.push(Instruction::ad(*op_code, *a, *d, inst_source_line));
                     index += 1;
                 }
-                ExtendedInstructionVariant::Goto { label, next_available_slot } => {
+                ExtendedInstructionVariant::Goto { label, next_available_slot }
+                | ExtendedInstructionVariant::Loop { label, next_available_slot } => {
                     let target_index = *label_map.get(label).expect("Unknown label");
                     let jump_offset = if index > target_index {
                         Instruction::jump_backward((index - target_index) as u16)
@@ -287,14 +295,18 @@ impl ExtendedInstructionBuffer {
                         Instruction::jump_forward((target_index - index) as u16)
                     };
                     instructions.push(Instruction::ad(
-                        JMP,
+                        match &inst.variant {
+                            ExtendedInstructionVariant::Goto { .. } => JMP,
+                            ExtendedInstructionVariant::Loop { .. } => LOOP,
+                            _ => unreachable!(),
+                        },
                         *next_available_slot,
                         jump_offset,
                         inst_source_line,
                     ));
                     index += 1;
                 }
-                _ => (),
+                ExtendedInstructionVariant::Label(_) => (),
             }
 
             // Finally, save the current source line
@@ -354,10 +366,36 @@ pub struct ExtendedInstruction {
 /// This type represents all variants of an extended instruction.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExtendedInstructionVariant {
-    ABC { op_code: u8, a: u8, b: u8, c: u8 },
-    AD { op_code: u8, a: u8, d: u16 },
+    ABC {
+        op_code: u8,
+        a: u8,
+        b: u8,
+        c: u8,
+    },
+    AD {
+        op_code: u8,
+        a: u8,
+        d: u16,
+    },
+
+    /// This instruction variant represents a label in the instruction flow
+    /// that may be referred to.
+    /// The instruction following this label instruction is considered as
+    /// labeled by it.
     Label(Label),
-    Goto { label: Label, next_available_slot: u8 },
+
+    /// Goto a specific label.
+    Goto {
+        label: Label,
+        next_available_slot: u8,
+    },
+
+    /// Flag the start of a loop in the bytecode. This is used to allow the JIT
+    /// compiled to perform tracing on the emitted bytecode.
+    Loop {
+        label: Label,
+        next_available_slot: u8,
+    },
 }
 
 /// This type represents data collected during the compilation for a local
