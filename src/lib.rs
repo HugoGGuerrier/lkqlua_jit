@@ -4,13 +4,16 @@
 //! stuff to parse, compile and execute LKQL sources.
 
 use crate::{
-    intermediate_tree::ExecutionUnit, report::Report, runtime::engine::Engine,
-    sources::SourceRepository,
+    bytecode::extended_bytecode::ExtendedBytecodeUnit,
+    intermediate_tree::ExecutionUnit,
+    report::Report,
+    runtime::engine::Engine,
+    sources::{SourceId, SourceRepository},
 };
 use clap::ValueEnum;
 use pretty_hex::PrettyHex;
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     fs::File,
     io::Write,
     os::fd::FromRawFd,
@@ -32,13 +35,19 @@ pub mod sources;
 pub struct ExecutionContext {
     pub config: EngineConfig,
     pub source_repo: SourceRepository,
+    pub compilation_cache: HashMap<SourceId, (ExtendedBytecodeUnit, Vec<u8>)>,
     pub engine: Engine,
 }
 
 impl ExecutionContext {
     /// Create an initialize a new execution context.
     pub fn new(config: EngineConfig) -> Self {
-        Self { source_repo: SourceRepository::new(), config, engine: Engine::new() }
+        Self {
+            config,
+            source_repo: SourceRepository::new(),
+            compilation_cache: HashMap::new(),
+            engine: Engine::new(),
+        }
     }
 
     /// Just run the provided LKQL file, don't return anything and report all
@@ -57,12 +66,53 @@ impl ExecutionContext {
     /// Execute the provided LKQL file, returning possible [`Report`] if the
     /// execution is not successful.
     pub fn execute_lkql_file(&mut self, file: &Path) -> Result<(), Report> {
-        // Create time measurement requirements
-        let mut time_point: Instant;
-        let mut timings: Vec<(String, Duration)> = Vec::new();
-
         // Add the source file to the source repo updating it if required
         let source = self.source_repo.add_source_file(file, true)?;
+        self.compilation_cache.remove(&source);
+
+        // Create working variables to measure time
+        let mut timings: Vec<(String, Duration)> = Vec::new();
+
+        // Then compile the LKQL source and get the result in the cache
+        self.compile_lkql_source(source, &mut timings)?;
+        let (_, encoded_bytecode_unit) = self.compilation_cache.get(&source).unwrap();
+
+        // Then, run the encoded bytecode with the custom engine
+        let time_point = Instant::now();
+        let res = self
+            .engine
+            .run_bytecode(self, source, &encoded_bytecode_unit);
+        timings.push((String::from("execution"), time_point.elapsed()));
+
+        // If required, display timing information
+        if self.config.perform_timings {
+            writeln!(self.config.std_out, "")?;
+            self.display_timings(
+                &timings,
+                &format!("Executing {}", self.source_repo.get_source_by_id(source).unwrap().name),
+            )?;
+        }
+
+        // Finally, return the execution result
+        res
+    }
+
+    /// Inner function that compile the provided source as an LKQL input and
+    /// place the result of this compilation in the cache.
+    fn compile_lkql_source(
+        &mut self,
+        source: SourceId,
+        timings: &mut Vec<(String, Duration)>,
+    ) -> Result<(), Report> {
+        // First of all check in the compilation cache whether the source has
+        // already been compiled. In that case, don't perform compilation.
+        if self.compilation_cache.contains_key(&source) {
+            return Ok(());
+        }
+
+        // Here we know that the source hasn't been compiled before, so we
+        // do the compilation.
+        let mut time_point: Instant;
 
         // Parse the source file
         time_point = Instant::now();
@@ -87,58 +137,65 @@ impl ExecutionContext {
             writeln!(self.config.std_out, "{}\n", lowering_tree)?;
         }
 
-        // Compile the lowering tree and execute it
+        // Compile the lowering tree to the extended bytecode format
         time_point = Instant::now();
-        let (bytecode_buffer, runtime_data) = lowering_tree.compile(&self.source_repo)?;
+        let extended_bytecode_unit = lowering_tree.compile()?;
         timings.push((String::from("compilation"), time_point.elapsed()));
+
+        // Transform the extended bytecode unit into a standard bytecode unit
+        let bytecode_unit = extended_bytecode_unit.to_bytecode_unit(&self.source_repo);
 
         // If required, display the compiled bytecode
         if self.config.is_verbose(VerboseElement::Bytecode) {
             writeln!(self.config.std_out, "===== Bytecode =====\n")?;
-            writeln!(self.config.std_out, "{}\n", bytecode_buffer)?;
+            writeln!(self.config.std_out, "{}\n", bytecode_unit)?;
         }
 
-        // Encode the bytecode buffer as a byte vector
-        let mut encoded_bytecode_buffer = Vec::new();
-        bytecode_buffer.encode(&mut encoded_bytecode_buffer);
+        // Encode the bytecode unit to a byte buffer
+        let mut encoded_bytecode_unit = Vec::new();
+        bytecode_unit.encode(&mut encoded_bytecode_unit);
 
         // If required, display the raw bytecode buffer
         if self.config.is_verbose(VerboseElement::RawBytecode) {
             writeln!(self.config.std_out, "===== Raw bytecode =====\n")?;
-            writeln!(self.config.std_out, "{:?}\n", encoded_bytecode_buffer.hex_dump())?;
+            writeln!(self.config.std_out, "{:?}\n", encoded_bytecode_unit.hex_dump())?;
         }
 
-        // Use the engine to run the bytecode
-        time_point = Instant::now();
-        let res = self
-            .engine
-            .run_bytecode(self, source, &encoded_bytecode_buffer, &runtime_data);
-        timings.push((String::from("execution"), time_point.elapsed()));
+        // Store the compilation result in the cache
+        self.compilation_cache
+            .insert(source, (extended_bytecode_unit, encoded_bytecode_unit));
 
-        // If required, display timing information
-        if self.config.perform_timings {
-            writeln!(self.config.std_out, "===== Timings =====\n")?;
-            let longest_event_name = timings
-                .iter()
-                .max_by_key(|(name, _)| name.len())
-                .unwrap()
-                .0
-                .len();
-            for (event, duration) in &timings {
-                let duration_min = duration.as_secs() / 60;
-                let duration_sec = duration.as_secs() % 60;
-                let duration_ms = duration.as_millis() % 1000;
-                let fill = " ".repeat(longest_event_name - event.len());
-                writeln!(
-                    self.config.std_out,
-                    "  {event}:{fill}  {duration_min}m{duration_sec}.{:0>3}s",
-                    duration_ms
-                )?;
-            }
+        // Finally, return the success
+        Ok(())
+    }
+
+    /// Util function to show a timing vector in a pretty way.
+    fn display_timings(
+        &mut self,
+        timings: &Vec<(String, Duration)>,
+        header: &str,
+    ) -> Result<(), Report> {
+        let full_header = format!("===== {header} =====");
+        writeln!(self.config.std_out, "{full_header}")?;
+        let longest_event_name = timings
+            .iter()
+            .max_by_key(|(name, _)| name.len())
+            .unwrap()
+            .0
+            .len();
+        for (event, duration) in timings {
+            let duration_min = duration.as_secs() / 60;
+            let duration_sec = duration.as_secs() % 60;
+            let duration_ms = duration.as_millis() % 1000;
+            let fill = " ".repeat(longest_event_name - event.len());
+            writeln!(
+                self.config.std_out,
+                "  {event}:{fill}  {duration_min}m{duration_sec}.{:0>3}s",
+                duration_ms
+            )?;
         }
-
-        // Finally, return the execution result
-        res
+        writeln!(self.config.std_out, "{}", "=".repeat(full_header.len()))?;
+        Ok(())
     }
 }
 

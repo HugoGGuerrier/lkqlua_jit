@@ -15,8 +15,8 @@ use crate::{
     },
     report::Report,
     runtime::{
-        CONTEXT_GLOBAL_NAME, DynamicError, DynamicErrorArg, ERROR_VALUE, LuaValue, RuntimeData,
-        RuntimeError, StackTraceElement,
+        CONTEXT_GLOBAL_NAME, DynamicError, DynamicErrorArg, ERROR_VALUE, LuaValue, RuntimeError,
+        StackTraceElement,
     },
     sources::SourceId,
 };
@@ -65,8 +65,7 @@ impl Engine {
         &self,
         ctx: &ExecutionContext,
         source_id: SourceId,
-        bytecode_buffer: &Vec<u8>,
-        runtime_data: &RuntimeData,
+        encoded_bytecode_unit: &Vec<u8>,
     ) -> Result<(), Report> {
         // Place the execution context in the global Lua table
         push_user_data(self.lua_state, ctx);
@@ -79,7 +78,7 @@ impl Engine {
         // Load the bytecode buffer in the Lua state
         if !load_buffer(
             self.lua_state,
-            bytecode_buffer,
+            encoded_bytecode_unit,
             &ctx.source_repo.get_source_by_id(source_id).unwrap().name,
         ) {
             panic!(
@@ -105,11 +104,13 @@ impl Engine {
                     ctx.source_repo
                         .get_id_by_name(&e.source_name)
                         .and_then(|source| {
-                            runtime_data.location_in_prototype(
-                                source,
-                                e.prototype_identifier,
-                                e.program_counter,
-                            )
+                            ctx.compilation_cache
+                                .get(&source)
+                                .and_then(|(bytecode_unit, _)| {
+                                    bytecode_unit.prototypes[e.prototype_identifier]
+                                        .instructions
+                                        .get_location(e.program_counter)
+                                })
                         })
                 })
                 .unwrap();

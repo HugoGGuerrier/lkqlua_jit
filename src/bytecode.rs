@@ -298,13 +298,13 @@ pub const PRIM_TRUE: u16 = 2;
 
 /// This structure represents an executable bytecode buffer, structured as
 /// specified in the [`bytecode`](mod@self) module.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct BytecodeUnit {
-    /// Function prototypes, the last one is considered as the main.
-    pub prototypes: Vec<Prototype>,
-
     /// Name of the source this bytecode buffer is coming from.
     pub source_name: String,
+
+    /// Function prototypes, the last one is considered as the main.
+    pub prototypes: Vec<Prototype>,
 }
 
 impl Display for BytecodeUnit {
@@ -350,7 +350,7 @@ impl BytecodeUnit {
 
 /// This structure represents a function prototype in the LuaJIT bytecode
 /// encoding.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Prototype {
     // --- Flags
     pub has_child: bool,

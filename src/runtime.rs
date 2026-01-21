@@ -3,15 +3,11 @@
 //! This module host all data structures that are required to store information
 //! during runtime and communicate with the LuaJIT engine.
 
-use crate::{
-    lua::{
-        LuaCFunction, LuaState, call, get_top, load_lua_code, move_top_value, push_c_closure,
-        push_integer, push_string,
-    },
-    sources::{SourceId, SourceSection},
+use crate::lua::{
+    LuaCFunction, LuaState, call, get_top, load_lua_code, move_top_value, push_c_closure,
+    push_integer, push_string,
 };
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 pub mod engine;
 
@@ -20,68 +16,6 @@ pub const ERROR_VALUE: &str = "##ERROR##";
 
 /// Name of the global value where the LKQL execution context is stored.
 pub const CONTEXT_GLOBAL_NAME: &str = "value@execution_context";
-
-/// This type contains all information collected during the compilation and
-/// that may be required during the execution phase.
-#[derive(Debug)]
-pub struct RuntimeData {
-    /// A map associating to each sources a set of prototype identifiers, each
-    /// one being associated to a data storage.
-    pub source_prototypes: HashMap<SourceId, Vec<PrototypeData>>,
-}
-
-impl RuntimeData {
-    pub fn new() -> Self {
-        Self { source_prototypes: HashMap::new() }
-    }
-
-    /// Associate runtime data to a prototype in the provided source. A new
-    /// identifier is created and returned and may be used to fetch those data
-    /// later.
-    pub fn add_prototype_data(
-        &mut self,
-        source: SourceId,
-        instruction_locations: Vec<Option<SourceSection>>,
-    ) -> usize {
-        // Ensure the source is associated to an existing map
-        if !self.source_prototypes.contains_key(&source) {
-            self.source_prototypes.insert(source, Vec::new());
-        }
-
-        // Then store the provided prototype data
-        let prototypes = self.source_prototypes.get_mut(&source).unwrap();
-        prototypes.push(PrototypeData { instruction_locations });
-        prototypes.len() - 1
-    }
-
-    /// Get the source location associated to the provided program counter in
-    /// the prototype identified by the provided id.
-    pub fn location_in_prototype(
-        &self,
-        source: SourceId,
-        prototype_id: usize,
-        program_counter: usize,
-    ) -> Option<&SourceSection> {
-        self.source_prototypes
-            .get(&source)?
-            .get(prototype_id)
-            .and_then(|data| {
-                data.instruction_locations
-                    .get(program_counter)
-                    .map_or(None, |res| res.as_ref())
-            })
-    }
-}
-
-/// This type contains all information related to a prototype that are required
-/// during the runtime.
-#[derive(Debug)]
-pub struct PrototypeData {
-    /// A vector of all instruction locations. The location at index x in this
-    /// vector corresponds to the instruction at the same index in the
-    /// prototype.
-    pub instruction_locations: Vec<Option<SourceSection>>,
-}
 
 /// This trait is used to generalize the Lua value concept for all types that
 /// may represent one.

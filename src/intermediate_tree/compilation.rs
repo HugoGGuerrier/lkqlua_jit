@@ -13,10 +13,11 @@ use crate::{
         },
     },
     bytecode::{
-        self, BytecodeUnit, ComplexConstant, JUMP_BIASING, NumericConstant, PRIM_FALSE, PRIM_NIL,
-        PRIM_TRUE, Prototype, TableConstantElement, VariableData,
+        self, ComplexConstant, JUMP_BIASING, NumericConstant, PRIM_FALSE, PRIM_NIL, PRIM_TRUE,
+        TableConstantElement,
         extended_bytecode::{
-            ExtendedInstruction, ExtendedInstructionBuffer, ExtendedInstructionVariant, Label,
+            ExtendedBytecodeUnit, ExtendedInstruction, ExtendedInstructionBuffer,
+            ExtendedInstructionVariant, ExtendedPrototype, ExtendedVariableData, Label,
         },
         op_codes::*,
     },
@@ -35,8 +36,8 @@ use crate::{
         constant_eval::{ConstantValue, ConstantValueVariant},
     },
     report::{Hint, Report},
-    runtime::{DynamicError, DynamicErrorArg, RuntimeData},
-    sources::{SourceRepository, SourceSection},
+    runtime::{DynamicError, DynamicErrorArg},
+    sources::SourceSection,
 };
 use num_bigint::BigInt;
 use std::{
@@ -55,10 +56,7 @@ impl ExecutionUnit {
     /// Compile this execution unit as a LuaJIT bytecode buffer. The result of
     /// this function can be used to execute the semantics described by the
     /// execution unit with the LuaJIT engine.
-    pub fn compile(
-        &self,
-        source_repo: &SourceRepository,
-    ) -> Result<(BytecodeUnit, RuntimeData), Report> {
+    pub fn compile(&self) -> Result<ExtendedBytecodeUnit, Report> {
         // Open the initial compilation context and create the prototypes vector
         let mut compile_context = CompilationContext::new(self);
 
@@ -67,17 +65,10 @@ impl ExecutionUnit {
 
         // Then return the success result
         if compile_context.diagnostics.is_empty() {
-            Ok((
-                BytecodeUnit {
-                    prototypes: compile_context.prototypes,
-                    source_name: source_repo
-                        .get_source_by_id(self.origin_location.source)
-                        .unwrap()
-                        .name
-                        .clone(),
-                },
-                compile_context.runtime_data,
-            ))
+            Ok(ExtendedBytecodeUnit {
+                source: self.origin_location.source,
+                prototypes: compile_context.prototypes,
+            })
         } else {
             Err(Report::Composed(compile_context.diagnostics))
         }
@@ -297,9 +288,6 @@ impl ExecutionUnit {
             }
         }
 
-        // Perform post compilation assertions
-        assert!(arg_count <= u8::MAX as usize, "Too many arguments for prototype");
-
         // Restore the previous execution unit and get data collected during
         // compilation.
         ctx.unit = previous_unit;
@@ -311,32 +299,11 @@ impl ExecutionUnit {
         // Tell the parent execution unit it has a child
         ctx.unit_data.has_child = true;
 
-        // Now we collect variable information to create debug data
-        let label_map = instructions.label_map();
-        let mut variable_data = data
-            .dead_bindings
-            .iter()
-            .map(|(n, b)| VariableData {
-                name: n.clone(),
-                birth_instruction: *label_map.get(&b.birth_label).expect("Unknown label"),
-                death_instruction: *label_map.get(&b.death_label).expect("Unknown label"),
-            })
-            .collect::<Vec<_>>();
-
-        // We sort variable data by birth label
-        variable_data.sort_by(|lvd, rvd| lvd.birth_instruction.cmp(&rvd.birth_instruction));
-
-        // Now we get instructions and their locations
-        let (instructions, instruction_locations) =
-            instructions.as_instructions_and_locations(&self.origin_location);
-
-        // We add all these information in the runtime required data
-        let proto_id = ctx
-            .runtime_data
-            .add_prototype_data(self.origin_location.source, instruction_locations);
+        // We add the prototype identifier as the last numeric constant of the
+        // prototype.
         data.constants
             .numeric_constants
-            .push(NumericConstant::Integer(proto_id as i32));
+            .push(NumericConstant::Integer(ctx.prototypes.len() as i32));
 
         // Create the bytecode prototype and add it to the current context
         // result.
@@ -344,17 +311,14 @@ impl ExecutionUnit {
             FrameVariant::Semantic { maximum_size, up_values, .. } => {
                 // Sort up-values from their index
                 let mut sorted_up_values = up_values.into_iter().collect::<Vec<_>>();
-                sorted_up_values.sort_by(|(_, uv_1), (_, uv_2)| uv_1.index.cmp(&uv_2.index));
-
-                // Get the prototype first line
-                let first_line = self.origin_location.start.line;
+                sorted_up_values.sort_by_key(|(_, uv)| uv.index);
 
                 // Then push the new prototype in the result
-                ctx.prototypes.push(Prototype {
+                ctx.prototypes.push(ExtendedPrototype {
                     has_child: data.has_child,
                     is_variadic,
                     has_ffi: true,
-                    arg_count: arg_count as u8,
+                    arg_count,
                     frame_size: *maximum_size,
                     instructions,
                     up_values: sorted_up_values
@@ -370,9 +334,16 @@ impl ExecutionUnit {
                         .collect(),
                     complex_consts: data.constants.complex_constants,
                     numeric_consts: data.constants.numeric_constants,
-                    first_line,
-                    line_count: self.origin_location.end.line - first_line,
-                    variable_data,
+                    origin_location: self.origin_location.clone(),
+                    variable_data: data
+                        .dead_bindings
+                        .iter()
+                        .map(|(n, b)| ExtendedVariableData {
+                            name: n.clone(),
+                            birth_label: b.birth_label,
+                            death_label: b.death_label,
+                        })
+                        .collect(),
                 })
             }
             _ => unreachable!(),
@@ -2113,10 +2084,7 @@ struct CompilationContext<'a> {
 
     /// This is the main result of the compilation process, it is filled during
     /// the compilation of execution units (see [`ExecutionUnit::compile`]).
-    prototypes: Vec<Prototype>,
-
-    /// Data required for the runtime and collected during the compilation.
-    runtime_data: RuntimeData,
+    prototypes: Vec<ExtendedPrototype>,
 
     /// Buffer containing all instructions, result of the compilation process.
     instructions: ExtendedInstructionBuffer,
@@ -2138,7 +2106,6 @@ impl<'a> CompilationContext<'a> {
             unit,
             unit_data: ExecUnitCompilationData::new(),
             prototypes: Vec::new(),
-            runtime_data: RuntimeData::new(),
             instructions: ExtendedInstructionBuffer::new(),
             diagnostics: Vec::new(),
         }
