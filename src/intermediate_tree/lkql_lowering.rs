@@ -6,7 +6,7 @@ use crate::{
         traits,
         types::{self},
     },
-    error_templates::{POS_AFTER_NAMED_ARGUMENT, PREVIOUS_NAMED_ARG_HINT},
+    errors::{POS_AFTER_NAMED_ARGUMENT, PREVIOUS_NAMED_ARG_HINT},
     intermediate_tree::{
         ArithOperator, ArithOperatorVariant, CompOperator, CompOperatorVariant, ExecutionUnit,
         ExecutionUnitVariant, Identifier, LogicOperator, LogicOperatorVariant, MiscOperator,

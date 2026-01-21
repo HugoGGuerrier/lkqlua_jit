@@ -21,7 +21,7 @@ use crate::{
         },
         op_codes::*,
     },
-    error_templates::{
+    errors::{
         DUPLICATED_SYMBOL, ErrorTemplate, INDEX_OUT_OF_BOUNDS, MISSING_TRAIT, NO_VALUE_FOR_PARAM,
         POS_AND_NAMED_VALUE_FOR_PARAM, PREVIOUS_SYMBOL_HINT, UNKNOWN_MEMBER, UNKNOWN_SYMBOL,
         WRONG_TYPE,

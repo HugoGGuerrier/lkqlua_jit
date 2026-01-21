@@ -6,7 +6,7 @@
 use crate::{
     ExecutionContext,
     builtins::{get_builtin_bindings, get_builtin_types},
-    error_templates::{ERROR_TEMPLATE_REPOSITORY, LUA_ENGINE_ERROR},
+    errors::{ERROR_TEMPLATE_REPOSITORY, LUA_ENGINE_ERROR},
     lua::{
         LuaState, close_lua_state, debug_frame, debug_get_local, debug_get_source, debug_info,
         debug_proto_and_pc, get_string, get_top, load_buffer, new_lua_state, open_lua_libs, pop,

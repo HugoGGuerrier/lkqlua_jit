@@ -5,7 +5,7 @@
 
 use crate::sources::{Location, SourceRepository};
 use crate::{
-    error_templates::ErrorTemplate,
+    errors::ErrorTemplate,
     sources::{SourceId, SourceSection},
 };
 use ariadne::{self, Label, StdoutFmt};
