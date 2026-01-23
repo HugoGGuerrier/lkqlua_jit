@@ -121,18 +121,27 @@ impl SourceRepository {
         self.sources.get(source_id)
     }
 
-    /// Get a reference to the source object associated to the provided name,
-    /// if any.
-    pub fn get_source_by_name(&self, source_name: &str) -> Option<&Source> {
-        self.source_name_map
-            .get(source_name)
-            .and_then(|id| self.get_source_by_id(*id))
-    }
-
     /// Get the source identifier associated to the provided source name, if
     /// any.
     pub fn get_id_by_name(&self, source_name: &str) -> Option<SourceId> {
         self.source_name_map.get(source_name).copied()
+    }
+
+    /// Get the name of a source from its identifier.
+    pub fn get_name_by_id(&self, source_id: SourceId) -> &String {
+        &self.sources.get(source_id).unwrap().name
+    }
+
+    /// Get the source identifier corresponding to the provided file path, if
+    /// any.
+    pub fn get_id_by_file(&self, file: &Path) -> Option<SourceId> {
+        if let Ok(canonical_file) = file.canonicalize() {
+            self.source_name_map
+                .get(&canonical_file.to_string_lossy().to_string())
+                .copied()
+        } else {
+            None
+        }
     }
 
     /// Parse the source designated by the provided identifier using the LKQL

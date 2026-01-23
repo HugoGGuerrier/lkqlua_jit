@@ -13,6 +13,7 @@ use crate::{
 use std::{
     fmt::{Debug, Display},
     hash::Hash,
+    path::PathBuf,
 };
 
 pub mod compilation;
@@ -243,7 +244,7 @@ pub enum NodeVariant {
         operand: Box<Node>,
     },
 
-    // --- Symbol accesses
+    // --- Symbol introduction
     /// Standard local symbol initialization
     InitLocal {
         symbol: Identifier,
@@ -252,6 +253,12 @@ pub enum NodeVariant {
     /// Special local symbol initialization for function-like values. This node
     /// must be used for recursion and debug purposes.
     InitLocalFun(u16),
+    ImportModule {
+        name: Identifier,
+        file: PathBuf,
+    },
+
+    // --- Symbol accesses
     ReadSymbol(Identifier),
 
     // --- Lambda function access
@@ -418,6 +425,13 @@ impl Node {
             NodeVariant::InitLocalFun(child_index) => {
                 ("InitLocalFun", vec![("child_index", child_index.to_string())])
             }
+            NodeVariant::ImportModule { name, file } => (
+                "ImportModule",
+                vec![
+                    ("name", format!("\"{}\"", name.text)),
+                    ("file", format!("\"{}\"", file.as_os_str().to_string_lossy())),
+                ],
+            ),
             NodeVariant::ReadSymbol(symbol) => {
                 ("ReadSymbol", vec![("symbol", format!("\"{}\"", symbol.text))])
             }

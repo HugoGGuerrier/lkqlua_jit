@@ -5,7 +5,7 @@
 
 use crate::{
     builtins::{
-        functions::{lkql_img, lkql_print},
+        functions::{lkql_img, lkql_import, lkql_print},
         types::BuiltinType,
     },
     engine::{FunctionValue, RuntimeValue},
@@ -26,6 +26,9 @@ pub fn create_unit_value(l: LuaState) {
     set_metatable(l, -2);
 }
 
+/// Name of the global value binding to the importation function.
+pub const LKQL_IMPORT_GLOBAL_NAME: &str = "value@lkql_import";
+
 /// This type represents a built-in symbol binding, this symbol is accessible
 /// in all lexical environments.
 pub struct BuiltinBinding {
@@ -42,6 +45,10 @@ pub fn get_builtin_bindings() -> Vec<BuiltinBinding> {
     vec![
         b("print", RuntimeValue::Function(FunctionValue::CFunction(lkql_print))),
         b("img", RuntimeValue::Function(FunctionValue::CFunction(lkql_img))),
+        b(
+            LKQL_IMPORT_GLOBAL_NAME,
+            RuntimeValue::Function(FunctionValue::CFunction(lkql_import)),
+        ),
         b(UNIT_SINGLETON_GLOBAL_NAME, RuntimeValue::FromBuilder(create_unit_value)),
     ]
 }
@@ -86,5 +93,6 @@ pub fn get_builtin_types() -> Vec<&'static BuiltinType> {
         b(&types::list::TYPE),
         b(&types::stream::TYPE),
         b(&types::obj::TYPE),
+        b(&types::namespace::TYPE),
     ]
 }

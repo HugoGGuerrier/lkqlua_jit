@@ -15,6 +15,7 @@ use crate::{
 pub mod bool;
 pub mod int;
 pub mod list;
+pub mod namespace;
 pub mod obj;
 pub mod str;
 pub mod stream;

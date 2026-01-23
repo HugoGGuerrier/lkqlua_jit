@@ -5,10 +5,10 @@
 
 use crate::{
     builtins::{
-        UNIT_SINGLETON_GLOBAL_NAME, get_builtin_bindings,
+        LKQL_IMPORT_GLOBAL_NAME, UNIT_SINGLETON_GLOBAL_NAME, get_builtin_bindings,
         traits::{BuiltinTrait, iterable::ITERATOR_FIELD},
         types::{
-            self, BuiltinType, TYPE_NAME_FIELD, TYPE_TAG_FIELD, TypeImplementation,
+            self, BuiltinType, TYPE_NAME_FIELD, TYPE_TAG_FIELD, TypeImplementation, namespace,
             stream::lazy_comprehension,
         },
     },
@@ -138,6 +138,12 @@ impl ExecutionUnit {
 
                 // Emit instructions to create the module table
                 emit_new_table(ctx, &end_source_section, result_tmp, 0, symbols.len() as u32);
+                emit_set_metatable(
+                    ctx,
+                    Some(&end_source_section),
+                    result_tmp,
+                    &namespace::IMPLEMENTATION,
+                );
                 for symbol in symbols {
                     let local_slot = ctx.frame.borrow().get_local(&symbol.text).unwrap();
                     emit_table_member_write(
@@ -749,7 +755,7 @@ impl Node {
                 operand_access.release(ctx);
             }
 
-            // --- Symbol accesses
+            // --- Symbol introduction
             NodeVariant::InitLocal { symbol, val } => {
                 // Create the birth label of the local variable
                 let birth_label = ctx.instructions.new_label();
@@ -767,6 +773,47 @@ impl Node {
             NodeVariant::InitLocalFun(child_index) => {
                 Self::compile_child_unit(ctx, &self.origin_location, *child_index as usize);
             }
+            NodeVariant::ImportModule { name, file } => {
+                // Create the birth label of the local variable
+                let birth_label = ctx.instructions.new_label();
+
+                // Then compile the call to the importation function and place
+                // its result in the bindings slot
+                let binding_slot = ctx.frame.borrow().get_local(&name.text).unwrap();
+                let call_slots = ctx.frame.borrow_mut().reserve_contiguous_slots(3);
+                emit_global_read(
+                    ctx,
+                    Some(&self.origin_location),
+                    call_slots.first,
+                    LKQL_IMPORT_GLOBAL_NAME,
+                );
+                let module_file_cst = ctx
+                    .unit_data
+                    .constants
+                    .get_from_string(&file.to_string_lossy());
+                ctx.instructions
+                    .ad(&self.origin_location, KSTR, call_slots.last, module_file_cst);
+                ctx.instructions
+                    .abc(&self.origin_location, CALL, call_slots.first, 2, 2);
+
+                // Move the result in the binding slot
+                ctx.instructions.ad(
+                    &self.origin_location,
+                    MOV,
+                    binding_slot.slot,
+                    call_slots.first as u16,
+                );
+
+                // Release call slots
+                ctx.frame.borrow_mut().release_slots(call_slots);
+
+                // Then label the next instruction as the birthing one and flag
+                // the slot as initialized in the current frame.
+                ctx.instructions.label(birth_label);
+                ctx.frame.borrow_mut().init_local(&name.text, birth_label);
+            }
+
+            // --- Symbol accesses
             NodeVariant::ReadSymbol(identifier) => {
                 // First try getting the symbol in the local frame
                 let maybe_local_binding = ctx.frame.borrow().get_local(&identifier.text);
@@ -1329,6 +1376,9 @@ impl Node {
                     call_slots.first,
                     call_slots.count() as u16 - 1,
                 );
+
+                // Release call slots
+                ctx.frame.borrow_mut().release_slots(call_slots);
             }
 
             // In the case of a conditional expression, avoid useless jump and
@@ -1551,6 +1601,10 @@ impl Node {
         let callee_slot = call_slots.first;
         let this_slot = call_slots.first + 3;
 
+        // Get labels for type checking
+        let is_namespace_label = ctx.instructions.new_label();
+        let next_label = ctx.instructions.new_label();
+
         // Place the "this" argument in the call slots
         prefix.compile_as_value(ctx, this_slot);
 
@@ -1564,7 +1618,17 @@ impl Node {
             is_safe,
         );
 
-        // Compile arguments
+        // Check if the dotted object is a namespace
+        emit_type_condition(
+            ctx,
+            Some(origin_location),
+            this_slot,
+            &namespace::TYPE,
+            is_namespace_label,
+        );
+
+        // Compile arguments for the case where the dotted object is not a
+        // namespace.
         Self::compile_args(
             ctx,
             origin_location,
@@ -1573,6 +1637,24 @@ impl Node {
             named_args,
             call_slots.first + 2,
         );
+        ctx.goto(next_label);
+
+        // Place the label when the dotted object is a namespace
+        ctx.instructions.label(is_namespace_label);
+
+        // Then compile arguments for the case where the dotted object is a
+        // namespace.
+        Self::compile_args(
+            ctx,
+            origin_location,
+            positional_args,
+            this_slot,
+            named_args,
+            call_slots.first + 2,
+        );
+
+        // Then flag the next instruction
+        ctx.instructions.label(next_label);
 
         // Finally return slots used for the call
         call_slots
@@ -2033,40 +2115,26 @@ fn emit_set_metatable(
 fn emit_type_check(
     ctx: &mut CompilationContext,
     maybe_origin_location: Option<&SourceSection>,
-    actual_value: u8,
-    expected_type: &BuiltinType,
+    value_slot: u8,
+    required_type: &BuiltinType,
 ) {
     // First create a label for the instruction next to what this function is
     // emitting.
     let next_label = ctx.instructions.new_label();
 
-    // First get the type tag of the actual value
-    let actual_tag = ctx.frame.borrow_mut().get_tmp();
-    emit_table_member_read(ctx, maybe_origin_location, actual_tag, actual_value, TYPE_TAG_FIELD);
-
-    // Then compare type tags and if they're not equals, emit a
-    // runtime error.
-    ctx.instructions.ad_maybe_loc(
-        maybe_origin_location,
-        ISEQN,
-        actual_tag,
-        ctx.unit_data
-            .constants
-            .get_from_int(expected_type.tag as i32),
-    );
-    ctx.goto(next_label);
-    ctx.frame.borrow_mut().release_slot(actual_tag);
+    // Emit the type checking part
+    emit_type_condition(ctx, maybe_origin_location, value_slot, required_type, next_label);
 
     // Now emit the code to raise a runtime error in the case where type tags
     // don't match.
     let actual_name = ctx.frame.borrow_mut().get_tmp();
-    emit_table_member_read(ctx, maybe_origin_location, actual_name, actual_value, TYPE_NAME_FIELD);
+    emit_table_member_read(ctx, maybe_origin_location, actual_name, value_slot, TYPE_NAME_FIELD);
     emit_runtime_error(
         ctx,
         maybe_origin_location,
         &WRONG_TYPE,
         &vec![
-            ErrorInstanceArg::Static(String::from(expected_type.display_name())),
+            ErrorInstanceArg::Static(String::from(required_type.display_name())),
             ErrorInstanceArg::LocalValue(actual_name),
         ],
     );
@@ -2117,6 +2185,33 @@ fn emit_trait_check(
 
     // Finally label the next instructions
     ctx.instructions.label(next_label);
+}
+
+/// Emit code that checks if the value at `value_slot` is of the
+/// `required_type`. If not, jump to the `if_false_label`.
+fn emit_type_condition(
+    ctx: &mut CompilationContext,
+    maybe_origin_location: Option<&SourceSection>,
+    value_slot: u8,
+    required_type: &BuiltinType,
+    if_true_label: Label,
+) {
+    // First get the type tag of the actual value
+    let actual_tag = ctx.frame.borrow_mut().get_tmp();
+    emit_table_member_read(ctx, maybe_origin_location, actual_tag, value_slot, TYPE_TAG_FIELD);
+
+    // Then compare type tags and if they're not equals jump to the provided
+    // label.
+    ctx.instructions.ad_maybe_loc(
+        maybe_origin_location,
+        ISEQN,
+        actual_tag,
+        ctx.unit_data
+            .constants
+            .get_from_int(required_type.tag as i32),
+    );
+    ctx.goto(if_true_label);
+    ctx.frame.borrow_mut().release_slot(actual_tag);
 }
 
 /// Emit, if required, the instruction to close local values in the current

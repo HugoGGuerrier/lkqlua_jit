@@ -83,7 +83,7 @@ impl Engine {
         if !load_buffer(
             self.lua_state,
             encoded_bytecode_unit,
-            &ctx.source_repo.get_source_by_id(source_id).unwrap().name,
+            &ctx.source_repo.get_name_by_id(source_id),
         ) {
             panic!(
                 "Cannot load the provided bytecode buffer, error message: {}",

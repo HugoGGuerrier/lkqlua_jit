@@ -6,7 +6,9 @@ use crate::{
         traits,
         types::{self},
     },
-    errors::{POS_AFTER_NAMED_ARGUMENT, PREVIOUS_NAMED_ARG_HINT},
+    errors::{
+        AMBIGUOUS_IMPORT, MODULE_NOT_FOUND, POS_AFTER_NAMED_ARGUMENT, PREVIOUS_NAMED_ARG_HINT,
+    },
     intermediate_tree::{
         ArithOperator, ArithOperatorVariant, CompOperator, CompOperatorVariant, ExecutionUnit,
         ExecutionUnitVariant, Identifier, LogicOperator, LogicOperatorVariant, MiscOperator,
@@ -16,7 +18,11 @@ use crate::{
     sources::{SourceId, SourceSection},
 };
 use liblkqllang::{BaseFunction, Exception, LkqlNode};
-use std::{collections::HashMap, path::PathBuf};
+use std::{
+    collections::HashMap,
+    env,
+    path::{Path, PathBuf},
+};
 
 impl ExecutionUnit {
     /// Lower the provided LKQL node as an intermediate [`ExecutionUnit`]. The
@@ -50,7 +56,7 @@ impl ExecutionUnit {
             }
             LkqlNode::FunDecl(fun_decl) => fun_decl.f_name()?.text()?,
             LkqlNode::AnonymousFunction(_) => ctx.next_lambda_name(),
-            LkqlNode::ListComprehension(_) => ctx.next_lazy_comp_name(),
+            LkqlNode::ListComprehension(_) => ctx.next_lazy_comprehension_name(),
             _ => unreachable!(),
         };
 
@@ -182,6 +188,9 @@ impl Node {
     /// Lower an LKQL node as an intermediate node. All LKQL node kinds should
     /// be accepted by this function.
     fn lower_lkql_node(node: &LkqlNode, ctx: &mut LoweringContext) -> Result<Self, Report> {
+        // Get the location of the node
+        let origin_location = SourceSection::from_lkql_node(ctx.lowered_source, node)?;
+
         // Lower the node
         let variant = match node {
             // --- Declarations
@@ -191,6 +200,72 @@ impl Node {
             },
             LkqlNode::FunDecl(_) | LkqlNode::SelectorDecl(_) => {
                 NodeVariant::InitLocalFun(*ctx.child_index_map.get(node).unwrap())
+            }
+            LkqlNode::Import(import) => {
+                // Create a vector of directories to look in
+                let mut searching_dirs: Vec<PathBuf> = Vec::new();
+
+                // Get the parent directory of the file being lowered
+                let current_file = node.unit()?.unwrap().filename()?;
+                if let Some(p) = Path::new(&current_file).parent() {
+                    searching_dirs.push(p.to_path_buf());
+                }
+
+                // Now get all directories in the "LKQL_PATH" environment
+                // variable.
+                if let Ok(lkql_path) = env::var("LKQL_PATH") {
+                    env::split_paths(&lkql_path)
+                        .filter(|p| p.exists() && p.is_dir())
+                        .for_each(|d| searching_dirs.push(d));
+                }
+
+                // Now look for the LKQL file corresponding to the module
+                let module_name_node = import.f_name()?;
+                let module_name = module_name_node.text()?;
+                let module_file_name = format!("{module_name}.lkql");
+                let module_files = searching_dirs
+                    .iter()
+                    .filter_map(|d| {
+                        let possible_module_file = d.join(Path::new(&module_file_name));
+                        if possible_module_file.exists() && possible_module_file.is_file() {
+                            Some(possible_module_file)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>();
+
+                // Check that there is exactly one matching file
+                let module_file = match &module_files[..] {
+                    [f] => f,
+                    [] => {
+                        ctx.diagnostics.push(Report::from_error_template(
+                            &origin_location,
+                            &MODULE_NOT_FOUND,
+                            &vec![module_name],
+                        ));
+                        &PathBuf::new()
+                    }
+                    x => {
+                        ctx.diagnostics.push(Report::from_error_template(
+                            &origin_location,
+                            &AMBIGUOUS_IMPORT,
+                            &vec![
+                                x.iter()
+                                    .map(|f| f.to_string_lossy())
+                                    .collect::<Vec<_>>()
+                                    .join(" & "),
+                            ],
+                        ));
+                        &PathBuf::new()
+                    }
+                };
+
+                // Finally return the created node variant
+                NodeVariant::ImportModule {
+                    name: Identifier::from_lkql_node(&module_name_node, ctx)?,
+                    file: module_file.clone(),
+                }
             }
 
             // --- Function call
@@ -506,10 +581,7 @@ impl Node {
         };
 
         // Finally return the resulting node
-        Ok(Node {
-            origin_location: SourceSection::from_lkql_node(ctx.lowered_source, node)?,
-            variant,
-        })
+        Ok(Node { origin_location, variant })
     }
 
     /// Wrap the current node using the provided wrapper creation function,
@@ -606,7 +678,7 @@ struct LoweringContext {
 
     /// Counter of encountered list comprehension, used for naming their
     /// execution units.
-    lazy_comp_counter: usize,
+    lazy_comprehension_counter: usize,
 
     /// The list of diagnostics emitted during the lowering.
     diagnostics: Vec<Report>,
@@ -618,7 +690,7 @@ impl LoweringContext {
             lowered_source,
             child_index_map: HashMap::new(),
             lambda_counter: 0,
-            lazy_comp_counter: 0,
+            lazy_comprehension_counter: 0,
             diagnostics: Vec::new(),
         }
     }
@@ -632,9 +704,9 @@ impl LoweringContext {
 
     /// Get the next available list comprehension name, incrementing the
     /// counter.
-    fn next_lazy_comp_name(&mut self) -> String {
-        let res = format!("<lazy_comprehension_{}>", self.lazy_comp_counter);
-        self.lazy_comp_counter += 1;
+    fn next_lazy_comprehension_name(&mut self) -> String {
+        let res = format!("<lazy_comprehension_{}>", self.lazy_comprehension_counter);
+        self.lazy_comprehension_counter += 1;
         res
     }
 }
@@ -662,6 +734,7 @@ fn all_local_decls(node: &LkqlNode, output: &mut Vec<LkqlNode>) -> Result<(), Re
                 }
                 LkqlNode::FunDecl(_) => output.push(child),
                 LkqlNode::SelectorDecl(_) => output.push(child),
+                LkqlNode::Import(_) => output.push(child),
                 LkqlNode::AnonymousFunction(_)
                 | LkqlNode::ListComprehension(_)
                 | LkqlNode::BlockExpr(_) => (),
@@ -687,6 +760,7 @@ fn all_local_symbols(node: &LkqlNode, ctx: &LoweringContext) -> Result<Vec<Ident
                 LkqlNode::ValDecl(vd) => vd.f_identifier()?.text()?,
                 LkqlNode::FunDecl(fd) => fd.f_name()?.text()?,
                 LkqlNode::SelectorDecl(sd) => sd.f_name()?.text()?,
+                LkqlNode::Import(i) => i.f_name()?.text()?,
                 _ => unreachable!(),
             };
             Ok(Identifier {

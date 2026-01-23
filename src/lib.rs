@@ -37,6 +37,10 @@ pub struct ExecutionContext {
     pub source_repo: SourceRepository,
     pub compilation_cache: HashMap<SourceId, (ExtendedBytecodeUnit, Vec<u8>)>,
     pub engine: Engine,
+
+    /// This vector stores sources that are being executed in their execution
+    /// order (oldest first).
+    execution_stack: Vec<SourceId>,
 }
 
 impl ExecutionContext {
@@ -47,6 +51,7 @@ impl ExecutionContext {
             source_repo: SourceRepository::new(),
             compilation_cache: HashMap::new(),
             engine: Engine::new(),
+            execution_stack: Vec::new(),
         }
     }
 
@@ -70,6 +75,9 @@ impl ExecutionContext {
         let source = self.source_repo.add_source_file(file, true)?;
         self.compilation_cache.remove(&source);
 
+        // Push the source on the execution stack
+        self.execution_stack.push(source);
+
         // Create working variables to measure time
         let mut timings: Vec<(String, Duration)> = Vec::new();
 
@@ -89,9 +97,12 @@ impl ExecutionContext {
             writeln!(self.config.std_out, "")?;
             self.display_timings(
                 &timings,
-                &format!("Executing {}", self.source_repo.get_source_by_id(source).unwrap().name),
+                &format!("Executing {}", self.source_repo.get_name_by_id(source)),
             )?;
         }
+
+        // Pop the source from the execution stack
+        self.execution_stack.pop();
 
         // Finally, return the execution result
         res

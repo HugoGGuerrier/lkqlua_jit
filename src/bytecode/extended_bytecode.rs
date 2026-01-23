@@ -36,11 +36,7 @@ impl ExtendedBytecodeUnit {
     pub fn to_bytecode_unit(&self, source_repo: &SourceRepository) -> BytecodeUnit {
         BytecodeUnit {
             prototypes: self.prototypes.iter().map(|p| p.to_prototype()).collect(),
-            source_name: source_repo
-                .get_source_by_id(self.source)
-                .unwrap()
-                .name
-                .clone(),
+            source_name: source_repo.get_name_by_id(self.source).clone(),
         }
     }
 }
@@ -498,11 +494,7 @@ mod tests {
             bytecode_buffer_1.to_bytecode_unit(&source_repo),
             BytecodeUnit {
                 prototypes: vec![],
-                source_name: source_repo
-                    .get_source_by_id(dummy_source)
-                    .unwrap()
-                    .name
-                    .clone()
+                source_name: source_repo.get_name_by_id(dummy_source).clone()
             },
         );
 

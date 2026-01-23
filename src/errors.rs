@@ -86,12 +86,42 @@ pub const MISSING_TRAIT: ErrorTemplate = ErrorTemplate {
     message_template: "Trait \"{}\" is required, the type \"{}\" isn't implementing it",
 };
 
+// --- Module related errors
+
+/// Error when a module file cannot be located.
+pub const MODULE_NOT_FOUND: ErrorTemplate = ErrorTemplate {
+    id: MISSING_TRAIT.id + 1,
+    title: "Module file not found",
+    message_template: "Impossible to locate the file corresponding to the module \"{}\"",
+};
+
+/// Error when a module is found in multiple files.
+pub const AMBIGUOUS_IMPORT: ErrorTemplate = ErrorTemplate {
+    id: MODULE_NOT_FOUND.id + 1,
+    title: "Ambiguous module importation",
+    message_template: "This module can be imported from multiple files ({})",
+};
+
+/// Error when there is a module dependency cycle.
+pub const DEPENDENCY_CYCLE: ErrorTemplate = ErrorTemplate {
+    id: AMBIGUOUS_IMPORT.id + 1,
+    title: "Dependency cycle",
+    message_template: "There is a cycle in modules dependency chain ({})",
+};
+
+// Error when an error occurs in during the importation of a module.
+pub const ERROR_DURING_IMPORTATION: ErrorTemplate = ErrorTemplate {
+    id: DEPENDENCY_CYCLE.id + 1,
+    title: "Error when importing a module",
+    message_template: "An error occurred during the module importation, please check the related file",
+};
+
 // --- Misc errors
 
 /// Error coming from the Lua engine and that cannot be mapped to a more
 /// precise error.
 pub const LUA_ENGINE_ERROR: ErrorTemplate = ErrorTemplate {
-    id: MISSING_TRAIT.id + 1,
+    id: ERROR_DURING_IMPORTATION.id + 1,
     title: "Error from the Lua engine",
     message_template: "{}",
 };
@@ -111,6 +141,10 @@ pub const ERROR_TEMPLATE_REPOSITORY: &[&ErrorTemplate] = &[
     &WRONG_TYPE,
     &WRONG_ARG_TYPE,
     &MISSING_TRAIT,
+    &MODULE_NOT_FOUND,
+    &AMBIGUOUS_IMPORT,
+    &DEPENDENCY_CYCLE,
+    &ERROR_DURING_IMPORTATION,
     &LUA_ENGINE_ERROR,
 ];
 
