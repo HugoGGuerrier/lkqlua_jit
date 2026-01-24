@@ -7,8 +7,15 @@
 
 use crate::report::Report;
 use ariadne::Cache;
-use liblkqllang::{AnalysisContext, AnalysisUnit, LkqlNode, SourceLocation};
-use std::{collections::HashMap, env::current_dir, fmt::Display, fs, ops::Range, path::Path};
+use liblkqllang::{AnalysisContext, AnalysisUnit, SourceLocation};
+use std::{
+    collections::HashMap,
+    fmt::Display,
+    fs,
+    ops::Range,
+    path::{Path, PathBuf},
+    time::SystemTime,
+};
 
 /// This structure is the main entry point of abstract source handling, it
 /// holds all created sources, associating each one from its name to its
@@ -17,7 +24,10 @@ use std::{collections::HashMap, env::current_dir, fmt::Display, fs, ops::Range, 
 pub struct SourceRepository {
     lkql_context: AnalysisContext,
     sources: Vec<Source>,
-    source_name_map: HashMap<String, SourceId>,
+
+    /// Internal field to store all loaded files and link them to their
+    /// corresponding source.
+    file_to_source: HashMap<PathBuf, SourceId>,
 }
 
 impl Cache<SourceId> for &SourceRepository {
@@ -28,11 +38,12 @@ impl Cache<SourceId> for &SourceRepository {
         source_id: &SourceId,
     ) -> Result<&ariadne::Source<Self::Storage>, impl std::fmt::Debug> {
         self.get_source_by_id(*source_id)
-            .map_or(Err(format!("No sources with id {source_id}")), |s| Ok(&s.buffer))
+            .map_or(Err(format!("No sources with id {source_id}")), |s| Ok(&s.content()))
     }
 
     fn display<'a>(&self, source_id: &'a SourceId) -> Option<impl std::fmt::Display + 'a> {
-        self.get_source_by_id(*source_id).map(|s| s.name.clone())
+        self.get_source_by_id(*source_id)
+            .map(|s| String::from(s.name()))
     }
 }
 
@@ -43,76 +54,69 @@ impl SourceRepository {
         Self {
             lkql_context: AnalysisContext::create_default().unwrap(),
             sources: Vec::new(),
-            source_name_map: HashMap::new(),
+            file_to_source: HashMap::new(),
         }
     }
 
-    /// Register a new file designated by the provided path in the source
-    /// repository. If the operation is successful, then return the identifier
-    /// of the newly created source. Note that if the file has already been
-    /// loaded in this source repository and the `update` parameter is `true`,
-    /// then the file is loaded again and the repository is updated.
+    /// Read the provided file and store it as a source in this repository.
+    /// This function tries to avoid useless file reload, so before reading
+    /// the file, it checks if the latter has been modified since the last
+    /// load. If not, the source repository isn't modified, and the second
+    /// part of the result is [`false`].
     /// This method may fail if:
-    ///   * The provided file has already been loaded in this source repository
-    ///     and the `update` parameter is `false`
     ///   * The provided path doesn't designate an existing file
     ///   * The file designated by the provided file is not UTF-8 encoded
     ///     (see https://github.com/HugoGGuerrier/lkqlua_jit/issues/1)
-    pub fn add_source_file(&mut self, file_path: &Path, update: bool) -> Result<SourceId, Report> {
+    pub fn add_source_file(&mut self, file_path: &Path) -> Result<(SourceId, bool), Report> {
+        // Get the absolute path to the file
         let canonical_path = file_path.canonicalize()?;
-        let source_name = canonical_path.to_string_lossy().to_string();
-        self.add_source(source_name, || fs::read_to_string(&canonical_path), update)
+
+        // Then get the last time the file has been modified
+        let last_modification = fs::metadata(&canonical_path)
+            .and_then(|md| md.modified())
+            .ok();
+
+        // Then, if this file has already been loaded in this repository,
+        // compare the stored modification date with the one from metadata.
+        if let Some(&source_id) = self.file_to_source.get(&canonical_path) {
+            if let Some(known_last_change) = self.sources[source_id].last_modification() {
+                if let Some(current_last_change) = last_modification {
+                    if known_last_change == current_last_change {
+                        return Ok((source_id, false));
+                    }
+                }
+            }
+        }
+
+        // If we're here, the source must be updated or inserted in the
+        // repository.
+        let source_id = self
+            .file_to_source
+            .get(&canonical_path)
+            .copied()
+            .unwrap_or(self.sources.len());
+        self.file_to_source
+            .insert(canonical_path.clone(), source_id);
+        let source = Source::File {
+            content: ariadne::Source::from(fs::read_to_string(&canonical_path)?),
+            path: canonical_path,
+            last_modification,
+        };
+        self.sources.insert(source_id, source);
+        Ok((source_id, true))
     }
 
     /// Register the provided buffer in the source repository, returning the
-    /// identifier of the newly created source. If the `update` parameter is
-    /// `true`, the source is updated if it is already presents in the
-    /// repository.
-    /// This method may fail if:
-    ///   * The provided file has already been loaded in this source repository
-    ///     and the `update` parameter is `false`
-    pub fn add_source_buffer(
-        &mut self,
-        name: &str,
-        content: &str,
-        update: bool,
-    ) -> Result<SourceId, Report> {
-        // We add the current working directory before the buffer name in order
-        // to be compatible with Langkit unit naming convention.
-        let mut canonical_path = current_dir()?.canonicalize()?;
-        canonical_path.push(name);
-        let source_name = canonical_path.to_string_lossy().to_string();
-        self.add_source(source_name, || Ok::<_, Report>(String::from(content)), update)
-    }
-
-    /// Internal function for adding sources.
-    fn add_source<F, E>(
-        &mut self,
-        source_name: String,
-        content_provider: F,
-        update: bool,
-    ) -> Result<SourceId, Report>
-    where
-        F: Fn() -> Result<String, E>,
-        Report: From<E>,
-    {
-        // Start by checking if a source with the same name already exists
-        if self.source_name_map.contains_key(&source_name) && !update {
-            return Err(Report::bug_msg(format!(
-                "A source named \"{source_name}\" is already in the repository"
-            )));
-        }
-
-        // If we get here, we have to create the new source object and save it
-        // in the repository.
+    /// identifier of the newly created source. This function store the new
+    /// buffer unconditionally.
+    pub fn add_source_buffer(&mut self, name: &str, content: &str) -> SourceId {
+        let source = Source::Buffer {
+            name: String::from(name),
+            content: ariadne::Source::from(String::from(content)),
+        };
         let source_id = self.sources.len();
-        self.source_name_map.insert(source_name.clone(), source_id);
-        let source_object =
-            Source { name: source_name, buffer: ariadne::Source::from(content_provider()?) };
-        self.sources.push(source_object);
-
-        // Finally return the identifier of the new source
-        Ok(source_id)
+        self.sources.insert(source_id, source);
+        source_id
     }
 
     /// Get a reference to the source object associated to the provided
@@ -121,27 +125,17 @@ impl SourceRepository {
         self.sources.get(source_id)
     }
 
-    /// Get the source identifier associated to the provided source name, if
-    /// any.
-    pub fn get_id_by_name(&self, source_name: &str) -> Option<SourceId> {
-        self.source_name_map.get(source_name).copied()
-    }
-
     /// Get the name of a source from its identifier.
-    pub fn get_name_by_id(&self, source_id: SourceId) -> &String {
-        &self.sources.get(source_id).unwrap().name
+    pub fn get_name_by_id(&self, source_id: SourceId) -> &str {
+        self.sources.get(source_id).unwrap().name()
     }
 
     /// Get the source identifier corresponding to the provided file path, if
     /// any.
     pub fn get_id_by_file(&self, file: &Path) -> Option<SourceId> {
-        if let Ok(canonical_file) = file.canonicalize() {
-            self.source_name_map
-                .get(&canonical_file.to_string_lossy().to_string())
-                .copied()
-        } else {
-            None
-        }
+        file.canonicalize()
+            .ok()
+            .and_then(|p| self.file_to_source.get(&p).copied())
     }
 
     /// Parse the source designated by the provided identifier using the LKQL
@@ -158,8 +152,8 @@ impl SourceRepository {
             .get_source_by_id(source_id)
             .ok_or(format!("No sources with id {source_id}"))?;
         let unit = self.lkql_context.get_unit_from_buffer(
-            &source.name,
-            source.buffer.text(),
+            &source.name(),
+            source.content().text(),
             None,
             None,
         )?;
@@ -181,15 +175,53 @@ impl SourceRepository {
 /// A source identifier is just an unsigned integer.
 pub type SourceId = usize;
 
-/// This type represent a source
+/// This type represents an abstract source.
 #[derive(Debug)]
-pub struct Source {
-    /// Name of the source, either the absolute path of the file, or the
-    /// provided buffer name, preceded by the current directory absolute path.
-    pub name: String,
+pub enum Source {
+    File {
+        /// An absolute path to the file.
+        path: PathBuf,
 
-    /// Content of the source.
-    pub buffer: ariadne::Source<String>,
+        /// Content of the file.
+        content: ariadne::Source<String>,
+
+        /// Last time the file has been modified when this instance has been
+        /// created.
+        last_modification: Option<SystemTime>,
+    },
+    Buffer {
+        /// Name of the buffer.
+        name: String,
+
+        /// Content of the buffer.
+        content: ariadne::Source<String>,
+    },
+}
+
+impl Source {
+    /// Get the name of the source.
+    pub fn name(&self) -> &str {
+        match self {
+            Source::File { path, .. } => path.to_str().unwrap(),
+            Source::Buffer { name, .. } => name,
+        }
+    }
+
+    /// Get the content of the source.
+    pub fn content(&self) -> &ariadne::Source<String> {
+        match self {
+            Source::File { content, .. } | Source::Buffer { content, .. } => content,
+        }
+    }
+
+    /// Get the last time the source origin has been modified, if this is
+    /// applicable to it.
+    pub fn last_modification(&self) -> Option<SystemTime> {
+        match self {
+            Source::File { last_modification, .. } => last_modification.clone(),
+            Source::Buffer { .. } => None,
+        }
+    }
 }
 
 /// This structure represents an extract from a source object.
@@ -207,17 +239,6 @@ impl Display for SourceSection {
 }
 
 impl SourceSection {
-    /// Create a new section corresponding to the provided node location range
-    /// in the provided source.
-    pub fn from_lkql_node(source: SourceId, node: &LkqlNode) -> Result<Self, Report> {
-        let sloc_range = node.sloc_range()?;
-        Ok(Self {
-            source,
-            start: Location::from_lkql_location(sloc_range.start),
-            end: Location::from_lkql_location(sloc_range.end),
-        })
-    }
-
     /// Create a new source section start from the `from` start location and
     /// finishing at the `to` end.
     /// This method returns an error if:
@@ -246,22 +267,22 @@ impl SourceSection {
 
         // Here, we ensure the start offset is included in the source
         let maybe_start_offset = source
-            .buffer
+            .content()
             .line(self.start.line as usize - 1)
             .map(|l| l.offset() + self.start.col as usize - 1);
         let start_offset = maybe_start_offset.unwrap_or(if self.start.line > 1 {
-            source.buffer.lines().last().unwrap().span().end
+            source.content().lines().last().unwrap().span().end
         } else {
             0
         });
 
         // Doing the same thing for the end offset
         let maybe_end_offset = source
-            .buffer
+            .content()
             .line(self.end.line as usize - 1)
             .map(|l| l.offset() + self.end.col as usize - 1);
         let end_offset = maybe_end_offset.unwrap_or(if self.end.line > 1 {
-            source.buffer.lines().last().unwrap().span().end
+            source.content().lines().last().unwrap().span().end
         } else {
             0
         });

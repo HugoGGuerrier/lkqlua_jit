@@ -72,8 +72,10 @@ impl ExecutionContext {
     /// execution is not successful.
     pub fn execute_lkql_file(&mut self, file: &Path) -> Result<(), Report> {
         // Add the source file to the source repo updating it if required
-        let source = self.source_repo.add_source_file(file, true)?;
-        self.compilation_cache.remove(&source);
+        let (source, updated) = self.source_repo.add_source_file(file)?;
+        if updated {
+            self.compilation_cache.remove(&source);
+        }
 
         // Push the source on the execution stack
         self.execution_stack.push(source);
@@ -154,7 +156,7 @@ impl ExecutionContext {
         timings.push((String::from("compilation"), time_point.elapsed()));
 
         // Transform the extended bytecode unit into a standard bytecode unit
-        let bytecode_unit = extended_bytecode_unit.to_bytecode_unit(&self.source_repo);
+        let bytecode_unit = extended_bytecode_unit.to_bytecode_unit();
 
         // If required, display the compiled bytecode
         if self.config.is_verbose(VerboseElement::Bytecode) {
