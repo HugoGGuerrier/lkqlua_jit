@@ -13,7 +13,7 @@ use crate::{
         VariableData,
         op_codes::{JMP, LOOP},
     },
-    sources::{SourceId, SourceRepository, SourceSection},
+    sources::{SourceId, SourceSection},
 };
 use std::collections::HashMap;
 
@@ -33,10 +33,10 @@ pub struct ExtendedBytecodeUnit {
 impl ExtendedBytecodeUnit {
     /// Create a new [`crate::bytecode::BytecodeUnit`] instance with data
     /// contained in this extended bytecode buffer.
-    pub fn to_bytecode_unit(&self, source_repo: &SourceRepository) -> BytecodeUnit {
+    pub fn to_bytecode_unit(&self) -> BytecodeUnit {
         BytecodeUnit {
             prototypes: self.prototypes.iter().map(|p| p.to_prototype()).collect(),
-            source_name: source_repo.get_name_by_id(self.source).clone(),
+            source_name: String::from(self.source.to_string()),
         }
     }
 }
@@ -426,14 +426,14 @@ mod tests {
     use crate::bytecode::UpValueVariant;
     #[allow(unused)]
     use crate::sources::Location;
+    #[allow(unused)]
+    use crate::sources::SourceRepository;
 
     #[test]
     fn test_extended_bytecode() {
         // Create a source repository and add a dummy source
         let mut source_repo = SourceRepository::new();
-        let dummy_source = source_repo
-            .add_source_buffer("<my_source>", "# This is my content", false)
-            .unwrap();
+        let dummy_source = source_repo.add_source_buffer("<my_source>", "# This is my content");
         let dummy_loc = SourceSection {
             source: dummy_source,
             start: Location { line: 1, col: 1 },
@@ -491,10 +491,10 @@ mod tests {
         // Test bytecode buffers
         let bytecode_buffer_1 = ExtendedBytecodeUnit { source: dummy_source, prototypes: vec![] };
         assert_eq!(
-            bytecode_buffer_1.to_bytecode_unit(&source_repo),
+            bytecode_buffer_1.to_bytecode_unit(),
             BytecodeUnit {
                 prototypes: vec![],
-                source_name: source_repo.get_name_by_id(dummy_source).clone()
+                source_name: String::from(source_repo.get_name_by_id(dummy_source)),
             },
         );
 

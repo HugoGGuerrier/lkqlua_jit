@@ -105,16 +105,12 @@ impl Engine {
                 .stack_trace
                 .iter()
                 .find_map(|e| {
-                    ctx.source_repo
-                        .get_id_by_name(&e.source_name)
-                        .and_then(|source| {
-                            ctx.compilation_cache
-                                .get(&source)
-                                .and_then(|(bytecode_unit, _)| {
-                                    bytecode_unit.prototypes[e.prototype_identifier]
-                                        .instructions
-                                        .get_location(e.program_counter)
-                                })
+                    ctx.compilation_cache
+                        .get(&e.source_id)
+                        .and_then(|(bytecode_unit, _)| {
+                            bytecode_unit.prototypes[e.prototype_identifier]
+                                .instructions
+                                .get_location(e.program_counter)
                         })
                 })
                 .unwrap();
@@ -149,13 +145,15 @@ unsafe extern "C" fn handle_error(l: LuaState) -> c_int {
             if debug_info(l, &mut frame, "S") {
                 if let Some((proto_id, pc)) = debug_proto_and_pc(l, &mut frame) {
                     let source_name = debug_get_source(&frame).unwrap();
-                    stack_trace.push(StackTraceElement {
-                        source_name,
-                        prototype_identifier: proto_id,
-                        // We subtract 1 to the PC because Lua index
-                        // instructions from 1.
-                        program_counter: pc - 1,
-                    });
+                    if let Ok(source_id) = source_name.parse::<usize>() {
+                        stack_trace.push(StackTraceElement {
+                            source_id,
+                            prototype_identifier: proto_id,
+                            // We subtract 1 to the PC because Lua index
+                            // instructions from 1.
+                            program_counter: pc - 1,
+                        });
+                    }
                     if current_frame.is_none() {
                         let _ = current_frame.insert(frame);
                     }
@@ -240,7 +238,7 @@ impl RuntimeError {
 /// This type represents an element of a runtime stack trace.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StackTraceElement {
-    pub source_name: String,
+    pub source_id: usize,
     pub prototype_identifier: usize,
     pub program_counter: usize,
 }

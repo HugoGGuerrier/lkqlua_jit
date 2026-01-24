@@ -15,7 +15,7 @@ use crate::{
         MiscOperatorVariant, Node, NodeVariant,
     },
     report::{Hint, Report},
-    sources::{SourceId, SourceSection},
+    sources::{Location, SourceId, SourceSection},
 };
 use liblkqllang::{BaseFunction, Exception, LkqlNode};
 use std::{
@@ -661,6 +661,19 @@ impl Identifier {
         Ok(Self {
             origin_location: SourceSection::from_lkql_node(ctx.lowered_source, node)?,
             text: node.text()?,
+        })
+    }
+}
+
+impl SourceSection {
+    /// Create a new section corresponding to the provided node location range
+    /// in the provided source.
+    fn from_lkql_node(source: SourceId, node: &LkqlNode) -> Result<Self, Report> {
+        let sloc_range = node.sloc_range()?;
+        Ok(Self {
+            source,
+            start: Location::from_lkql_location(sloc_range.start),
+            end: Location::from_lkql_location(sloc_range.end),
         })
     }
 }
