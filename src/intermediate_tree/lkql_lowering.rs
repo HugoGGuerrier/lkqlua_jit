@@ -374,13 +374,13 @@ impl Node {
                 };
                 NodeVariant::IndexExpr {
                     indexed_val: Box::new(Self::lower_lkql_node(&coll_expr?, ctx)?.with_wrapper(
-                        |indexed_val| NodeVariant::CheckTrait {
+                        |indexed_val| NodeVariant::RequireTrait {
                             expression: Box::new(indexed_val),
                             required_trait: &traits::indexable::TRAIT,
                         },
                     )),
                     index: Box::new(Self::lower_lkql_node(&index?, ctx)?.with_wrapper(|i| {
-                        NodeVariant::CheckType {
+                        NodeVariant::RequireType {
                             expression: Box::new(i),
                             expected_type: &types::int::TYPE,
                         }
@@ -394,7 +394,7 @@ impl Node {
                 value: Box::new(Self::lower_lkql_node(&in_clause.f_value_expr()?, ctx)?),
                 collection: Box::new(
                     Self::lower_lkql_node(&in_clause.f_list_expr()?, ctx)?.with_wrapper(|n| {
-                        NodeVariant::CheckTrait {
+                        NodeVariant::RequireTrait {
                             expression: Box::new(n),
                             required_trait: &traits::iterable::TRAIT,
                         }
@@ -458,7 +458,7 @@ impl Node {
                     })
                     .map(|n| Self::lower_lkql_node(&n?.unwrap(), ctx))
                     .map(|n| {
-                        Ok(n?.with_wrapper(|coll_expr| NodeVariant::CheckTrait {
+                        Ok(n?.with_wrapper(|coll_expr| NodeVariant::RequireTrait {
                             expression: Box::new(coll_expr),
                             required_trait: &traits::iterable::TRAIT,
                         }))

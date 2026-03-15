@@ -265,13 +265,13 @@ pub enum NodeVariant {
     LambdaFun(u16),
 
     // --- Type checkers
-    /// This node is checking that the child expression matches the given type
-    /// and if so, return it. Otherwise, this node should raise an error.
-    CheckType {
+    /// Following nodes emit a runtime error if sub-expression isn't matching
+    /// their requirements.
+    RequireType {
         expression: Box<Node>,
         expected_type: &'static BuiltinType,
     },
-    CheckTrait {
+    RequireTrait {
         expression: Box<Node>,
         required_trait: &'static BuiltinTrait,
     },
@@ -438,15 +438,15 @@ impl Node {
             NodeVariant::LambdaFun(child_index) => {
                 ("LambdaFun", vec![("child_index", child_index.to_string())])
             }
-            NodeVariant::CheckType { expression, expected_type } => (
-                "CheckType",
+            NodeVariant::RequireType { expression, expected_type } => (
+                "RequireType",
                 vec![
                     ("expression", expression.pretty_print(child_level)),
                     ("expected_type", expected_type.display_name().to_string()),
                 ],
             ),
-            NodeVariant::CheckTrait { expression, required_trait } => (
-                "CheckTrait",
+            NodeVariant::RequireTrait { expression, required_trait } => (
+                "RequireTrait",
                 vec![
                     ("expression", expression.pretty_print(child_level)),
                     ("required_trait", required_trait.name.to_string()),

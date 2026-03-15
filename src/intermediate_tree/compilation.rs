@@ -97,7 +97,7 @@ impl ExecutionUnit {
         'a: 'b,
     {
         // Save the previous execution unit and its data and update the
-        // compilation context
+        // compilation context.
         let previous_unit = ctx.unit;
         ctx.unit = self;
         let previous_unit_data = mem::replace(&mut ctx.unit_data, ExecUnitCompilationData::new());
@@ -893,19 +893,24 @@ impl Node {
             }
 
             // --- Type checkers
-            NodeVariant::CheckType { expression, expected_type } => {
+            NodeVariant::RequireType { expression, expected_type } => {
                 // Compile the expression in the result slot
                 expression.compile_as_value(ctx, result_slot);
 
                 // Then emit type checking instructions
-                emit_type_check(ctx, Some(&self.origin_location), result_slot, expected_type);
+                emit_type_requirement(ctx, Some(&self.origin_location), result_slot, expected_type);
             }
-            NodeVariant::CheckTrait { expression, required_trait } => {
+            NodeVariant::RequireTrait { expression, required_trait } => {
                 // Compile the expression in the result slot
                 expression.compile_as_value(ctx, result_slot);
 
                 // Then emit trait checking instructions
-                emit_trait_check(ctx, Some(&self.origin_location), result_slot, required_trait);
+                emit_trait_requirement(
+                    ctx,
+                    Some(&self.origin_location),
+                    result_slot,
+                    required_trait,
+                );
             }
 
             // --- Non-trivial literals
@@ -1090,15 +1095,20 @@ impl Node {
                 }
             }
 
-            NodeVariant::CheckType { expression, expected_type } => {
+            NodeVariant::RequireType { expression, expected_type } => {
                 let res = expression.compile_as_access(ctx, already_reserved_slot);
-                emit_type_check(ctx, Some(&self.origin_location), res.slot(), expected_type);
+                emit_type_requirement(ctx, Some(&self.origin_location), res.slot(), expected_type);
                 res
             }
 
-            NodeVariant::CheckTrait { expression, required_trait } => {
+            NodeVariant::RequireTrait { expression, required_trait } => {
                 let res = expression.compile_as_access(ctx, already_reserved_slot);
-                emit_trait_check(ctx, Some(&self.origin_location), res.slot(), required_trait);
+                emit_trait_requirement(
+                    ctx,
+                    Some(&self.origin_location),
+                    res.slot(),
+                    required_trait,
+                );
                 res
             }
             _ => fallback(ctx, already_reserved_slot, self),
@@ -2112,7 +2122,7 @@ fn emit_set_metatable(
 /// Emit instructions to check that the type of the value stored in the
 /// `actual_value` slot is corresponding to `expected_type`. If types don't
 /// match a runtime error is raised.
-fn emit_type_check(
+fn emit_type_requirement(
     ctx: &mut CompilationContext,
     maybe_origin_location: Option<&SourceSection>,
     value_slot: u8,
@@ -2147,7 +2157,7 @@ fn emit_type_check(
 /// Emit instructions to check that the value stored in the `value_slot` slot
 /// is implementing the required built-in trait. If not, a runtime error is
 /// raised.
-fn emit_trait_check(
+fn emit_trait_requirement(
     ctx: &mut CompilationContext,
     maybe_origin_location: Option<&SourceSection>,
     value_slot: u8,
