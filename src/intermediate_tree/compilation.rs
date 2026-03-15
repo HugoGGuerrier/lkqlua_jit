@@ -1870,7 +1870,7 @@ fn emit_iteration<F>(
 
     // Declare the loop
     ctx.instructions.label(loop_start);
-    ctx.loop_(next_label);
+    ctx.r#loop(next_label);
 
     // Then make the loop variant progress
     ctx.instructions
@@ -2312,9 +2312,9 @@ impl<'a> CompilationContext<'a> {
 
     /// Add a new `loop` instruction in the instruction buffer with information
     /// about the current frame in the context.
-    fn loop_(&mut self, label: Label) {
+    fn r#loop(&mut self, label: Label) {
         let next_available_slot = self.frame.borrow_mut().peek_next_slot();
-        self.instructions.loop_(label, next_available_slot);
+        self.instructions.r#loop(label, next_available_slot);
     }
 
     /// Util function to add a collection of symbols in the current frame as local

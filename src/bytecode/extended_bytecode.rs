@@ -167,7 +167,7 @@ impl ExtendedInstructionBuffer {
 
     /// Shortcut to add an [`ExtendedInstructionVariant::Loop`] instruction to
     /// the buffer.
-    pub fn loop_(&mut self, label: Label, next_available_slot: u8) {
+    pub fn r#loop(&mut self, label: Label, next_available_slot: u8) {
         self.add_instruction(None, ExtendedInstructionVariant::Loop { label, next_available_slot });
     }
 
@@ -387,7 +387,7 @@ pub enum ExtendedInstructionVariant {
     },
 
     /// Flag the start of a loop in the bytecode. This is used to allow the JIT
-    /// compiled to perform tracing on the emitted bytecode.
+    /// compiler to perform tracing on the emitted bytecode.
     Loop {
         label: Label,
         next_available_slot: u8,
