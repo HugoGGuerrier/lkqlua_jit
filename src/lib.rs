@@ -13,7 +13,7 @@ use crate::{
 use clap::ValueEnum;
 use pretty_hex::PrettyHex;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     fs::File,
     io::Write,
     os::fd::FromRawFd,
@@ -36,6 +36,7 @@ pub struct ExecutionContext {
     pub config: Config,
     pub source_repo: SourceRepository,
     pub compilation_cache: HashMap<SourceId, (ExtendedBytecodeUnit, Vec<u8>)>,
+    pub timings: BTreeMap<SourceId, Timings>,
     pub engine: Engine,
 
     /// This vector stores sources that are currently being executed in their
@@ -50,6 +51,7 @@ impl ExecutionContext {
             config,
             source_repo: SourceRepository::new(),
             compilation_cache: HashMap::new(),
+            timings: BTreeMap::new(),
             engine: Engine::new(),
             execution_stack: Vec::new(),
         }
@@ -80,11 +82,8 @@ impl ExecutionContext {
         // Push the source on the execution stack
         self.execution_stack.push(source);
 
-        // Create working variables to measure time
-        let mut timings: Vec<(String, Duration)> = Vec::new();
-
         // Then compile the LKQL source and get the result in the cache
-        self.compile_lkql_source(source, &mut timings)?;
+        self.compile_lkql_source(source)?;
         let (_, encoded_bytecode_unit) = self.compilation_cache.get(&source).unwrap();
 
         // Then, run the encoded bytecode with the custom engine
@@ -92,16 +91,7 @@ impl ExecutionContext {
         let res = self
             .engine
             .run_bytecode(self, source, &encoded_bytecode_unit);
-        timings.push((String::from("execution"), time_point.elapsed()));
-
-        // If required, display timing information
-        if self.config.perform_timings {
-            writeln!(self.config.std_out, "")?;
-            self.display_timings(
-                &timings,
-                &format!("Executing {}", self.source_repo.get_name_by_id(source)),
-            )?;
-        }
+        self.get_timings_for_source(source).execution = time_point.elapsed();
 
         // Pop the source from the execution stack
         self.execution_stack.pop();
@@ -112,11 +102,7 @@ impl ExecutionContext {
 
     /// Inner function that compile the provided source as an LKQL input and
     /// place the result of this compilation in the cache.
-    fn compile_lkql_source(
-        &mut self,
-        source: SourceId,
-        timings: &mut Vec<(String, Duration)>,
-    ) -> Result<(), Report> {
+    fn compile_lkql_source(&mut self, source: SourceId) -> Result<(), Report> {
         // First of all check in the compilation cache whether the source has
         // already been compiled. In that case, don't perform compilation.
         if self.compilation_cache.contains_key(&source) {
@@ -131,7 +117,7 @@ impl ExecutionContext {
         time_point = Instant::now();
         let unit = self.source_repo.parse_as_lkql(source)?;
         let root = unit.root()?.unwrap();
-        timings.push((String::from("parsing"), time_point.elapsed()));
+        self.get_timings_for_source(source).parsing = time_point.elapsed();
 
         // If required, display the parsing tree
         if self.config.is_verbose(VerboseElement::ParsingTree) {
@@ -142,7 +128,7 @@ impl ExecutionContext {
         // Lower the parsing tree
         time_point = Instant::now();
         let lowering_tree = ExecutionUnit::lower_lkql_node(source, &root)?;
-        timings.push((String::from("lowering"), time_point.elapsed()));
+        self.get_timings_for_source(source).lowering = time_point.elapsed();
 
         // If required, display the lowered tree
         if self.config.is_verbose(VerboseElement::LoweringTree) {
@@ -153,7 +139,7 @@ impl ExecutionContext {
         // Compile the lowering tree to the extended bytecode format
         time_point = Instant::now();
         let extended_bytecode_unit = lowering_tree.compile()?;
-        timings.push((String::from("compilation"), time_point.elapsed()));
+        self.get_timings_for_source(source).compilation = time_point.elapsed();
 
         // Transform the extended bytecode unit into a standard bytecode unit
         let bytecode_unit = extended_bytecode_unit.to_bytecode_unit();
@@ -182,33 +168,12 @@ impl ExecutionContext {
         Ok(())
     }
 
-    /// Util function to show a timing vector in a pretty way.
-    fn display_timings(
-        &mut self,
-        timings: &Vec<(String, Duration)>,
-        header: &str,
-    ) -> Result<(), Report> {
-        let full_header = format!("===== {header} =====");
-        writeln!(self.config.std_out, "{full_header}")?;
-        let longest_event_name = timings
-            .iter()
-            .max_by_key(|(name, _)| name.len())
-            .unwrap()
-            .0
-            .len();
-        for (event, duration) in timings {
-            let duration_min = duration.as_secs() / 60;
-            let duration_sec = duration.as_secs() % 60;
-            let duration_ms = duration.as_millis() % 1000;
-            let fill = " ".repeat(longest_event_name - event.len());
-            writeln!(
-                self.config.std_out,
-                "  {event}:{fill}  {duration_min}m{duration_sec}.{:0>3}s",
-                duration_ms
-            )?;
+    /// Get a mutable reference to timings associated to the given source.
+    fn get_timings_for_source(&mut self, source: SourceId) -> &mut Timings {
+        if !self.timings.contains_key(&source) {
+            self.timings.insert(source, Timings::new());
         }
-        writeln!(self.config.std_out, "{}", "=".repeat(full_header.len()))?;
-        Ok(())
+        self.timings.get_mut(&source).unwrap()
     }
 }
 
@@ -217,7 +182,6 @@ pub struct Config {
     pub std_out: Writable,
     pub std_err: Writable,
     pub verbose_elements: HashSet<VerboseElement>,
-    pub perform_timings: bool,
 }
 
 impl Config {
@@ -274,4 +238,23 @@ pub enum VerboseElement {
     LoweringTree,
     Bytecode,
     RawBytecode,
+}
+
+/** This structure is used to store timing information about a source. */
+pub struct Timings {
+    pub parsing: Duration,
+    pub lowering: Duration,
+    pub compilation: Duration,
+    pub execution: Duration,
+}
+
+impl Timings {
+    pub fn new() -> Self {
+        Timings {
+            parsing: Duration::ZERO,
+            lowering: Duration::ZERO,
+            compilation: Duration::ZERO,
+            execution: Duration::ZERO,
+        }
+    }
 }
