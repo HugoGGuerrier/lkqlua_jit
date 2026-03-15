@@ -893,6 +893,33 @@ impl Node {
             }
 
             // --- Type checkers
+            NodeVariant::InstanceOf { expression, expected_type } => {
+                // Get an access to the tested expression
+                let expression_access = expression.compile_as_access(ctx, None);
+
+                // Set the default result to "true"
+                ctx.instructions
+                    .ad(&self.origin_location, KPRI, result_slot, PRIM_TRUE);
+
+                // Emit the type checking
+                let next_label = ctx.instructions.new_label();
+                emit_type_check(
+                    ctx,
+                    Some(&self.origin_location),
+                    expression_access.slot(),
+                    expected_type,
+                    next_label,
+                    false,
+                );
+                ctx.instructions
+                    .ad(&self.origin_location, KPRI, result_slot, PRIM_FALSE);
+
+                // Release the expression access
+                expression_access.release(ctx);
+
+                // Finally, label the next instruction
+                ctx.instructions.label(next_label);
+            }
             NodeVariant::RequireType { expression, expected_type } => {
                 // Compile the expression in the result slot
                 expression.compile_as_value(ctx, result_slot);
@@ -1241,6 +1268,28 @@ impl Node {
                         left_access.release(ctx);
                         right_access.release(ctx);
                     }
+                }
+
+                NodeVariant::InstanceOf { expression, expected_type } => {
+                    // Compile the expression
+                    let expression_access = expression.compile_as_access(ctx, None);
+
+                    // Emit the type checking
+                    let (reverse_check, target_label) = match branching_kind {
+                        BranchingKind::IfTrue => (false, if_true_label),
+                        BranchingKind::IfFalse => (true, if_false_label),
+                    };
+                    emit_type_check(
+                        ctx,
+                        Some(&node.origin_location),
+                        expression_access.slot(),
+                        expected_type,
+                        target_label,
+                        reverse_check,
+                    );
+
+                    // Release the expression access
+                    expression_access.release(ctx);
                 }
 
                 // In all other cases, the node is compiled as an access and
@@ -1629,12 +1678,13 @@ impl Node {
         );
 
         // Check if the dotted object is a namespace
-        emit_type_condition(
+        emit_type_check(
             ctx,
             Some(origin_location),
             this_slot,
             &namespace::TYPE,
             is_namespace_label,
+            false,
         );
 
         // Compile arguments for the case where the dotted object is not a
@@ -2133,7 +2183,7 @@ fn emit_type_requirement(
     let next_label = ctx.instructions.new_label();
 
     // Emit the type checking part
-    emit_type_condition(ctx, maybe_origin_location, value_slot, required_type, next_label);
+    emit_type_check(ctx, maybe_origin_location, value_slot, required_type, next_label, false);
 
     // Now emit the code to raise a runtime error in the case where type tags
     // don't match.
@@ -2197,14 +2247,18 @@ fn emit_trait_requirement(
     ctx.instructions.label(next_label);
 }
 
-/// Emit code that checks if the value at `value_slot` is of the
-/// `required_type`. If not, jump to the `if_false_label`.
-fn emit_type_condition(
+/// Emit code that checks whether the value at `value_slot` is an instance
+/// of the `checked_type`. If so, jumps to the `target_label`.
+/// If `do_neq` is `true`, the checking logic is reversed and the emitted code
+/// will go to `target_label` if the value is NOT an instance of
+/// `checked_type`.
+fn emit_type_check(
     ctx: &mut CompilationContext,
     maybe_origin_location: Option<&SourceSection>,
     value_slot: u8,
-    required_type: &BuiltinType,
-    if_true_label: Label,
+    checked_type: &BuiltinType,
+    target_label: Label,
+    do_neq: bool,
 ) {
     // First get the type tag of the actual value
     let actual_tag = ctx.frame.borrow_mut().get_tmp();
@@ -2214,13 +2268,13 @@ fn emit_type_condition(
     // label.
     ctx.instructions.ad_maybe_loc(
         maybe_origin_location,
-        ISEQN,
+        if do_neq { ISNEN } else { ISEQN },
         actual_tag,
         ctx.unit_data
             .constants
-            .get_from_int(required_type.tag as i32),
+            .get_from_int(checked_type.tag as i32),
     );
-    ctx.goto(if_true_label);
+    ctx.goto(target_label);
     ctx.frame.borrow_mut().release_slot(actual_tag);
 }
 

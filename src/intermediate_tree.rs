@@ -265,6 +265,13 @@ pub enum NodeVariant {
     LambdaFun(u16),
 
     // --- Type checkers
+    /// This node evaluates to `true` at runtime if the sub-expression is an
+    /// instance of the required type.
+    InstanceOf {
+        expression: Box<Node>,
+        expected_type: &'static BuiltinType,
+    },
+
     /// Following nodes emit a runtime error if sub-expression isn't matching
     /// their requirements.
     RequireType {
@@ -438,6 +445,13 @@ impl Node {
             NodeVariant::LambdaFun(child_index) => {
                 ("LambdaFun", vec![("child_index", child_index.to_string())])
             }
+            NodeVariant::InstanceOf { expression, expected_type } => (
+                "InstanceOf",
+                vec![
+                    ("expression", expression.pretty_print(child_level)),
+                    ("expected_type", expected_type.display_name().to_string()),
+                ],
+            ),
             NodeVariant::RequireType { expression, expected_type } => (
                 "RequireType",
                 vec![
