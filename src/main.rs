@@ -1,5 +1,5 @@
 use clap::Parser;
-use lkqlua_jit::{EngineConfig, ExecutionContext, VerboseElement, Writable};
+use lkqlua_jit::{Config, ExecutionContext, VerboseElement, Writable};
 use std::path::PathBuf;
 
 #[derive(Parser, Debug)]
@@ -23,8 +23,8 @@ fn main() {
     // Parse CLI arguments
     let args = LauncherArgs::parse();
 
-    // Turn CLI arguments into an engine configuration
-    let config = EngineConfig {
+    // Turn CLI arguments into a context configuration
+    let config = Config {
         std_out: Writable::stdout(),
         std_err: Writable::stderr(),
         verbose_elements: args.verbose.into_iter().collect(),

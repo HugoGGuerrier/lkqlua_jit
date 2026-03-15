@@ -33,19 +33,19 @@ pub mod sources;
 /// This type holds all required data to run LKQL sources using LuaJIT as a
 /// backend. This is what you have to use.
 pub struct ExecutionContext {
-    pub config: EngineConfig,
+    pub config: Config,
     pub source_repo: SourceRepository,
     pub compilation_cache: HashMap<SourceId, (ExtendedBytecodeUnit, Vec<u8>)>,
     pub engine: Engine,
 
-    /// This vector stores sources that are being executed in their execution
-    /// order (oldest first).
+    /// This vector stores sources that are currently being executed in their
+    /// execution order (oldest first).
     execution_stack: Vec<SourceId>,
 }
 
 impl ExecutionContext {
     /// Create an initialize a new execution context.
-    pub fn new(config: EngineConfig) -> Self {
+    pub fn new(config: Config) -> Self {
         Self {
             config,
             source_repo: SourceRepository::new(),
@@ -213,14 +213,14 @@ impl ExecutionContext {
 }
 
 #[derive(Debug)]
-pub struct EngineConfig {
+pub struct Config {
     pub std_out: Writable,
     pub std_err: Writable,
     pub verbose_elements: HashSet<VerboseElement>,
     pub perform_timings: bool,
 }
 
-impl EngineConfig {
+impl Config {
     pub fn is_verbose(&self, element: VerboseElement) -> bool {
         self.verbose_elements.contains(&element)
             || self.verbose_elements.contains(&VerboseElement::All)
