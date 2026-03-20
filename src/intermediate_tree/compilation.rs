@@ -339,6 +339,7 @@ impl ExecutionUnit {
                         .collect(),
                     complex_consts: data.constants.complex_constants,
                     numeric_consts: data.constants.numeric_constants,
+                    name: self.name.clone(),
                     origin_location: self.origin_location.clone(),
                     variable_data: data
                         .dead_bindings

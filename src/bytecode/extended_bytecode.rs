@@ -64,6 +64,7 @@ pub struct ExtendedPrototype {
     pub numeric_consts: Vec<NumericConstant>,
 
     // --- Debug information
+    pub name: String,
     pub origin_location: SourceSection,
     pub variable_data: Vec<ExtendedVariableData>,
 }
@@ -551,6 +552,7 @@ mod tests {
             up_values: vec![],
             complex_consts: vec![],
             numeric_consts: vec![],
+            name: String::from("prototype_1"),
             origin_location: dummy_loc.clone(),
             variable_data: vec![],
         };
@@ -585,6 +587,7 @@ mod tests {
             }],
             complex_consts: vec![ComplexConstant::Integer(11)],
             numeric_consts: vec![NumericConstant::Float(12.0)],
+            name: String::from("prototype_2"),
             origin_location: dummy_loc.clone(),
             variable_data: vec![ExtendedVariableData {
                 name: String::from("local_name"),

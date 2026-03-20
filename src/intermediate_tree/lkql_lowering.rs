@@ -52,7 +52,7 @@ impl ExecutionUnit {
         let name = match &node {
             LkqlNode::TopLevelList(top_level) => {
                 let unit_path = PathBuf::from(top_level.unit()?.unwrap().filename()?);
-                unit_path.file_stem().unwrap().to_string_lossy().to_string()
+                unit_path.file_name().unwrap().to_string_lossy().to_string()
             }
             LkqlNode::FunDecl(fun_decl) => fun_decl.f_name()?.text()?,
             LkqlNode::AnonymousFunction(_) => ctx.next_lambda_name(),
