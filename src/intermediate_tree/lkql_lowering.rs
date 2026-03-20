@@ -301,13 +301,13 @@ impl Node {
                                             )?,
                                             &POS_AFTER_NAMED_ARGUMENT,
                                             &vec![],
-                                            vec![Hint::new(
-                                                PREVIOUS_NAMED_ARG_HINT,
-                                                &SourceSection::range(
+                                            vec![Hint {
+                                                message: String::from(PREVIOUS_NAMED_ARG_HINT),
+                                                location: SourceSection::range(
                                                     &last_id.origin_location,
                                                     &last_node.origin_location,
                                                 )?,
-                                            )],
+                                            }],
                                         ));
                                 }
                             }

@@ -296,13 +296,7 @@ pub enum ReportVariant {
 /// a diagnostic.
 #[derive(Debug, Clone)]
 pub struct Hint {
-    message: String,
-    location: SourceSection,
+    pub message: String,
+    pub location: SourceSection,
 }
 
-impl Hint {
-    /// Create a new hint.
-    pub fn new(message: &str, location: &SourceSection) -> Self {
-        Self { message: String::from(message), location: location.clone() }
-    }
-}

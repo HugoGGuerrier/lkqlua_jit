@@ -2408,10 +2408,10 @@ impl<'a> CompilationContext<'a> {
                         &symbol.origin_location,
                         &DUPLICATED_SYMBOL,
                         &vec![&symbol.text],
-                        vec![Hint::new(
-                            PREVIOUS_SYMBOL_HINT,
-                            &previous_binding.declaration_location,
-                        )],
+                        vec![Hint {
+                            message: String::from(PREVIOUS_SYMBOL_HINT),
+                            location: previous_binding.declaration_location.clone(),
+                        }],
                     ));
             } else {
                 self.frame
