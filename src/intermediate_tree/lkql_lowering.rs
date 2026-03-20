@@ -191,6 +191,13 @@ impl Node {
         // Get the location of the node
         let origin_location = SourceSection::from_lkql_node(ctx.lowered_source, node)?;
 
+        // Util function used to create a node related to the one currently
+        // lowered. The result node is wrapped in a Box and has the same origin
+        // location os the current one.
+        let related_node = |variant: NodeVariant| {
+            Box::new(Node { origin_location: origin_location.clone(), variant })
+        };
+
         // Lower the node
         let variant = match node {
             // --- Declarations
@@ -318,6 +325,7 @@ impl Node {
                 let name = fun_call.f_name()?;
                 match name {
                     LkqlNode::DotAccess(_) | LkqlNode::SafeAccess(_) => {
+                        // Get the dot left part and the field name
                         let (receiver, member, is_safe) = match name {
                             LkqlNode::DotAccess(dot_access) => {
                                 (dot_access.f_receiver(), dot_access.f_member(), false)
@@ -327,12 +335,45 @@ impl Node {
                             }
                             _ => unreachable!(),
                         };
-                        NodeVariant::MethodCall {
-                            prefix: Box::new(Self::lower_lkql_node(&receiver?, ctx)?),
-                            method_name: Identifier::from_lkql_node(&member?, ctx)?,
-                            is_safe,
-                            positional_args,
-                            named_args,
+
+                        // Lower receiver and field name
+                        let prefix = Box::new(Self::lower_lkql_node(&receiver?, ctx)?);
+                        let suffix = Identifier::from_lkql_node(&member?, ctx)?;
+
+                        // Create a new named temporary value to compute the
+                        // prefix part of the dot access only once.
+                        let dot_prefix_tmp = ctx.new_tmp_id();
+                        let dot_prefix_tmp_ref =
+                            related_node(NodeVariant::ReadTemporary(dot_prefix_tmp));
+
+                        // Create a new node to test the type of the dot access
+                        // prefix.
+                        let type_condition = related_node(NodeVariant::IfExpr {
+                            condition: related_node(NodeVariant::InstanceOf {
+                                expression: dot_prefix_tmp_ref.clone(),
+                                expected_type: &types::namespace::TYPE,
+                            }),
+                            consequence: related_node(NodeVariant::FunCall {
+                                callee: related_node(NodeVariant::DottedExpr {
+                                    prefix: dot_prefix_tmp_ref.clone(),
+                                    suffix: suffix.clone(),
+                                    is_safe,
+                                }),
+                                positional_args: positional_args.clone(),
+                                named_args: named_args.clone(),
+                            }),
+                            alternative: related_node(NodeVariant::MethodCall {
+                                prefix: dot_prefix_tmp_ref,
+                                method_name: suffix,
+                                is_safe,
+                                positional_args,
+                                named_args,
+                            }),
+                        });
+                        NodeVariant::WithTemporary {
+                            id: dot_prefix_tmp,
+                            value: prefix,
+                            body: type_condition,
                         }
                     }
                     _ => NodeVariant::FunCall {
@@ -693,6 +734,9 @@ struct LoweringContext {
     /// execution units.
     lazy_comprehension_counter: usize,
 
+    /// Counter of created "named" temporary values.
+    tmp_counter: usize,
+
     /// The list of diagnostics emitted during the lowering.
     diagnostics: Vec<Report>,
 }
@@ -704,6 +748,7 @@ impl LoweringContext {
             child_index_map: HashMap::new(),
             lambda_counter: 0,
             lazy_comprehension_counter: 0,
+            tmp_counter: 0,
             diagnostics: Vec::new(),
         }
     }
@@ -720,6 +765,13 @@ impl LoweringContext {
     fn next_lazy_comprehension_name(&mut self) -> String {
         let res = format!("<lazy_comprehension_{}>", self.lazy_comprehension_counter);
         self.lazy_comprehension_counter += 1;
+        res
+    }
+
+    /// Get a fresh temporary value identifier.
+    fn new_tmp_id(&mut self) -> usize {
+        let res = self.tmp_counter;
+        self.tmp_counter += 1;
         res
     }
 }

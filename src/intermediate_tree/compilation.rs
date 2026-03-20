@@ -892,6 +892,33 @@ impl Node {
                 );
             }
 
+            // --- Temporary values
+            NodeVariant::WithTemporary { id, value, body } => {
+                // Get an access to the value and set it as a temporary
+                let value_access = value.compile_as_access(ctx, None);
+                ctx.frame
+                    .borrow_mut()
+                    .temporaries
+                    .insert(*id, value_access.slot());
+
+                // Compile the body
+                body.compile_as_value(ctx, result_slot);
+
+                // Release access the the value and remove it from temporaries table
+                ctx.frame.borrow_mut().temporaries.remove(id);
+                value_access.release(ctx);
+            }
+            NodeVariant::ReadTemporary(id) => {
+                let tmp_slot = *ctx
+                    .frame
+                    .borrow()
+                    .temporaries
+                    .get(id)
+                    .expect("Unknown temporary identifier");
+                ctx.instructions
+                    .ad(&self.origin_location, MOV, result_slot, tmp_slot as u16);
+            }
+
             // --- Type checkers
             NodeVariant::InstanceOf { expression, expected_type } => {
                 // Get an access to the tested expression
@@ -1122,6 +1149,35 @@ impl Node {
                 }
             }
 
+            NodeVariant::WithTemporary { id, value, body } => {
+                // Get an access to the value and set it as a temporary
+                let value_access = value.compile_as_access(ctx, None);
+                ctx.frame
+                    .borrow_mut()
+                    .temporaries
+                    .insert(*id, value_access.slot());
+
+                // Compile the body
+                let res = body.compile_as_access(ctx, already_reserved_slot);
+
+                // Release access the the value and remove it from temporaries table
+                ctx.frame.borrow_mut().temporaries.remove(id);
+                value_access.release(ctx);
+
+                // Finally return the result on the body result
+                res
+            }
+
+            NodeVariant::ReadTemporary(id) => {
+                let tmp_slot = *ctx
+                    .frame
+                    .borrow()
+                    .temporaries
+                    .get(id)
+                    .expect("Unknown temporary identifier");
+                ValueAccess::BorrowedTmp(tmp_slot)
+            }
+
             NodeVariant::RequireType { expression, expected_type } => {
                 let res = expression.compile_as_access(ctx, already_reserved_slot);
                 emit_type_requirement(ctx, Some(&self.origin_location), res.slot(), expected_type);
@@ -1196,6 +1252,7 @@ impl Node {
                     ctx.instructions.label(eval_right_part_label);
                     internal_compile(right, ctx, if_true_label, if_false_label, branching_kind);
                 }
+
                 NodeVariant::CompBinOp { left, operator, right } => {
                     // Try to compile the operation with a constant-operand shape
                     let already_compiled = match (left.eval_as_constant(), right.eval_as_constant())
@@ -1660,10 +1717,6 @@ impl Node {
         let callee_slot = call_slots.first;
         let this_slot = call_slots.first + 3;
 
-        // Get labels for type checking
-        let is_namespace_label = ctx.instructions.new_label();
-        let next_label = ctx.instructions.new_label();
-
         // Place the "this" argument in the call slots
         prefix.compile_as_value(ctx, this_slot);
 
@@ -1677,16 +1730,6 @@ impl Node {
             is_safe,
         );
 
-        // Check if the dotted object is a namespace
-        emit_type_check(
-            ctx,
-            Some(origin_location),
-            this_slot,
-            &namespace::TYPE,
-            is_namespace_label,
-            false,
-        );
-
         // Compile arguments for the case where the dotted object is not a
         // namespace.
         Self::compile_args(
@@ -1697,24 +1740,6 @@ impl Node {
             named_args,
             call_slots.first + 2,
         );
-        ctx.goto(next_label);
-
-        // Place the label when the dotted object is a namespace
-        ctx.instructions.label(is_namespace_label);
-
-        // Then compile arguments for the case where the dotted object is a
-        // namespace.
-        Self::compile_args(
-            ctx,
-            origin_location,
-            positional_args,
-            this_slot,
-            named_args,
-            call_slots.first + 2,
-        );
-
-        // Then flag the next instruction
-        ctx.instructions.label(next_label);
 
         // Finally return slots used for the call
         call_slots

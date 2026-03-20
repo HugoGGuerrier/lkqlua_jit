@@ -159,14 +159,14 @@ impl ExecutionUnit {
 /// This structure represents a node of the intermediate tree. The structure of
 /// the tree is made to easily represents the program semantics while being
 /// convenient to analyze and compile to LuaJIT bytecode.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Node {
     pub origin_location: SourceSection,
     pub variant: NodeVariant,
 }
 
 /// This enumeration represents the variant part of an [`Node`].
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum NodeVariant {
     // --- Call expressions
     FunCall {
@@ -263,6 +263,18 @@ pub enum NodeVariant {
 
     // --- Lambda function access
     LambdaFun(u16),
+
+    // --- Temporary values
+    /// Create a referenceable temporary value, possibly usable in the
+    /// associated body.
+    /// This node may be used to avoid multiple computation of the same value.
+    WithTemporary {
+        id: usize,
+        value: Box<Node>,
+        body: Box<Node>,
+    },
+    /// Read the temporary value identified by the provided [`usize`].
+    ReadTemporary(usize),
 
     // --- Type checkers
     /// This node evaluates to `true` at runtime if the sub-expression is an
@@ -444,6 +456,17 @@ impl Node {
             }
             NodeVariant::LambdaFun(child_index) => {
                 ("LambdaFun", vec![("child_index", child_index.to_string())])
+            }
+            NodeVariant::WithTemporary { id, value, body } => (
+                "WithTemporary",
+                vec![
+                    ("id", format!("\"{id}\"")),
+                    ("value", value.pretty_print(child_level)),
+                    ("body", body.pretty_print(child_level)),
+                ],
+            ),
+            NodeVariant::ReadTemporary(name) => {
+                ("ReadTemporary", vec![("name", format!("\"{name}\""))])
             }
             NodeVariant::InstanceOf { expression, expected_type } => (
                 "InstanceOf",

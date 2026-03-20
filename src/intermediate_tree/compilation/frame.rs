@@ -19,8 +19,12 @@ pub struct Frame {
     /// A reference to the frame that owns this one.
     pub parent_frame: Option<Rc<RefCell<Frame>>>,
 
-    /// Slots of the frame, each one being associated with its name.
+    /// Bindings in the current frame, each one being defined by its name and
+    /// related to its data.
     pub bindings: HashMap<String, BindingData>,
+
+    /// A map storing temporary values, mapping them to their slot.
+    pub temporaries: HashMap<usize, u8>,
 
     /// Variant part of the frame, containing additional information.
     pub variant: FrameVariant,
@@ -61,6 +65,7 @@ impl Frame {
         Frame {
             parent_frame,
             bindings: HashMap::new(),
+            temporaries: HashMap::new(),
             variant: FrameVariant::Semantic {
                 occupied_slots: [false; u8::MAX as usize],
                 maximum_size: 0,
@@ -76,6 +81,7 @@ impl Frame {
         Frame {
             parent_frame: Some(parent_frame),
             bindings: HashMap::new(),
+            temporaries: HashMap::new(),
             variant: FrameVariant::Lexical,
         }
     }
