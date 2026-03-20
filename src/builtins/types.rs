@@ -13,6 +13,7 @@ use crate::{
 };
 
 pub mod bool;
+pub mod function;
 pub mod int;
 pub mod list;
 pub mod namespace;

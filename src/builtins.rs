@@ -94,5 +94,6 @@ pub fn get_builtin_types() -> Vec<&'static BuiltinType> {
         b(&types::stream::TYPE),
         b(&types::obj::TYPE),
         b(&types::namespace::TYPE),
+        b(&types::function::TYPE),
     ]
 }
