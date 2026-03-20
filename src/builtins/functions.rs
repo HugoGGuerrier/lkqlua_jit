@@ -4,7 +4,10 @@
 
 use crate::{
     ExecutionContext,
-    builtins::utils::{get_bool_param, get_param},
+    builtins::{
+        UNIT_SINGLETON_GLOBAL_NAME,
+        utils::{get_bool_param, get_param},
+    },
     engine::CONTEXT_GLOBAL_NAME,
     errors::{DEPENDENCY_CYCLE, ERROR_DURING_IMPORTATION, ErrorInstance, ErrorInstanceArg},
     lua::{
@@ -39,7 +42,10 @@ pub unsafe extern "C" fn lkql_print(l: LuaState) -> c_int {
         write!(ctx.config.std_out, "{}", to_string(l, to_print_index, DEFAULT_VALUE_IMAGE))
             .unwrap();
     }
-    0
+
+    // Return the LKQL unit value
+    get_global(l, UNIT_SINGLETON_GLOBAL_NAME);
+    1
 }
 
 /// The "img" function
