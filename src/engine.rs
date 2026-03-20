@@ -110,7 +110,7 @@ impl Engine {
                         .and_then(|(bytecode_unit, _)| {
                             bytecode_unit.prototypes[e.prototype_identifier]
                                 .instructions
-                                .get_location(e.program_counter)
+                                .get_exact_location(e.program_counter)
                         })
                 })
                 .unwrap();

@@ -331,7 +331,9 @@ impl ExtendedInstructionBuffer {
     /// program counter index. This function only considers instructions that
     /// may end in the final [`crate::bytecode::Prototype`] for indexing. See
     /// [`Self::to_instructions`] for more information.
-    pub fn get_location(&self, program_counter: usize) -> Option<&SourceSection> {
+    /// If there is no location information available for the instruction, this
+    /// function returns [`None`]
+    pub fn get_exact_location(&self, program_counter: usize) -> Option<&SourceSection> {
         self.into_iter().find_map(|(index, instruction)| {
             if index == program_counter
                 && !matches!(&instruction.variant, ExtendedInstructionVariant::Label(_))
@@ -341,6 +343,37 @@ impl ExtendedInstructionBuffer {
                 None
             }
         })
+    }
+
+    /// Get the location of the instruction in this prototype at the provided
+    /// program counter index. This function only considers instructions that
+    /// may end in the final [`crate::bytecode::Prototype`] for indexing. See
+    /// [`Self::to_instructions`] for more information.
+    /// If no location information are available for the instruction, this
+    /// function will try to return the nearest previous location information
+    /// or the provided default location if there is none.
+    pub fn get_location_or_default<'a>(
+        &'a self,
+        program_counter: usize,
+        default_location: &'a SourceSection,
+    ) -> &'a SourceSection {
+        let mut previous_location = default_location;
+        for (index, instruction) in self {
+            if index == program_counter
+                && !matches!(&instruction.variant, ExtendedInstructionVariant::Label(_))
+            {
+                return instruction
+                    .origin_location
+                    .as_ref()
+                    .unwrap_or(previous_location);
+            } else {
+                if let Some(loc) = instruction.origin_location.as_ref() {
+                    previous_location = loc
+                }
+            }
+        }
+
+        previous_location
     }
 }
 
@@ -478,15 +511,24 @@ mod tests {
 
         // Test instruction location fetching
         assert_eq!(
-            extended_instructions.get_location(4),
+            extended_instructions.get_exact_location(4),
             Some(&SourceSection {
                 source: dummy_source,
                 start: Location { line: 2, col: 2 },
                 end: Location { line: 3, col: 4 },
             }),
         );
-        assert_eq!(extended_instructions.get_location(0), None);
-        assert_eq!(extended_instructions.get_location(5), None);
+        assert_eq!(extended_instructions.get_exact_location(0), None);
+        assert_eq!(extended_instructions.get_location_or_default(0, &dummy_loc), &dummy_loc);
+        assert_eq!(extended_instructions.get_exact_location(5), None);
+        assert_eq!(
+            extended_instructions.get_location_or_default(5, &dummy_loc),
+            &SourceSection {
+                source: dummy_source,
+                start: Location { line: 2, col: 2 },
+                end: Location { line: 3, col: 4 },
+            },
+        );
 
         // Test bytecode buffers
         let bytecode_buffer_1 = ExtendedBytecodeUnit { source: dummy_source, prototypes: vec![] };
