@@ -55,7 +55,7 @@ impl Report {
 
     /// Create a new information report with a located message.
     pub fn info_diag(title: String, message: String, location: SourceSection) -> Self {
-        Self::single_diag(ReportKind::Info, location, title, message, vec![])
+        Self::single_diag(ReportKind::Info, location, title, message, vec![], vec![])
     }
 
     // --- Warning reports
@@ -67,7 +67,7 @@ impl Report {
 
     /// Create a new warning report with a located message.
     pub fn warning_diag(title: String, message: String, location: SourceSection) -> Self {
-        Self::single_diag(ReportKind::Warning, location, title, message, vec![])
+        Self::single_diag(ReportKind::Warning, location, title, message, vec![], vec![])
     }
 
     // --- Error reports
@@ -79,7 +79,7 @@ impl Report {
 
     /// Create a new error report with a located message.
     pub fn error_diag(title: String, message: String, location: SourceSection) -> Self {
-        Self::single_diag(ReportKind::Error, location, title, message, vec![])
+        Self::single_diag(ReportKind::Error, location, title, message, vec![], vec![])
     }
 
     /// Create a new error report from an error template with message
@@ -98,6 +98,7 @@ impl Report {
             String::from(error_template.title),
             error_template.render_message(message_args),
             vec![],
+            vec![],
         )
     }
 
@@ -106,7 +107,7 @@ impl Report {
     pub fn from_error_template_with_hints<T>(
         location: &SourceSection,
         error_template: &ErrorTemplate,
-        message_args: &Vec<&T>,
+        message_args: &Vec<T>,
         hints: Vec<Hint>,
     ) -> Self
     where
@@ -118,6 +119,28 @@ impl Report {
             String::from(error_template.title),
             error_template.render_message(message_args),
             hints,
+            vec![],
+        )
+    }
+
+    /// Create a new error report from an error template with arguments and a
+    /// stack trace.
+    pub fn from_error_template_with_stack_trace<T>(
+        location: &SourceSection,
+        error_template: &ErrorTemplate,
+        message_args: &Vec<T>,
+        stack_trace: Vec<StackTraceElement>,
+    ) -> Self
+    where
+        T: AsRef<str>,
+    {
+        Self::single_diag(
+            ReportKind::Error,
+            location.clone(),
+            String::from(error_template.title),
+            error_template.render_message(message_args),
+            vec![],
+            stack_trace,
         )
     }
 
@@ -130,7 +153,7 @@ impl Report {
 
     /// Create a new bug report with a located message.
     pub fn bug_diag(title: String, message: String, location: SourceSection) -> Self {
-        Self::single_diag(ReportKind::Bug, location, title, message, vec![])
+        Self::single_diag(ReportKind::Bug, location, title, message, vec![], vec![])
     }
 
     // --- Creation helpers
@@ -148,6 +171,7 @@ impl Report {
             String::from("Parsing error"),
             diagnostic.message.clone(),
             vec![],
+            vec![],
         ))
     }
 
@@ -163,10 +187,11 @@ impl Report {
         title: String,
         message: String,
         hints: Vec<Hint>,
+        stack_trace: Vec<StackTraceElement>,
     ) -> Self {
         Self::Single {
             kind: kind,
-            variant: ReportVariant::Diagnostic { location, title, message, hints },
+            variant: ReportVariant::Diagnostic { location, title, message, hints, stack_trace },
         }
     }
 
@@ -213,7 +238,7 @@ impl Report {
                     writeln!(output, "{line_prefix} {msg}")
                         .expect(format!("Error while printing report \"{msg}\"").as_str());
                 }
-                ReportVariant::Diagnostic { location, title, message, hints } => {
+                ReportVariant::Diagnostic { location, title, message, hints, stack_trace } => {
                     // Create a new report builder
                     let rep_builder = ariadne::Report::build(
                         kind.to_ariadne_kind(),
@@ -242,11 +267,36 @@ impl Report {
 
                     // Then print the report
                     if for_stdout {
-                        rep_builder.finish().write_for_stdout(source_repo, output)
+                        rep_builder
+                            .finish()
+                            .write_for_stdout(source_repo, &mut *output)
                     } else {
-                        rep_builder.finish().write(source_repo, output)
+                        rep_builder.finish().write(source_repo, &mut *output)
                     }
-                    .expect(format!("Error while printing report {:?}", self).as_str())
+                    .expect(format!("Error while printing report {:?}", self).as_str());
+
+                    // Print the error stack trace
+                    for trace_element in stack_trace {
+                        let trace_element_builder = ariadne::Report::build(
+                            ariadne::ReportKind::Advice,
+                            trace_element.location.to_span(source_repo),
+                        )
+                        .with_label(
+                            Label::new(trace_element.location.to_span(source_repo))
+                                .with_color(ariadne::Color::Fixed(147)),
+                        )
+                        .with_message(format!("Called in \"{}\"", trace_element.call_context));
+                        if for_stdout {
+                            trace_element_builder
+                                .finish()
+                                .write_for_stdout(source_repo, &mut *output)
+                        } else {
+                            trace_element_builder
+                                .finish()
+                                .write(source_repo, &mut *output)
+                        }
+                        .expect(format!("Error while printing report {:?}", self).as_str());
+                    }
                 }
             },
         }
@@ -288,7 +338,13 @@ impl ReportKind {
 #[derive(Debug, Clone)]
 pub enum ReportVariant {
     Message(String),
-    Diagnostic { location: SourceSection, title: String, message: String, hints: Vec<Hint> },
+    Diagnostic {
+        location: SourceSection,
+        title: String,
+        message: String,
+        hints: Vec<Hint>,
+        stack_trace: Vec<StackTraceElement>,
+    },
 }
 
 /// This structure represents an hint in a diagnostic. A hint is a located
@@ -300,3 +356,9 @@ pub struct Hint {
     pub location: SourceSection,
 }
 
+/// This structure represents an element in an error stack trace.
+#[derive(Debug, Clone)]
+pub struct StackTraceElement {
+    pub call_context: String,
+    pub location: SourceSection,
+}

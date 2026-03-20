@@ -101,23 +101,38 @@ impl Engine {
         // as JSON to extract all information.
         if let Err(encoded_error) = call_res {
             let runtime_error = RuntimeError::from_json(&encoded_error).unwrap();
-            let error_location = runtime_error
-                .stack_trace
-                .iter()
-                .find_map(|e| {
-                    ctx.compilation_cache
-                        .get(&e.source_id)
-                        .and_then(|(bytecode_unit, _)| {
-                            bytecode_unit.prototypes[e.prototype_identifier]
-                                .instructions
-                                .get_exact_location(e.program_counter)
-                        })
-                })
-                .unwrap();
-            Err(Report::from_error_template(
-                error_location,
+
+            // Transform the runtime error stack trace into an iterator
+            // associating prototype names to the call location.
+            let mut stack_trace = runtime_error.stack_trace.iter().filter_map(|e| {
+                ctx.compilation_cache
+                    .get(&e.source_id)
+                    .and_then(|(bytecode_unit, _)| {
+                        let prototype = &bytecode_unit.prototypes[e.prototype_identifier];
+                        Some((
+                            &prototype.name,
+                            prototype.instructions.get_location_or_default(
+                                e.program_counter,
+                                &prototype.origin_location,
+                            ),
+                        ))
+                    })
+            });
+
+            // Get the frame of the error
+            let error_frame = stack_trace.next().unwrap();
+
+            // Then create the report and return it
+            Err(Report::from_error_template_with_stack_trace(
+                error_frame.1,
                 ERROR_TEMPLATE_REPOSITORY[runtime_error.template_id],
                 &runtime_error.message_args,
+                stack_trace
+                    .map(|(call_context, call_location)| crate::report::StackTraceElement {
+                        call_context: call_context.clone(),
+                        location: call_location.clone(),
+                    })
+                    .collect(),
             ))
         }
         // Otherwise, just return the success
@@ -134,7 +149,7 @@ impl Engine {
 /// the LKQL [`Engine`] to display a beautiful error about the LKQL source.
 #[unsafe(no_mangle)]
 unsafe extern "C" fn handle_error(l: LuaState) -> c_int {
-    // Start by computing the stack trace and fetching the current frame
+    // Start by gathering the whole stack trace
     let mut stack_trace = Vec::new();
     let mut current_frame = None;
     let mut level = 0;
@@ -144,8 +159,8 @@ unsafe extern "C" fn handle_error(l: LuaState) -> c_int {
         if let Some(mut frame) = maybe_frame {
             if debug_info(l, &mut frame, "S") {
                 if let Some((proto_id, pc)) = debug_proto_and_pc(l, &mut frame) {
-                    let source_name = debug_get_source(&frame).unwrap();
-                    if let Ok(source_id) = source_name.parse::<usize>() {
+                    let source_id_str = debug_get_source(&frame).unwrap();
+                    if let Ok(source_id) = source_id_str.parse::<usize>() {
                         stack_trace.push(StackTraceElement {
                             source_id,
                             prototype_identifier: proto_id,
@@ -217,7 +232,7 @@ unsafe extern "C" fn handle_error(l: LuaState) -> c_int {
 /// the error template and arguments for it, alongside the stack trace of the
 /// error.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RuntimeError {
+struct RuntimeError {
     pub template_id: usize,
     pub message_args: Vec<String>,
     pub stack_trace: Vec<StackTraceElement>,
@@ -237,13 +252,13 @@ impl RuntimeError {
 
 /// This type represents an element of a runtime stack trace.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StackTraceElement {
+struct StackTraceElement {
     pub source_id: usize,
     pub prototype_identifier: usize,
     pub program_counter: usize,
 }
 
-/// Parse the error message coming from the Lua engine and map it to a custom
+/// Parse the error message coming from the Lua engine and map it to an LKQL
 /// error.
 fn parse_lua_error(error_message: &str) -> (usize, Vec<String>) {
     let mut final_message = error_message[..1].to_uppercase();
