@@ -1144,7 +1144,7 @@ impl Node {
             NodeVariant::ReadSymbol(identifier) => {
                 let maybe_local_binding = ctx.frame.borrow().get_local(&identifier.text);
                 if let Some(BindingData { slot, is_init: true, .. }) = maybe_local_binding {
-                    ValueAccess::Direct(slot)
+                    ValueAccess::BorrowedTmp(slot)
                 } else {
                     fallback(ctx, already_reserved_slot, self)
                 }
@@ -2328,11 +2328,10 @@ fn emit_closing_instruction(ctx: &mut CompilationContext) {
 
 // ----- Compilation support -----
 
-/// This type is used to represents the result of an access to a value, it
-/// carries the information whether the value is directly accessed through a
-/// slot read, or through a temporary value.
+/// This type represents an access to an already reserved slot, it is used to
+/// discriminate an owned access (the caller must release the slot) and a
+/// borrowed one (the caller isn't responsible of freeing it).
 enum ValueAccess {
-    Direct(u8),
     OwnedTmp(u8),
     BorrowedTmp(u8),
 }
@@ -2340,14 +2339,14 @@ enum ValueAccess {
 impl ValueAccess {
     fn slot(&self) -> u8 {
         match self {
-            ValueAccess::Direct(s) | ValueAccess::OwnedTmp(s) | ValueAccess::BorrowedTmp(s) => *s,
+            ValueAccess::OwnedTmp(s) | ValueAccess::BorrowedTmp(s) => *s,
         }
     }
 
     fn release(self, ctx: &mut CompilationContext) {
         match self {
             ValueAccess::OwnedTmp(s) => ctx.frame.borrow_mut().release_slot(s),
-            ValueAccess::Direct(_) | ValueAccess::BorrowedTmp(_) => (),
+            ValueAccess::BorrowedTmp(_) => (),
         }
     }
 }
