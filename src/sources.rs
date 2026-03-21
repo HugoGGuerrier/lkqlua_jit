@@ -244,21 +244,18 @@ impl SourceSection {
     /// This method returns an error if:
     ///   * Sections are not about the same source
     ///   * `to`'s end is before `from`'s start
-    pub fn range(from: &Self, to: &Self) -> Result<Self, Report> {
+    pub fn range(from: &Self, to: &Self) -> Self {
         // Ensure both sections are about the same source
-        if from.source != to.source {
-            return Err(Report::bug_msg(format!(
-                "Cannot get a range from sections about different sources"
-            )));
-        }
+        assert!(
+            from.source == to.source,
+            "Cannot get a range from sections about different sources"
+        );
 
         // Ensure the `from` start is lower or equals to `to` end
-        if from.start > to.end {
-            return Err(Report::bug_msg(format!("Cannot create a span from {from} to {to}")));
-        }
+        assert!(from.start <= to.end, "Cannot create a span from {from} to {to}");
 
         // Finally create the new source section
-        Ok(Self { source: from.source.clone(), start: from.start.clone(), end: to.end.clone() })
+        Self { source: from.source.clone(), start: from.start.clone(), end: to.end.clone() }
     }
 
     /// Create an [`ariadne::Span`] value from this source section.

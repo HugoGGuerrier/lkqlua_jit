@@ -1739,7 +1739,7 @@ impl Node {
         Self::compile_dot_access(
             ctx,
             callee_slot,
-            &SourceSection::range(&prefix.origin_location, &method_name.origin_location).unwrap(),
+            &SourceSection::range(&prefix.origin_location, &method_name.origin_location),
             this_slot,
             method_name,
             is_safe,

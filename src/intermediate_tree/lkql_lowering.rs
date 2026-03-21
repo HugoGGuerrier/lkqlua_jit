@@ -306,7 +306,7 @@ impl Node {
                                                 location: SourceSection::range(
                                                     &last_id.origin_location,
                                                     &last_node.origin_location,
-                                                )?,
+                                                ),
                                             }],
                                         ));
                                 }
