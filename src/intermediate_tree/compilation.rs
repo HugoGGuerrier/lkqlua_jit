@@ -1150,6 +1150,20 @@ impl Node {
                 }
             }
 
+            NodeVariant::LambdaFun(child_index) => {
+                // Add the lambda symbol in the frame locals
+                let lambda_name = &ctx.unit.children_units[*child_index as usize].name;
+                ctx.frame
+                    .borrow_mut()
+                    .bind_local(lambda_name, &self.origin_location);
+
+                // Compile the child unit
+                Self::compile_child_unit(ctx, &self.origin_location, *child_index as usize);
+
+                // Finally return the slot of the lambda
+                ValueAccess::BorrowedTmp(ctx.frame.borrow().get_local(lambda_name).unwrap().slot)
+            }
+
             NodeVariant::WithTemporary { id, value, body } => {
                 // Get an access to the value and set it as a temporary
                 let value_access = value.compile_as_access(ctx, None);
