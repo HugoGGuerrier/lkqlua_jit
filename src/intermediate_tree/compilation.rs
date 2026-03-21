@@ -322,7 +322,7 @@ impl ExecutionUnit {
                 ctx.prototypes.push(ExtendedPrototype {
                     has_child: data.has_child,
                     is_variadic,
-                    has_ffi: true,
+                    has_ffi: false,
                     arg_count,
                     frame_size: *maximum_size,
                     instructions,
