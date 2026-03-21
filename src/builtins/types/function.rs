@@ -5,6 +5,7 @@
 use std::ffi::c_int;
 
 use crate::{
+    ExecutionContext,
     builtins::{
         functions::lkql_img,
         types::{
@@ -12,8 +13,11 @@ use crate::{
             namespace,
         },
     },
-    engine::FunctionValue,
-    lua::{LuaState, copy_value, load_lua_code, push_string, set_metatable},
+    engine::{CONTEXT_GLOBAL_NAME, FunctionValue},
+    lua::{
+        LuaState, call, copy_value, debug_get_func_id, get_field, get_global, get_string, get_top,
+        get_user_data, load_lua_code, pop, push_string, set_metatable,
+    },
 };
 
 pub const TYPE: BuiltinType = BuiltinType {
@@ -40,7 +44,40 @@ fn register_metatable(l: LuaState, _: &TypeImplementation) {
 /// Overload of "__tostring" for the "Function" type
 #[unsafe(no_mangle)]
 unsafe extern "C" fn function_tostring(l: LuaState) -> c_int {
-    // Try to get the name of the function
-    push_string(l, "<Function>");
+    // Define the default function name
+    let default_function_name = "anonymous";
+
+    // Try to get the name of the function value
+    let function_name = if let Some(proto_id) = debug_get_func_id(l, -1) {
+        // Get the name of the source the function is defined in
+        get_global(l, "debug");
+        get_field(l, -1, "getinfo");
+        copy_value(l, -3);
+        push_string(l, "S");
+        call(l, 2, Some(1));
+        get_field(l, -1, "source");
+
+        // Ensure the source name is actually a source id
+        if let Some(source_id_str) = get_string(l, -1) {
+            if let Ok(source_id) = source_id_str.parse::<usize>() {
+                // Get the current execution context
+                get_global(l, CONTEXT_GLOBAL_NAME);
+                let ctx = get_user_data::<ExecutionContext>(l, get_top(l)).unwrap();
+                pop(l, 1);
+
+                // Get the prototype name
+                &ctx.compilation_cache.get(&source_id).unwrap().0.prototypes[proto_id].name
+            } else {
+                default_function_name
+            }
+        } else {
+            default_function_name
+        }
+    } else {
+        default_function_name
+    };
+
+    // Push the string representing the function as a result
+    push_string(l, &format!("Function<{function_name}>"));
     1
 }

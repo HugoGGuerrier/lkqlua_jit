@@ -755,7 +755,7 @@ impl LoweringContext {
 
     /// Get the next available lambda name, incrementing the counter.
     fn next_lambda_name(&mut self) -> String {
-        let res = format!("<lambda_{}>", self.lambda_counter);
+        let res = format!("#lambda_{}", self.lambda_counter);
         self.lambda_counter += 1;
         res
     }
@@ -763,7 +763,7 @@ impl LoweringContext {
     /// Get the next available list comprehension name, incrementing the
     /// counter.
     fn next_lazy_comprehension_name(&mut self) -> String {
-        let res = format!("<lazy_comprehension_{}>", self.lazy_comprehension_counter);
+        let res = format!("#lazy_comprehension_{}", self.lazy_comprehension_counter);
         self.lazy_comprehension_counter += 1;
         res
     }

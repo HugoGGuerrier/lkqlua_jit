@@ -422,6 +422,19 @@ pub fn debug_proto_and_pc(l: LuaState, ar: &mut LuaDebug) -> Option<(usize, usiz
     }
 }
 
+/// Get the prototype identifier of the function at the provided index if
+/// possible, [`None`] otherwise.
+pub fn debug_get_func_id(l: LuaState, index: i32) -> Option<usize> {
+    unsafe {
+        let mut ext_id: c_uint = 0;
+        if lua_getfuncid(l, index, &mut ext_id) != 0 {
+            Some(ext_id as usize)
+        } else {
+            None
+        }
+    }
+}
+
 /// Get the local value at the provide index in the provided debug frame, push
 /// its value on the current stack if it exists.
 /// This function returns the local value name if it has been found, [`None`]
@@ -556,6 +569,7 @@ unsafe extern "C" {
     fn lua_getstack(l: LuaState, level: c_int, ar: *mut LuaDebug) -> c_int;
     fn lua_getinfo(l: LuaState, what: *const c_char, ar: *mut LuaDebug) -> c_int;
     fn lua_getpc(l: LuaState, ar: *const LuaDebug, pc: *mut c_uint) -> c_int;
-    fn lua_getprotoid(l: LuaState, ar: *const LuaDebug, pc: *mut c_uint) -> c_int;
+    fn lua_getprotoid(l: LuaState, ar: *const LuaDebug, id: *mut c_uint) -> c_int;
+    fn lua_getfuncid(l: LuaState, index: c_int, id: *mut c_uint) -> c_int;
     fn lua_getlocal(l: LuaState, ar: *const LuaDebug, n: c_int) -> *const c_char;
 }

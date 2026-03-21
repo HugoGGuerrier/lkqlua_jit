@@ -387,6 +387,13 @@ LUA_API int lua_getpc(lua_State *L, const lua_Debug *ar, unsigned int *pc);
  */
 LUA_API int lua_getprotoid(lua_State *L, const lua_Debug *ar, unsigned int *id);
 
+/**
+ * Get the identifier of the function value located at the provided index in
+ * the Lua stack. This function returns 1 if the prototype identifier fetching
+ * succeeded, 0 otherwise.
+ */
+LUA_API int lua_getfuncid(lua_State *L, int idx, unsigned int *id);
+
 /* }====================================================================== */
 
 
