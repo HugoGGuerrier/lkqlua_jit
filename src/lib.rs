@@ -35,13 +35,16 @@ pub mod sources;
 pub struct ExecutionContext {
     pub config: Config,
     pub source_repo: SourceRepository,
-    pub compilation_cache: HashMap<SourceId, (ExtendedBytecodeUnit, Vec<u8>)>,
-    pub timings: BTreeMap<SourceId, Timings>,
+    pub compilation_cache: HashMap<SourceId, ExtendedBytecodeUnit>,
     pub engine: Engine,
 
     /// This vector stores sources that are currently being executed in their
     /// execution order (oldest first).
     execution_stack: Vec<SourceId>,
+
+    /// Map used to store source time measurements associated to executed
+    /// sources.
+    pub timings: BTreeMap<SourceId, Timings>,
 }
 
 impl ExecutionContext {
@@ -51,9 +54,9 @@ impl ExecutionContext {
             config,
             source_repo: SourceRepository::new(),
             compilation_cache: HashMap::new(),
-            timings: BTreeMap::new(),
             engine: Engine::new(),
             execution_stack: Vec::new(),
+            timings: BTreeMap::new(),
         }
     }
 
@@ -84,13 +87,11 @@ impl ExecutionContext {
 
         // Then compile the LKQL source and get the result in the cache
         self.compile_lkql_source(source)?;
-        let (_, encoded_bytecode_unit) = self.compilation_cache.get(&source).unwrap();
+        let bytecode_unit = self.compilation_cache.get(&source).unwrap();
 
         // Then, run the encoded bytecode with the custom engine
         let time_point = Instant::now();
-        let res = self
-            .engine
-            .run_bytecode(self, source, &encoded_bytecode_unit);
+        let res = self.engine.run_bytecode(self, bytecode_unit);
         self.get_timings_for_source(source).execution = time_point.elapsed();
 
         // Pop the source from the execution stack
@@ -150,19 +151,17 @@ impl ExecutionContext {
             writeln!(self.config.std_out, "{}\n", bytecode_unit)?;
         }
 
-        // Encode the bytecode unit to a byte buffer
-        let mut encoded_bytecode_unit = Vec::new();
-        bytecode_unit.encode(&mut encoded_bytecode_unit);
-
         // If required, display the raw bytecode buffer
         if self.config.is_verbose(VerboseElement::RawBytecode) {
+            let mut encoded_bytecode_unit = Vec::new();
+            bytecode_unit.encode(&mut encoded_bytecode_unit);
             writeln!(self.config.std_out, "===== Raw bytecode =====\n")?;
             writeln!(self.config.std_out, "{:?}\n", encoded_bytecode_unit.hex_dump())?;
         }
 
         // Store the compilation result in the cache
         self.compilation_cache
-            .insert(source, (extended_bytecode_unit, encoded_bytecode_unit));
+            .insert(source, extended_bytecode_unit);
 
         // Finally, return the success
         Ok(())

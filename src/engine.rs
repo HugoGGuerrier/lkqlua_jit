@@ -6,6 +6,7 @@
 use crate::{
     ExecutionContext,
     builtins::{get_builtin_bindings, get_builtin_types},
+    bytecode::extended_bytecode::ExtendedBytecodeUnit,
     errors::{ERROR_TEMPLATE_REPOSITORY, ErrorInstance, ErrorInstanceArg, LUA_ENGINE_ERROR},
     lua::{
         LuaCFunction, LuaState, call, close_lua_state, debug_frame, debug_get_local,
@@ -15,7 +16,6 @@ use crate::{
         set_global, to_string,
     },
     report::Report,
-    sources::SourceId,
 };
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -68,9 +68,14 @@ impl Engine {
     pub fn run_bytecode(
         &self,
         ctx: &ExecutionContext,
-        source_id: SourceId,
-        encoded_bytecode_unit: &Vec<u8>,
+        bytecode_unit: &ExtendedBytecodeUnit,
     ) -> Result<(), Report> {
+        // Encode the bytecode unit
+        let mut encoded_bytecode_unit = Vec::new();
+        bytecode_unit
+            .to_bytecode_unit()
+            .encode(&mut encoded_bytecode_unit);
+
         // Place the execution context in the global Lua table
         push_user_data(self.lua_state, ctx);
         set_global(self.lua_state, CONTEXT_GLOBAL_NAME);
@@ -82,8 +87,8 @@ impl Engine {
         // Load the bytecode buffer in the Lua state
         if !load_buffer(
             self.lua_state,
-            encoded_bytecode_unit,
-            &ctx.source_repo.get_name_by_id(source_id),
+            &encoded_bytecode_unit,
+            &ctx.source_repo.get_name_by_id(bytecode_unit.source),
         ) {
             panic!(
                 "Cannot load the provided bytecode buffer, error message: {}",
@@ -107,7 +112,7 @@ impl Engine {
             let mut stack_trace = runtime_error.stack_trace.iter().filter_map(|e| {
                 ctx.compilation_cache
                     .get(&e.source_id)
-                    .and_then(|(bytecode_unit, _)| {
+                    .and_then(|bytecode_unit| {
                         let prototype = &bytecode_unit.prototypes[e.prototype_identifier];
                         Some((
                             &prototype.name,

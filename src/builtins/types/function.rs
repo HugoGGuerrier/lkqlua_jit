@@ -66,7 +66,7 @@ unsafe extern "C" fn function_tostring(l: LuaState) -> c_int {
                 pop(l, 1);
 
                 // Get the prototype name
-                &ctx.compilation_cache.get(&source_id).unwrap().0.prototypes[proto_id].name
+                &ctx.compilation_cache.get(&source_id).unwrap().prototypes[proto_id].name
             } else {
                 default_function_name
             }
