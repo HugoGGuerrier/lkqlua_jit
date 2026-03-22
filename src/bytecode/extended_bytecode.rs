@@ -1,10 +1,10 @@
 //! # Extended bytecode module
 //!
 //! This module defines the "extended bytecode". This is an extension of the
-//! bytecode defined in the [`crate::bytecode`] module with additional
+//! LuaJIT bytecode defined in the [`crate::bytecode`] module, with additional
 //! instructions and information that are used by the compiler to ease code and
 //! debug information emission.
-//! This extended bytecode can be easily translated into a LuaJIT compatible
+//! This extended bytecode can easily be translated into a LuaJIT compatible
 //! instruction buffer.
 
 use crate::{
