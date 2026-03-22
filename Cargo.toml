@@ -8,7 +8,7 @@ edition = "2024"
 liblkqllang = { path = "../rust_lkql_bindings" }
 
 # We use clap for CLI argument parsing
-clap = { version = "4.5.37", features = ["derive"] }
+clap = { version = "4.6.0", features = ["derive"] }
 
 # leb128 and num-bigint are used to encore / decode arbitrary sized integers for LuaJIT bytecode
 leb128 = "0.2.5"
