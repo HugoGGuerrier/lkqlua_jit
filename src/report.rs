@@ -17,6 +17,7 @@ const WARNING_KIND_COLOR: ariadne::Color = ariadne::Color::BrightYellow;
 const ERROR_KIND_COLOR: ariadne::Color = ariadne::Color::BrightRed;
 const BUG_KIND_COLOR: ariadne::Color = ariadne::Color::Red;
 const HINT_COLOR: ariadne::Color = ariadne::Color::Fixed(69);
+const ADVICE_COLOR: ariadne::Color = ariadne::Color::Fixed(147);
 
 /// This type is the top-level of all report that can be emitted by the engine.
 /// This type is designed to be used in [`Result::Err`] values, and can be
@@ -283,7 +284,7 @@ impl Report {
                         )
                         .with_label(
                             Label::new(trace_element.location.to_span(source_repo))
-                                .with_color(ariadne::Color::Fixed(147)),
+                                .with_color(ADVICE_COLOR),
                         )
                         .with_message(format!("Called in \"{}\"", trace_element.call_context));
                         if for_stdout {
