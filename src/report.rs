@@ -199,16 +199,10 @@ impl Report {
     /// Combine two report in a [`Report::Composed`] one.
     pub fn combine(self, other: Report) -> Self {
         match (self, other) {
-            (
-                Report::Single { kind: self_kind, variant: self_variant },
-                Report::Single { kind: other_kind, variant: other_variant },
-            ) => Self::Composed(vec![
-                Self::Single { kind: self_kind, variant: self_variant },
-                Self::Single { kind: other_kind, variant: other_variant },
-            ]),
-            (Report::Composed(mut reports), Report::Single { kind, variant })
-            | (Report::Single { kind, variant }, Report::Composed(mut reports)) => {
-                reports.push(Self::Single { kind, variant });
+            (l @ Report::Single { .. }, r @ Report::Single { .. }) => Self::Composed(vec![l, r]),
+            (Report::Composed(mut reports), single @ Report::Single { .. })
+            | (single @ Report::Single { .. }, Report::Composed(mut reports)) => {
+                reports.push(single);
                 Self::Composed(reports)
             }
             (Report::Composed(mut self_reports), Report::Composed(mut other_reports)) => {
