@@ -6,7 +6,11 @@ use clap::{
     },
 };
 use lkqlua_jit::{Config, ExecutionContext, Timings, VerboseElement, Writable};
-use std::{path::PathBuf, time::Duration};
+use std::{
+    io::{stderr, stdout},
+    path::PathBuf,
+    time::Duration,
+};
 
 #[derive(Parser, Debug)]
 #[command(about = "Run LKQL scripts", long_about = None, version, styles = get_styles())]
@@ -65,8 +69,8 @@ fn main() {
 
     // Turn CLI arguments into a context configuration
     let config = Config {
-        std_out: Writable::stdout(),
-        std_err: Writable::stderr(),
+        std_out: Writable::Stdout(stdout()),
+        std_err: Writable::Stderr(stderr()),
         verbose_elements: args.verbose.into_iter().collect(),
     };
 

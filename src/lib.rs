@@ -15,9 +15,8 @@ use pretty_hex::PrettyHex;
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
     fs::File,
-    io::Write,
-    os::fd::FromRawFd,
     path::Path,
+    io::{Stderr, Stdout, Write},
     time::{Duration, Instant},
 };
 
@@ -193,6 +192,8 @@ impl Config {
 /// This type represents different elements that can be written bytes to.
 #[derive(Debug)]
 pub enum Writable {
+    Stdout(Stdout),
+    Stderr(Stderr),
     File(File),
     ByteBuffer(Vec<u8>),
 }
@@ -200,6 +201,8 @@ pub enum Writable {
 impl Write for Writable {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         match self {
+            Writable::Stdout(o) => o.write(buf),
+            Writable::Stderr(o) => o.write(buf),
             Writable::File(file) => file.write(buf),
             Writable::ByteBuffer(buffer) => {
                 buffer.extend_from_slice(buf);
@@ -210,21 +213,11 @@ impl Write for Writable {
 
     fn flush(&mut self) -> std::io::Result<()> {
         match self {
+            Writable::Stdout(o) => o.flush(),
+            Writable::Stderr(o) => o.flush(),
             Writable::File(file) => file.flush(),
             Writable::ByteBuffer(_) => Ok(()),
         }
-    }
-}
-
-impl Writable {
-    /// Get a writable object for the current process standard output.
-    pub fn stdout() -> Self {
-        unsafe { Self::File(File::from_raw_fd(1)) }
-    }
-
-    /// Get a writable object for the current process standard error output.
-    pub fn stderr() -> Self {
-        unsafe { Self::File(File::from_raw_fd(2)) }
     }
 }
 
