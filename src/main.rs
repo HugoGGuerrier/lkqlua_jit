@@ -1,9 +1,15 @@
-use clap::Parser;
+use clap::{
+    Parser,
+    builder::{
+        Styles,
+        styling::{AnsiColor, Color, Style},
+    },
+};
 use lkqlua_jit::{Config, ExecutionContext, Timings, VerboseElement, Writable};
 use std::{path::PathBuf, time::Duration};
 
 #[derive(Parser, Debug)]
-#[command(about)]
+#[command(about = "Run LKQL scripts", long_about = None, version, styles = get_styles())]
 struct LauncherArgs {
     #[arg(long, short = 'S', help = "LKQL file to run", value_name = "FILE")]
     script: Option<PathBuf>,
@@ -17,6 +23,40 @@ struct LauncherArgs {
         help = "Perform time measurements during compilation and run, and display those information"
     )]
     timings: bool,
+}
+
+/// Get a styles descriptor destined to clap.
+fn get_styles() -> Styles {
+    Styles::styled()
+        .header(
+            Style::new()
+                .bold()
+                .underline()
+                .fg_color(Some(Color::Ansi(AnsiColor::BrightGreen))),
+        )
+        .usage(
+            Style::new()
+                .bold()
+                .italic()
+                .fg_color(Some(Color::Ansi(AnsiColor::BrightBlack))),
+        )
+        .placeholder(
+            Style::new()
+                // .dimmed()
+                .fg_color(Some(Color::Ansi(AnsiColor::Cyan))),
+        )
+        .context_value(Style::new().fg_color(Some(Color::Ansi(AnsiColor::BrightBlue))))
+        .literal(
+            Style::new()
+                .bold()
+                .fg_color(Some(Color::Ansi(AnsiColor::BrightCyan))),
+        )
+        .valid(Style::new().fg_color(Some(Color::Ansi(AnsiColor::BrightCyan))))
+        .error(
+            Style::new()
+                .bold()
+                .fg_color(Some(Color::Ansi(AnsiColor::BrightRed))),
+        )
 }
 
 fn main() {
