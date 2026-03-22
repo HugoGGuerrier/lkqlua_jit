@@ -286,7 +286,7 @@ pub enum RuntimeValue {
 
     /// Create the value by calling the associated Lua C function that should
     /// push it on the top of the stack.
-    FromBuilder(RuntimeValueBuilder),
+    FromBuilder(fn(LuaState)),
 }
 
 impl LuaValue for RuntimeValue {
@@ -347,7 +347,3 @@ impl FunctionValue {
         }
     }
 }
-
-/// This type represents functions that take a Lua state as parameter, create
-/// a new runtime value and push it on the top of the stack.
-pub type RuntimeValueBuilder = fn(LuaState);
