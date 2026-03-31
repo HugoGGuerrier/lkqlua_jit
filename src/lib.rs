@@ -16,7 +16,7 @@ use std::{
     collections::{BTreeMap, HashMap, HashSet},
     fs::File,
     io::{Stderr, Stdout, Write},
-    path::Path,
+    path::{Path, PathBuf},
     time::{Duration, Instant},
 };
 
@@ -31,6 +31,7 @@ pub mod sources;
 
 /// This type holds all required data to run LKQL sources using LuaJIT as a
 /// backend. This is what you have to use.
+#[derive(Debug)]
 pub struct ExecutionContext {
     pub config: Config,
     pub source_repo: SourceRepository,
@@ -47,16 +48,20 @@ pub struct ExecutionContext {
 }
 
 impl ExecutionContext {
-    /// Create an initialize a new execution context.
-    pub fn new(config: Config) -> Self {
-        Self {
+    /// Create an initialize a new execution context. This is the first entry
+    /// point to the LKQL engine.
+    /// If any error occurs during the execution context initialization, this
+    /// function returns [`Err`] with all error messages.
+    pub fn new(config: Config) -> Result<Self, Vec<String>> {
+        let engine = Engine::new(&config)?;
+        Ok(Self {
             config,
             source_repo: SourceRepository::new(),
             compilation_cache: HashMap::new(),
-            engine: Engine::new(),
+            engine,
             execution_stack: Vec::new(),
             timings: BTreeMap::new(),
-        }
+        })
     }
 
     /// Just run the provided LKQL file, don't return anything and report all
@@ -177,9 +182,23 @@ impl ExecutionContext {
 
 #[derive(Debug)]
 pub struct Config {
+    /// Writable to use as standard output.
     pub std_out: Writable,
+
+    /// Writable to use as error output.
     pub std_err: Writable,
+
+    /// All elements to display additional information about.
     pub verbose_elements: HashSet<VerboseElement>,
+
+    /// Name of the language to analyze.
+    pub analyzed_lang_name: String,
+
+    /// All files to analyze as sources of the specified language.
+    pub files_to_analyze: Vec<PathBuf>,
+
+    /// Arguments that should be processed by the LKQL engine.
+    pub additional_args: Vec<String>,
 }
 
 impl Config {
@@ -233,6 +252,7 @@ pub enum VerboseElement {
 }
 
 /** This structure is used to store timing information about a source. */
+#[derive(Debug)]
 pub struct Timings {
     pub parsing: Duration,
     pub lowering: Duration,

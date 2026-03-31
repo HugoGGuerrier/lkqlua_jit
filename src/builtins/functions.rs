@@ -8,7 +8,7 @@ use crate::{
         UNIT_SINGLETON_GLOBAL_NAME,
         utils::{get_bool_param, get_param},
     },
-    engine::CONTEXT_GLOBAL_NAME,
+    engine::{CONTEXT_GLOBAL_NAME, analysis_lib::ANALYSIS_UNITS_GLOBAL_NAME},
     errors::{DEPENDENCY_CYCLE, ERROR_DURING_IMPORTATION, ErrorInstance, ErrorInstanceArg},
     lua::{
         LuaState, get_global, get_string, get_top, get_type, get_user_data, pop, push_string,
@@ -60,6 +60,12 @@ pub unsafe extern "C" fn lkql_img(l: LuaState) -> c_int {
         _ => push_string(l, to_string(l, value_index, DEFAULT_VALUE_IMAGE)),
     }
     1
+}
+
+/// The "units" function
+pub unsafe extern "C" fn lkql_units(l: LuaState) -> c_int {
+    get_global(l, ANALYSIS_UNITS_GLOBAL_NAME);
+    return 1;
 }
 
 /// The importation function, this is not intended to be called by the user.

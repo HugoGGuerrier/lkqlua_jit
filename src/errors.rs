@@ -133,6 +133,13 @@ pub const LUA_ENGINE_ERROR: ErrorTemplate = ErrorTemplate {
     message_template: "{}",
 };
 
+/// Error coming from the execution of the analysis library.
+pub const ANALYSIS_LIBRARY_ERROR: ErrorTemplate = ErrorTemplate {
+    id: LUA_ENGINE_ERROR.id + 1,
+    title: "Error in the analysis library",
+    message_template: "{}",
+};
+
 // --- The error repository
 
 /// This vector contains all error templates stored at the index of their
@@ -154,6 +161,7 @@ pub const ERROR_TEMPLATE_REPOSITORY: &[&ErrorTemplate] = &[
     &DEPENDENCY_CYCLE,
     &ERROR_DURING_IMPORTATION,
     &LUA_ENGINE_ERROR,
+    &ANALYSIS_LIBRARY_ERROR,
 ];
 
 // --- Hint message

@@ -7,7 +7,9 @@
 
 use std::{
     any::Any,
+    env,
     ffi::{CStr, CString, c_char, c_double, c_int, c_uint, c_void},
+    path::{Path, PathBuf},
     ptr,
     str::FromStr,
 };
@@ -117,6 +119,15 @@ pub fn load_lua_code(l: LuaState, source: &str, source_name: &str) -> bool {
         let ext_source = CString::from_str(source).unwrap();
         let ext_source_name = CString::from_str(source_name).unwrap();
         luaL_loadbuffer(l, ext_source.as_ptr(), source.len(), ext_source_name.as_ptr()) == 0
+    }
+}
+
+/// Load the provided file as a Lua source and return whether the operation
+/// succeeded.
+pub fn load_lua_file(l: LuaState, file: &Path) -> bool {
+    unsafe {
+        let ext_filename = CString::from_str(file.to_str().unwrap()).unwrap();
+        luaL_loadfile(l, ext_filename.as_ptr()) == 0
     }
 }
 
@@ -295,6 +306,12 @@ pub fn set_field(l: LuaState, index: i32, name: &str) {
     }
 }
 
+/// Pop the value on the top of the stack and place it at the provided
+/// `inner_index` in the table at the provided `index`.
+pub fn set_index(l: LuaState, index: i32, inner_index: i32) {
+    unsafe { lua_rawseti(l, index, inner_index) }
+}
+
 /// Get the index of the top of the stack. Since the stack is 1-indexed, this
 /// function also returns the number of values in the stack.
 pub fn get_top(l: LuaState) -> i32 {
@@ -453,6 +470,31 @@ pub fn debug_get_local(l: LuaState, ar: &LuaDebug, index: i32) -> Option<&'stati
 
 // ----- Utils -----
 
+/// Helper function to get the absolute path to the file defining the required
+/// module if it exists. This function looks in the defined `LUA_PATH`.
+pub fn find_in_lua_path(module_name: &str) -> Option<PathBuf> {
+    // Create the list of patterns to use for module search
+    let mut searching_patterns: Vec<String> = Vec::new();
+
+    // Add the current working directory to the searching patterns
+    if let Ok(current_dir) = env::current_dir() {
+        searching_patterns.push(format!("{}/?.lua", current_dir.to_string_lossy()));
+    }
+
+    // Then look in the LUA_PATH environment variable
+    if let Ok(lua_path) = env::var("LUA_PATH") {
+        lua_path
+            .split([':', ';'])
+            .for_each(|p| searching_patterns.push(String::from(p)));
+    }
+
+    // Finally, test each pattern to find the Lua file
+    searching_patterns.iter().find_map(|p| {
+        let maybe_file = PathBuf::from(p.replace("?", module_name));
+        if maybe_file.is_file() { Some(maybe_file) } else { None }
+    })
+}
+
 /// Transform the value in the stack at the provided index as a string and
 /// return it. This function use the `__tostring` Lua meta-method if the
 /// type of the value requires it. If the call to this method fails, the
@@ -532,6 +574,7 @@ unsafe extern "C" {
         buffer_size: usize,
         buffer_name: *const c_char,
     ) -> c_int;
+    fn luaL_loadfile(l: LuaState, filename: *const c_char) -> c_int;
 
     fn lua_type(l: LuaState, index: c_int) -> LuaType;
     fn lua_objlen(l: LuaState, index: c_int) -> usize;
@@ -552,6 +595,7 @@ unsafe extern "C" {
     fn lua_getfield(l: LuaState, index: c_int, field: *const c_char);
     fn lua_rawgeti(l: LuaState, index: c_int, i: c_int);
     fn lua_setfield(l: LuaState, index: c_int, field: *const c_char);
+    fn lua_rawseti(l: LuaState, index: c_int, i: c_int);
     fn lua_createtable(l: LuaState, narr: c_int, nrec: c_int);
     fn lua_getmetatable(l: LuaState, index: c_int) -> c_int;
     fn lua_setmetatable(l: LuaState, index: c_int) -> c_int;

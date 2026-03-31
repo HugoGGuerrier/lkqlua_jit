@@ -12,12 +12,12 @@ use ariadne::{self, Label, StdoutFmt};
 use liblkqllang::Diagnostic;
 use std::io::Write;
 
-const INFO_KIND_COLOR: ariadne::Color = ariadne::Color::BrightCyan;
-const WARNING_KIND_COLOR: ariadne::Color = ariadne::Color::BrightYellow;
-const ERROR_KIND_COLOR: ariadne::Color = ariadne::Color::BrightRed;
-const BUG_KIND_COLOR: ariadne::Color = ariadne::Color::Red;
-const HINT_COLOR: ariadne::Color = ariadne::Color::Fixed(69);
-const ADVICE_COLOR: ariadne::Color = ariadne::Color::Fixed(147);
+pub const INFO_KIND_COLOR: ariadne::Color = ariadne::Color::BrightCyan;
+pub const WARNING_KIND_COLOR: ariadne::Color = ariadne::Color::BrightYellow;
+pub const ERROR_KIND_COLOR: ariadne::Color = ariadne::Color::BrightRed;
+pub const BUG_KIND_COLOR: ariadne::Color = ariadne::Color::Red;
+pub const HINT_COLOR: ariadne::Color = ariadne::Color::Fixed(69);
+pub const ADVICE_COLOR: ariadne::Color = ariadne::Color::Fixed(147);
 
 /// This type is the top-level of all report that can be emitted by the engine.
 /// This type is designed to be used in [`Result::Err`] values, and can be

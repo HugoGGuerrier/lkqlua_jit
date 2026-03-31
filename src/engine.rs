@@ -4,9 +4,10 @@
 //! [`crate::intermediate_tree::compilation`] module.
 
 use crate::{
-    ExecutionContext,
+    Config, ExecutionContext,
     builtins::{get_builtin_bindings, get_builtin_types},
     bytecode::extended_bytecode::ExtendedBytecodeUnit,
+    engine::analysis_lib::AnalysisLibrary,
     errors::{ERROR_TEMPLATE_REPOSITORY, ErrorInstance, ErrorInstanceArg, LUA_ENGINE_ERROR},
     lua::{
         LuaCFunction, LuaState, call, close_lua_state, debug_frame, debug_get_local,
@@ -21,6 +22,8 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::ffi::c_int;
 
+pub mod analysis_lib;
+
 /// String to represents an erroneous runtime value.
 pub const ERROR_VALUE: &str = "##ERROR##";
 
@@ -29,8 +32,10 @@ pub const CONTEXT_GLOBAL_NAME: &str = "value@execution_context";
 
 /// This type represents an engine to execute the bytecode generate by the
 /// [`crate::intermediate_tree::compilation`] module.
+#[derive(Debug)]
 pub struct Engine {
     lua_state: LuaState,
+    analysis_lib: AnalysisLibrary,
 }
 
 impl Drop for Engine {
@@ -41,7 +46,7 @@ impl Drop for Engine {
 
 impl Engine {
     /// Create a new engine and initialize it to be ready to run bytecode.
-    pub fn new() -> Self {
+    pub fn new(config: &Config) -> Result<Self, Vec<String>> {
         // Create a new Lua state
         let lua_state = new_lua_state();
 
@@ -59,8 +64,11 @@ impl Engine {
             set_global(lua_state, builtin_binding.name);
         }
 
+        // Load the analysis library
+        let analysis_lib = AnalysisLibrary::new(lua_state, config)?;
+
         // Finally create the engine type and return it
-        Self { lua_state }
+        Ok(Self { lua_state, analysis_lib })
     }
 
     /// Run the given bytecode buffer in the engine, returning the potential
@@ -187,7 +195,7 @@ unsafe extern "C" fn handle_error(l: LuaState) -> c_int {
 
     // Then fetch the raw error message and start by extracting different parts
     // from it.
-    let location_header_matcher = Regex::new(r"^\[.*\]:\d+: (.*)$").unwrap();
+    let location_header_matcher = Regex::new(r"^.*:\d+: (.*)$").unwrap();
     let raw_error_message = to_string(l, get_top(l), "No error message");
     let error_message = if let Some(groups) = location_header_matcher.captures(raw_error_message) {
         groups.get(1).unwrap().as_str()

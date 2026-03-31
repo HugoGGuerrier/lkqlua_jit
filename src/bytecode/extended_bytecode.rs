@@ -22,6 +22,7 @@ pub type Label = usize;
 
 /// This type represents a unit of extended bytecode. It is composed of several
 /// prototypes and a source identifier.
+#[derive(Debug)]
 pub struct ExtendedBytecodeUnit {
     /// Identifier of the source this buffer is coming from.
     pub source: SourceId,
@@ -45,6 +46,7 @@ impl ExtendedBytecodeUnit {
 /// compared to the [`crate::bytecode::Prototype`] type. This is used to
 /// collect and store information required at runtime to execute the code
 /// represented by this prototype.
+#[derive(Debug)]
 pub struct ExtendedPrototype {
     // --- Flags
     pub has_child: bool,
@@ -106,7 +108,7 @@ impl ExtendedPrototype {
 
 /// This type represents a buffer of extended instructions, it owns a
 /// [`Vec<ExtendedInstruction>`] that contains all instruction of the buffer.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ExtendedInstructionBuffer {
     instructions: Vec<ExtendedInstruction>,
     next_label: Label,
@@ -430,6 +432,7 @@ pub enum ExtendedInstructionVariant {
 
 /// This type represents data collected during the compilation for a local
 /// variable, this is used for debug information emission.
+#[derive(Debug)]
 pub struct ExtendedVariableData {
     /// Debug name of the local variable.
     pub name: String,
