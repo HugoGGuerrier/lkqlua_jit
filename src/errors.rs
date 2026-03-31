@@ -47,11 +47,18 @@ pub const POS_AFTER_NAMED_ARGUMENT: ErrorTemplate = ErrorTemplate {
     message_template: "This positional argument is after a named one",
 };
 
+/// Error when an parameter value is not valid
+pub const INVALID_PARAM_VALUE: ErrorTemplate = ErrorTemplate {
+    id: POS_AFTER_NAMED_ARGUMENT.id + 1,
+    title: "Invalid argument value",
+    message_template: "Invalid value for the \"{}\" parameter, {}",
+};
+
 // --- Indexing and member errors
 
 /// Error when an index is out of the indexable value bounds.
 pub const INDEX_OUT_OF_BOUNDS: ErrorTemplate = ErrorTemplate {
-    id: POS_AFTER_NAMED_ARGUMENT.id + 1,
+    id: INVALID_PARAM_VALUE.id + 1,
     title: "Index out of bounds",
     message_template: "Cannot access index {} in the value, it is out of bounds",
 };
@@ -73,7 +80,7 @@ pub const WRONG_TYPE: ErrorTemplate = ErrorTemplate {
 };
 
 /// Error when an argument is not of a valid type.
-pub const WRONG_ARG_TYPE: ErrorTemplate = ErrorTemplate {
+pub const WRONG_PARAM_TYPE: ErrorTemplate = ErrorTemplate {
     id: WRONG_TYPE.id + 1,
     title: "Invalid argument type",
     message_template: "Expecting a \"{}\" for the parameter \"{}\", got a \"{}\"",
@@ -81,7 +88,7 @@ pub const WRONG_ARG_TYPE: ErrorTemplate = ErrorTemplate {
 
 /// Error when a trait is missing from a type.
 pub const MISSING_TRAIT: ErrorTemplate = ErrorTemplate {
-    id: WRONG_ARG_TYPE.id + 1,
+    id: WRONG_PARAM_TYPE.id + 1,
     title: "Missing required trait",
     message_template: "Trait \"{}\" is required, the type \"{}\" isn't implementing it",
 };
@@ -136,10 +143,11 @@ pub const ERROR_TEMPLATE_REPOSITORY: &[&ErrorTemplate] = &[
     &NO_VALUE_FOR_PARAM,
     &POS_AND_NAMED_VALUE_FOR_PARAM,
     &POS_AFTER_NAMED_ARGUMENT,
+    &INVALID_PARAM_VALUE,
     &INDEX_OUT_OF_BOUNDS,
     &UNKNOWN_MEMBER,
     &WRONG_TYPE,
-    &WRONG_ARG_TYPE,
+    &WRONG_PARAM_TYPE,
     &MISSING_TRAIT,
     &MODULE_NOT_FOUND,
     &AMBIGUOUS_IMPORT,

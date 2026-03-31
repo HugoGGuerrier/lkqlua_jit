@@ -6,8 +6,8 @@
 use crate::{
     builtins::types::{self, BuiltinType, TYPE_NAME_FIELD, TYPE_TAG_FIELD},
     errors::{
-        ErrorInstance, ErrorInstanceArg, NO_VALUE_FOR_PARAM, POS_AND_NAMED_VALUE_FOR_PARAM,
-        WRONG_ARG_TYPE,
+        ErrorInstance, ErrorInstanceArg, INVALID_PARAM_VALUE, NO_VALUE_FOR_PARAM,
+        POS_AND_NAMED_VALUE_FOR_PARAM, WRONG_PARAM_TYPE,
     },
     lua::{
         LuaState, LuaType, get_boolean, get_field, get_integer, get_string, get_top, get_type,
@@ -41,6 +41,33 @@ pub extern "C" fn get_bool_param(
     } else {
         raise_error(l, &maybe_param_index.unwrap_err().to_json_string());
         false
+    }
+}
+
+/// Given a Lua state, get the value of the parameter designated by the
+/// provided index and the provided name as an integer value.
+/// This function checks the parameter type, raising an error if it isn't the
+/// `int` one.
+/// If this parameter hasn't any value, this function returns the default value
+/// if any, otherwise it raises an error using the [`raise_error`] function.
+#[unsafe(no_mangle)]
+#[allow(improper_ctypes_definitions)]
+pub extern "C" fn get_int_param(
+    l: LuaState,
+    param_count: i32,
+    index: i32,
+    name: &str,
+    default_value: Option<isize>,
+) -> isize {
+    let maybe_param_index = get_param_safe(l, param_count, index, name);
+    if let Ok(param_index) = maybe_param_index {
+        check_param_type(l, name, param_index, &types::int::TYPE);
+        get_integer(l, param_index)
+    } else if default_value.is_some() {
+        default_value.unwrap()
+    } else {
+        raise_error(l, &maybe_param_index.unwrap_err().to_json_string());
+        0
     }
 }
 
@@ -145,7 +172,7 @@ extern "C" fn check_param_type(
         raise_error(
             l,
             &ErrorInstance {
-                template_id: WRONG_ARG_TYPE.id,
+                template_id: WRONG_PARAM_TYPE.id,
                 message_args: vec![
                     ErrorInstanceArg::Static(String::from(expected_type.display_name())),
                     ErrorInstanceArg::Static(String::from(param_name)),
@@ -154,6 +181,31 @@ extern "C" fn check_param_type(
             }
             .to_json_string(),
         )
+    }
+}
+
+/// Util function to emit an error about an invalid parameter value if the
+/// provided predicate is not `true`.
+#[unsafe(no_mangle)]
+#[allow(improper_ctypes_definitions)]
+pub extern "C" fn verify_param(
+    l: LuaState,
+    param_name: &str,
+    error_message: &str,
+    predicate: bool,
+) {
+    if !predicate {
+        raise_error(
+            l,
+            &ErrorInstance {
+                template_id: INVALID_PARAM_VALUE.id,
+                message_args: vec![
+                    ErrorInstanceArg::Static(String::from(param_name)),
+                    ErrorInstanceArg::Static(String::from(error_message)),
+                ],
+            }
+            .to_json_string(),
+        );
     }
 }
 

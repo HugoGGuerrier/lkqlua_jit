@@ -7,7 +7,7 @@ use crate::{
         functions::lkql_img,
         traits::{self, sized::DEFAULT_SIZED_LENGTH},
         types::{BuiltinType, TypeField, TypeImplementation, TypeImplementationKind, int},
-        utils::get_string_param,
+        utils::{get_int_param, get_string_param, verify_param},
     },
     engine::FunctionValue,
     lua::{LuaState, copy_value, get_string, get_top, push_bool, push_string, set_metatable},
@@ -27,6 +27,7 @@ pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
         ("length", TypeField::Property(DEFAULT_SIZED_LENGTH)),
         ("base_name", TypeField::Method(FunctionValue::CFunction(str_base_name))),
         ("starts_with", TypeField::Method(FunctionValue::CFunction(str_starts_with))),
+        ("substring", TypeField::Method(FunctionValue::CFunction(str_substring))),
     ],
     overloads: &[],
     index_method: None,
@@ -55,5 +56,26 @@ unsafe extern "C" fn str_starts_with(l: LuaState) -> c_int {
     let this = get_string(l, 2).unwrap();
     let prefix = get_string_param(l, param_count, 2, "prefix", None);
     push_bool(l, this.starts_with(prefix));
+    1
+}
+
+/// The "substring" function for the "Str" type
+unsafe extern "C" fn str_substring(l: LuaState) -> c_int {
+    // Get parameters
+    let param_count = get_top(l) - 1;
+    let this = get_string(l, 2).unwrap();
+    let start = get_int_param(l, param_count, 2, "start", None);
+    let end = get_int_param(l, param_count, 3, "end", None);
+
+    // Check bounds validity
+    verify_param(l, "start", "start bound should be greater than 0", start > 0);
+    verify_param(
+        l,
+        "end",
+        "end bound should be greater that 0 and the start bound",
+        end > start,
+    );
+
+    push_string(l, &this[(start - 1) as usize..end as usize]);
     1
 }

@@ -15,8 +15,8 @@ use pretty_hex::PrettyHex;
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
     fs::File,
-    path::Path,
     io::{Stderr, Stdout, Write},
+    path::Path,
     time::{Duration, Instant},
 };
 
