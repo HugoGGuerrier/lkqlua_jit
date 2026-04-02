@@ -67,7 +67,7 @@ impl Engine {
         }
 
         // Load the analysis library
-        let analysis_lib = AnalysisLibrary::new(lua_state, config)?;
+        let analysis_lib = AnalysisLibrary::new(lua_state, config, &builtin_types)?;
 
         // Finally create the engine type and return it
         Ok(Self { lua_state, analysis_lib, builtin_types })

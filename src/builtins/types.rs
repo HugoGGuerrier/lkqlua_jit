@@ -31,6 +31,9 @@ pub const TYPE_NAME_FIELD: &str = "field@type_name";
 /// Pseudo-field to use to get the tag of the type of a value.
 pub const TYPE_TAG_FIELD: &str = "field@type_tag";
 
+/// Pseudo-field where all base type tags are stored.
+pub const BASE_TYPES_FIELD: &str = "field@base_type_tags";
+
 /// This type represents a built-in type repository containing a collection of
 /// built-in types that are going to be available at runtime.
 #[derive(Debug)]
@@ -158,7 +161,7 @@ impl BuiltinType {
     /// but main content is going to be [`TypeImplementation`] specific.
     fn prepare_field_tables(&self, l: LuaState) {
         // Create the value field table
-        push_table(l, 0, 2);
+        push_table(l, 0, 3);
 
         // Store the type tag
         push_integer(l, self.tag);
@@ -167,6 +170,10 @@ impl BuiltinType {
         // Store the type display name
         push_string(l, self.display_name());
         set_field(l, -2, TYPE_NAME_FIELD);
+
+        // Store the type base types
+        push_table(l, 0, 0);
+        set_field(l, -2, BASE_TYPES_FIELD);
 
         // Store the type implemented traits
         for tr in self.traits {
