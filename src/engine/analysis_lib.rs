@@ -286,10 +286,6 @@ impl AnalysisLibrary {
                     function_value.push_on_stack(l);
                     -2
                 }
-                TypeField::Method(function_value) => {
-                    function_value.push_on_stack(l);
-                    -3
-                }
             };
             set_field(l, index, name);
         }

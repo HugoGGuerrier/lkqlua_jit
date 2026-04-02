@@ -11,7 +11,7 @@ use crate::{
         },
         utils::{get_int_param, get_string_param, verify_param},
     },
-    engine::FunctionValue,
+    engine::{FunctionValue, RuntimeValue},
     lua::{LuaState, copy_value, get_string, get_top, push_bool, push_string, set_metatable},
 };
 use std::{ffi::c_int, path::PathBuf, str::FromStr};
@@ -29,9 +29,18 @@ pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
     fields: &[
         ("img", TypeField::Property(FunctionValue::CFunction(img_property))),
         ("length", TypeField::Property(DEFAULT_SIZED_LENGTH)),
-        ("base_name", TypeField::Method(FunctionValue::CFunction(str_base_name))),
-        ("starts_with", TypeField::Method(FunctionValue::CFunction(str_starts_with))),
-        ("substring", TypeField::Method(FunctionValue::CFunction(str_substring))),
+        (
+            "base_name",
+            TypeField::Value(RuntimeValue::Function(FunctionValue::CFunction(str_base_name))),
+        ),
+        (
+            "starts_with",
+            TypeField::Value(RuntimeValue::Function(FunctionValue::CFunction(str_starts_with))),
+        ),
+        (
+            "substring",
+            TypeField::Value(RuntimeValue::Function(FunctionValue::CFunction(str_substring))),
+        ),
     ],
     overloads: &[],
     index_method: None,

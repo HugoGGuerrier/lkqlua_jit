@@ -117,26 +117,14 @@ const STREAM_INDEX: FunctionValue = FunctionValue::LuaFunction(formatcp!(
 
     -- In other cases, perform the generic indexing process
 
-    -- Check in type fields
-    local res = __uv[1][field]
-    if res ~= nil then
-        return res
-    end
-
     -- Check in type properties
     res = __uv[2][field]
     if res ~= nil then
         return res(nil, self)
     end
 
-    -- Check in type methods
-    res = __uv[3][field]
-    if res ~= nil then
-        return res
-    end
-
-    -- Nothing has been found
-    return nil
+    -- Then get the result in type fields
+    return __uv[1][field]
 end",
     cache_size_field = CACHE_SIZE_FIELD,
     next_field = INTERNAL_NEXT_FIELD,

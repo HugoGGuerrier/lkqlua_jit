@@ -154,13 +154,12 @@ impl BuiltinType {
     }
 
     /// Place at the top of the Lua stack, in this order:
-    ///   * A table that is going to contain all value fields of the type
+    ///   * A table that is going to contain all fields of the type
     ///   * A table that is going to contain all properties of the type
-    ///   * A table that is going to contain all methods of the type
     /// This function pre-fill some of those table with already known values,
     /// but main content is going to be [`TypeImplementation`] specific.
     fn prepare_field_tables(&self, l: LuaState) {
-        // Create the value field table
+        // Create the value fields table
         push_table(l, 0, 3);
 
         // Store the type tag
@@ -182,9 +181,6 @@ impl BuiltinType {
         }
 
         // Create the properties table
-        push_table(l, 0, 0);
-
-        // Create the methods table
         push_table(l, 0, 0);
     }
 }
@@ -222,38 +218,30 @@ impl TypeImplementation {
     }
 
     /// Fill tables containing fields of this type implementation. This
-    /// function assumes that there are at least 3 tables on the top of the
+    /// function assumes that there are at least 2 tables on the top of the
     /// stack, in this order (from bottom to top):
     ///   * The one that contains value fields
     ///   * The one that contains properties
-    ///   * The one that contains methods
     fn fill_field_tables(&self, l: LuaState) {
-        // Split static values, properties and methods
-        let mut static_fields = Vec::new();
+        // Split fields and properties
+        let mut fields = Vec::new();
         let mut properties = Vec::new();
-        let mut methods = Vec::new();
         for (name, field) in self.fields {
             match field {
-                TypeField::Value(runtime_value) => {
-                    static_fields.push((name, runtime_value.clone()))
-                }
+                TypeField::Value(runtime_value) => fields.push((name, runtime_value.clone())),
                 TypeField::Property(function) => properties.push((name, function)),
-                TypeField::Method(function) => methods.push((name, function)),
             }
         }
 
-        // Then fill field tables
+        // Then fill tables
         fn push_field<T: LuaValue>(l: LuaState, table_index: i32, name: &str, value: &T) {
             value.push_on_stack(l);
             set_field(l, table_index - 1, name);
         }
-        static_fields
-            .iter()
-            .for_each(|(n, v)| push_field(l, -3, n, v));
+        fields.iter().for_each(|(n, v)| push_field(l, -2, n, v));
         properties
             .iter()
-            .for_each(|(n, v)| push_field(l, -2, n, *v));
-        methods.iter().for_each(|(n, v)| push_field(l, -1, n, *v));
+            .for_each(|(n, v)| push_field(l, -1, n, *v));
     }
 
     /// Push a function on the stack to be used as the `__index` meta-method
@@ -262,7 +250,7 @@ impl TypeImplementation {
         self.index_method
             .as_ref()
             .unwrap_or(&FunctionValue::LuaFunction(GENERIC_INDEX))
-            .push_on_stack_with_uv(l, 3);
+            .push_on_stack_with_uv(l, 2);
     }
 
     /// Push all overloads meta-methods of this type implementation in the
@@ -278,14 +266,12 @@ impl TypeImplementation {
 /// This type represents a field in a built-in type.
 #[derive(Debug)]
 pub enum TypeField {
-    /// If the field is a value.
+    /// When the field is a simple value.
     Value(RuntimeValue),
 
-    /// If the field is computed value.
+    /// When the field is a property, that is a function value that is
+    /// implicitly called when accessed.
     Property(FunctionValue),
-
-    /// If the field is a method.
-    Method(FunctionValue),
 }
 
 /// This type represents the target of an overloading definition.
@@ -335,26 +321,14 @@ pub type MetatableRegisteringFunction = fn(LuaState, &TypeImplementation);
 
 /// Lua function used as generic value indexing function.
 const GENERIC_INDEX: &str = "function (self, field)
-    -- Check in type fields
-    local res = __uv[1][field]
-    if res ~= nil then
-        return res
+    -- Check in type properties and call the result if there is one
+    local prop = __uv[2][field]
+    if prop ~= nil then
+        return prop(self)
     end
 
-    -- Check in type properties
-    res = __uv[2][field]
-    if res ~= nil then
-        return res(self)
-    end
-
-    -- Check in type methods
-    res = __uv[3][field]
-    if res ~= nil then
-        return res
-    end
-
-    -- Nothing has been found
-    return nil
+    -- Then fetch the field
+    return __uv[1][field]
 end";
 
 /// The "img" property, it relies on the [`lkql_img`] function to execute.

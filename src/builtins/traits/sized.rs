@@ -1,7 +1,7 @@
 //! # LKQL "Sized" trait
 //!
 //! This module defines the "Sized" LKQL trait. This trait requires that
-//! implementing types define a `length` method that return the "size" of it.
+//! implementing types define a `length` property that return the "size" of it.
 //! It also require overloading on the "__len" Lua meta-method.
 
 use crate::{

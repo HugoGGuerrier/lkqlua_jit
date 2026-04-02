@@ -64,7 +64,6 @@ impl BuiltinTrait {
             haystack.iter().any(|(name, field)| match searched {
                 RequiredField::Value(n) => matches!(field, TypeField::Value(..)) && name == n,
                 RequiredField::Property(n) => matches!(field, TypeField::Property(..)) && name == n,
-                RequiredField::Method(n) => matches!(field, TypeField::Method(..)) && name == n,
             })
         }
 
@@ -82,9 +81,7 @@ impl BuiltinTrait {
             };
             if !field_found {
                 missing_fields.push(String::from(match field {
-                    RequiredField::Value(n)
-                    | RequiredField::Property(n)
-                    | RequiredField::Method(n) => *n,
+                    RequiredField::Value(n) | RequiredField::Property(n) => *n,
                 }));
             }
         }
@@ -101,5 +98,4 @@ impl BuiltinTrait {
 pub enum RequiredField {
     Value(&'static str),
     Property(&'static str),
-    Method(&'static str),
 }
