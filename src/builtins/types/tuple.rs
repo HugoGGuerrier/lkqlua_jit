@@ -4,10 +4,10 @@
 
 use crate::{
     builtins::{
-        functions::lkql_img,
         traits,
         types::{
-            BuiltinType, OverloadTarget, TypeField, TypeImplementation, TypeImplementationKind, str,
+            BuiltinType, OverloadTarget, TypeField, TypeImplementation, TypeImplementationVariant,
+            img_property, str,
         },
     },
     engine::FunctionValue,
@@ -18,12 +18,14 @@ use std::ffi::c_int;
 pub const TYPE: BuiltinType = BuiltinType {
     tag: str::TYPE.tag + 1,
     traits: &[&traits::indexable::TRAIT],
-    implementation_kind: TypeImplementationKind::Monomorphic { implementation: IMPLEMENTATION },
+    implementation_variant: TypeImplementationVariant::Monomorphic {
+        implementation: IMPLEMENTATION,
+    },
 };
 
 pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
     name: "Tuple",
-    fields: &[("img", TypeField::Property(FunctionValue::CFunction(lkql_img)))],
+    fields: &[("img", TypeField::Property(FunctionValue::CFunction(img_property)))],
     overloads: &[(OverloadTarget::ToString, FunctionValue::CFunction(tuple_tostring))],
     index_method: None,
     registering_function: None,

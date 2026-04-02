@@ -3,12 +3,9 @@
 //! This module defines the LKQL "Object" type.
 
 use crate::{
-    builtins::{
-        functions::lkql_img,
-        types::{
-            BuiltinType, OverloadTarget, TypeField, TypeImplementation, TypeImplementationKind,
-            stream,
-        },
+    builtins::types::{
+        BuiltinType, OverloadTarget, TypeField, TypeImplementation, TypeImplementationVariant,
+        img_property, stream,
     },
     engine::FunctionValue,
     lua::{LuaState, get_field, get_next_pair, get_string, pop, push_nil, push_string},
@@ -18,12 +15,14 @@ use std::ffi::c_int;
 pub const TYPE: BuiltinType = BuiltinType {
     tag: stream::TYPE.tag + 1,
     traits: &[],
-    implementation_kind: TypeImplementationKind::Monomorphic { implementation: IMPLEMENTATION },
+    implementation_variant: TypeImplementationVariant::Monomorphic {
+        implementation: IMPLEMENTATION,
+    },
 };
 
 pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
     name: "Object",
-    fields: &[("img", TypeField::Property(FunctionValue::CFunction(lkql_img)))],
+    fields: &[("img", TypeField::Property(FunctionValue::CFunction(img_property)))],
     overloads: &[(OverloadTarget::ToString, FunctionValue::CFunction(obj_tostring))],
     index_method: None,
     registering_function: None,

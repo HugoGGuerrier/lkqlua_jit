@@ -18,4 +18,4 @@ pub const TRAIT: BuiltinTrait = BuiltinTrait {
 /// This represents the default "length" property that links directly to the
 /// `#` Lua operator.
 pub const DEFAULT_SIZED_LENGTH: FunctionValue =
-    FunctionValue::LuaFunction("function (_, self) return #self end");
+    FunctionValue::LuaFunction("function (self) return #self end");

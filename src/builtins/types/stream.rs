@@ -6,15 +6,14 @@
 
 use crate::{
     builtins::{
-        functions::lkql_img,
         traits::{
             indexable,
             iterable::{self, ITERATOR_FIELD},
             sized,
         },
         types::{
-            BuiltinType, OverloadTarget, TypeField, TypeImplementation, TypeImplementationKind,
-            list,
+            BuiltinType, OverloadTarget, TypeField, TypeImplementation, TypeImplementationVariant,
+            img_property, list,
         },
     },
     engine::FunctionValue,
@@ -28,11 +27,11 @@ pub mod lazy_comprehension;
 pub const TYPE: BuiltinType = BuiltinType {
     tag: list::TYPE.tag + 1,
     traits: &[&indexable::TRAIT, &iterable::TRAIT, &sized::TRAIT],
-    implementation_kind: TypeImplementationKind::Polymorphic {
+    implementation_variant: TypeImplementationVariant::Polymorphic {
         base_implementation: TypeImplementation {
             name: "Stream",
             fields: &[
-                ("img", TypeField::Property(FunctionValue::CFunction(lkql_img))),
+                ("img", TypeField::Property(FunctionValue::CFunction(img_property))),
                 ("length", TypeField::Property(STREAM_LENGTH)),
                 (ITERATOR_FIELD, TypeField::Property(STREAM_ITERATOR)),
             ],
@@ -54,7 +53,7 @@ unsafe extern "C" fn stream_tostring(l: LuaState) -> c_int {
 
 /// Lua function to get the length of a stream.
 const STREAM_LENGTH: FunctionValue = FunctionValue::LuaFunction(
-    "function (_, self)
+    "function (self)
     local _ = self[0]
     return #self
 end",
@@ -62,7 +61,7 @@ end",
 
 /// Lua function to get an iterator for a stream.
 const STREAM_ITERATOR: FunctionValue = FunctionValue::LuaFunction(
-    "function (_, self)
+    "function (self)
     local cursor = 1
     local finished = false
     return function ()

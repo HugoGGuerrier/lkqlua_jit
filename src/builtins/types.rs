@@ -3,12 +3,14 @@
 //! This module contains all LKQL built-in types and their associated working
 //! values.
 
+use std::ffi::c_int;
+
 use crate::{
-    builtins::traits::BuiltinTrait,
+    builtins::{functions::lkql_img, traits::BuiltinTrait},
     engine::{FunctionValue, LuaValue, RuntimeValue},
     lua::{
-        LuaState, get_top, push_bool, push_integer, push_string, push_table, set_field, set_global,
-        set_top,
+        LuaState, get_top, move_top_value, push_bool, push_integer, push_nil, push_string,
+        push_table, set_field, set_global, set_top,
     },
 };
 
@@ -34,14 +36,14 @@ pub const TYPE_TAG_FIELD: &str = "field@type_tag";
 pub struct BuiltinType {
     pub tag: isize,
     pub traits: &'static [&'static BuiltinTrait],
-    pub implementation_kind: TypeImplementationKind,
+    pub implementation_variant: TypeImplementationVariant,
 }
 
 /// This type represents the way a built-in type is implemented.
 /// An LKQL type may be either mono or polymorphic. This means that a type can
 /// have multiple implementations, while staying the same type to the user.
 #[derive(Debug)]
-pub enum TypeImplementationKind {
+pub enum TypeImplementationVariant {
     Monomorphic {
         implementation: TypeImplementation,
     },
@@ -61,9 +63,9 @@ pub enum TypeImplementationKind {
 impl BuiltinType {
     /// Get the type name to display to the language users.
     pub fn display_name(&self) -> &'static str {
-        match &self.implementation_kind {
-            TypeImplementationKind::Monomorphic { implementation } => implementation.name,
-            TypeImplementationKind::Polymorphic { base_implementation, .. } => {
+        match &self.implementation_variant {
+            TypeImplementationVariant::Monomorphic { implementation } => implementation.name,
+            TypeImplementationVariant::Polymorphic { base_implementation, .. } => {
                 base_implementation.name
             }
         }
@@ -73,8 +75,8 @@ impl BuiltinType {
     /// provided Lua execution context.
     pub fn place_in_lua_context(&self, l: LuaState) {
         let top = get_top(l);
-        match &self.implementation_kind {
-            TypeImplementationKind::Monomorphic { implementation } => {
+        match &self.implementation_variant {
+            TypeImplementationVariant::Monomorphic { implementation } => {
                 // Create a new table that is going to be the type meta-table
                 push_table(l, 0, implementation.overloads.len() as i32 + 1);
 
@@ -96,7 +98,7 @@ impl BuiltinType {
 
                 set_top(l, top);
             }
-            TypeImplementationKind::Polymorphic { base_implementation, specializations } => {
+            TypeImplementationVariant::Polymorphic { base_implementation, specializations } => {
                 for specialization in *specializations {
                     // Create a new table that is going to be the meta-table
                     push_table(l, 0, base_implementation.overloads.len() as i32 + 1);
@@ -317,7 +319,7 @@ const GENERIC_INDEX: &str = "function (self, field)
     -- Check in type properties
     res = __uv[2][field]
     if res ~= nil then
-        return res(nil, self)
+        return res(self)
     end
 
     -- Check in type methods
@@ -329,6 +331,14 @@ const GENERIC_INDEX: &str = "function (self, field)
     -- Nothing has been found
     return nil
 end";
+
+/// The "img" property, it relies on the [`lkql_img`] function to execute.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn img_property(l: LuaState) -> c_int {
+    push_nil(l);
+    move_top_value(l, 1);
+    unsafe { lkql_img(l) }
+}
 
 /// This is the generic meta-table registering function, it places the
 /// meta-table on the top of the stack in a global field named from the type

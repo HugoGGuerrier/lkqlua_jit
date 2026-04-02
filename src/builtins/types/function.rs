@@ -6,12 +6,9 @@ use std::ffi::c_int;
 
 use crate::{
     ExecutionContext,
-    builtins::{
-        functions::lkql_img,
-        types::{
-            BuiltinType, OverloadTarget, TypeField, TypeImplementation, TypeImplementationKind,
-            namespace,
-        },
+    builtins::types::{
+        BuiltinType, OverloadTarget, TypeField, TypeImplementation, TypeImplementationVariant,
+        img_property, namespace,
     },
     engine::{CONTEXT_GLOBAL_NAME, FunctionValue},
     lua::{
@@ -23,12 +20,14 @@ use crate::{
 pub const TYPE: BuiltinType = BuiltinType {
     tag: namespace::TYPE.tag + 1,
     traits: &[],
-    implementation_kind: TypeImplementationKind::Monomorphic { implementation: IMPLEMENTATION },
+    implementation_variant: TypeImplementationVariant::Monomorphic {
+        implementation: IMPLEMENTATION,
+    },
 };
 
 pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
     name: "Function",
-    fields: &[("img", TypeField::Property(FunctionValue::CFunction(lkql_img)))],
+    fields: &[("img", TypeField::Property(FunctionValue::CFunction(img_property)))],
     overloads: &[(OverloadTarget::ToString, FunctionValue::CFunction(function_tostring))],
     index_method: None,
     registering_function: Some(register_metatable),
