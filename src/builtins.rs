@@ -6,7 +6,7 @@
 use crate::{
     builtins::{
         functions::{lkql_img, lkql_import, lkql_print, lkql_units},
-        types::BuiltinType,
+        types::{BuiltinType, BuiltinTypeRepo},
     },
     engine::{FunctionValue, RuntimeValue},
     lua::{LuaState, get_global, push_table, set_metatable},
@@ -56,7 +56,7 @@ pub fn get_builtin_bindings() -> Vec<BuiltinBinding> {
 
 /// Allocate a new vector and populate it with all LKQL built-in types, then
 /// return it.
-pub fn get_builtin_types() -> Vec<&'static BuiltinType> {
+pub fn get_builtin_types() -> BuiltinTypeRepo {
     let mut known_tags = HashMap::new();
     let mut b = |t: &'static BuiltinType| -> &'static BuiltinType {
         // Ensure the type tag is unique
@@ -85,16 +85,18 @@ pub fn get_builtin_types() -> Vec<&'static BuiltinType> {
         t
     };
 
-    vec![
-        b(&types::unit::TYPE),
-        b(&types::bool::TYPE),
-        b(&types::int::TYPE),
-        b(&types::str::TYPE),
-        b(&types::tuple::TYPE),
-        b(&types::list::TYPE),
-        b(&types::stream::TYPE),
-        b(&types::obj::TYPE),
-        b(&types::namespace::TYPE),
-        b(&types::function::TYPE),
-    ]
+    BuiltinTypeRepo {
+        registered_types: vec![
+            b(&types::unit::TYPE),
+            b(&types::bool::TYPE),
+            b(&types::int::TYPE),
+            b(&types::str::TYPE),
+            b(&types::tuple::TYPE),
+            b(&types::list::TYPE),
+            b(&types::stream::TYPE),
+            b(&types::obj::TYPE),
+            b(&types::namespace::TYPE),
+            b(&types::function::TYPE),
+        ],
+    }
 }

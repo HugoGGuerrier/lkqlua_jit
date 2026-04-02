@@ -31,6 +31,24 @@ pub const TYPE_NAME_FIELD: &str = "field@type_name";
 /// Pseudo-field to use to get the tag of the type of a value.
 pub const TYPE_TAG_FIELD: &str = "field@type_tag";
 
+/// This type represents a built-in type repository containing a collection of
+/// built-in types that are going to be available at runtime.
+#[derive(Debug)]
+pub struct BuiltinTypeRepo {
+    pub registered_types: Vec<&'static BuiltinType>,
+}
+
+impl BuiltinTypeRepo {
+    /// Get the immediate next tag that isn't used in this type repository.
+    pub fn next_free_tag(&self) -> isize {
+        self.registered_types
+            .iter()
+            .map(|t| t.tag)
+            .max()
+            .unwrap_or(0)
+    }
+}
+
 /// This type represents an LKQL built-in type.
 #[derive(Debug)]
 pub struct BuiltinType {

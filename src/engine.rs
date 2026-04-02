@@ -5,7 +5,7 @@
 
 use crate::{
     Config, ExecutionContext,
-    builtins::{get_builtin_bindings, get_builtin_types},
+    builtins::{get_builtin_bindings, get_builtin_types, types::BuiltinTypeRepo},
     bytecode::extended_bytecode::ExtendedBytecodeUnit,
     engine::analysis_lib::AnalysisLibrary,
     errors::{ERROR_TEMPLATE_REPOSITORY, ErrorInstance, ErrorInstanceArg, LUA_ENGINE_ERROR},
@@ -35,6 +35,7 @@ pub const CONTEXT_GLOBAL_NAME: &str = "value@execution_context";
 #[derive(Debug)]
 pub struct Engine {
     lua_state: LuaState,
+    builtin_types: BuiltinTypeRepo,
     analysis_lib: AnalysisLibrary,
 }
 
@@ -54,7 +55,8 @@ impl Engine {
         open_lua_libs(lua_state);
 
         // Create all built-in types and store them
-        for builtin_type in get_builtin_types() {
+        let builtin_types = get_builtin_types();
+        for builtin_type in &builtin_types.registered_types {
             builtin_type.place_in_lua_context(lua_state);
         }
 
@@ -68,7 +70,7 @@ impl Engine {
         let analysis_lib = AnalysisLibrary::new(lua_state, config)?;
 
         // Finally create the engine type and return it
-        Ok(Self { lua_state, analysis_lib })
+        Ok(Self { lua_state, analysis_lib, builtin_types })
     }
 
     /// Run the given bytecode buffer in the engine, returning the potential
