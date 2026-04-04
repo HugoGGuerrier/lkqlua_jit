@@ -44,10 +44,6 @@ pub enum FrameVariant {
 
         /// Map of up-values available in this semantic frame.
         up_values: HashMap<String, UpValueData>,
-
-        /// The slot from which to close local values in this frame if this
-        /// frame has to do it, [`None`] otherwise.
-        close_from: Option<u8>,
     },
 
     /// The case when the frame is only existing in the intermediate
@@ -70,7 +66,6 @@ impl Frame {
                 occupied_slots: [false; u8::MAX as usize],
                 maximum_size: 0,
                 up_values: HashMap::new(),
-                close_from: None,
             },
         }
     }
@@ -109,7 +104,7 @@ impl Frame {
 
     /// Add a new local value to this frame, updating the already registered
     /// one if any.
-    pub fn bind_local(&mut self, name: &str, declaration_location: &SourceSection) {
+    pub fn add_local(&mut self, name: &str, declaration_location: &SourceSection) {
         let local_slot = self.reserve_contiguous_slots(1).first;
         self.bindings.insert(
             String::from(name),
@@ -147,10 +142,10 @@ impl Frame {
         let new_up_value_index = self.next_up_value_index();
         let maybe_new_up_value = self.parent_frame_mut().and_then(|mut parent_frame| {
             // First look in the parent's locals
-            if let Some(ref mut parent_local) = parent_frame.get_local(name) {
-                parent_frame.close_binding(parent_local);
+            if let Some(parent_local) = parent_frame.get_local(name) {
+                parent_frame.close_binding(name);
                 Some(UpValueData {
-                    declaration_location: parent_local.declaration_location.clone(),
+                    declaration_location: parent_local.declaration_location,
                     index: new_up_value_index,
                     is_safe: parent_local.is_init,
                     target: UpValueTarget::ParentSlot(parent_local.slot),
@@ -186,10 +181,12 @@ impl Frame {
 
     /// Get the slot to close from in the current frame.
     pub fn get_slot_to_close_from(&self) -> Option<u8> {
-        match &self.variant {
-            FrameVariant::Semantic { close_from, .. } => close_from.clone(),
-            FrameVariant::Lexical => self.parent_frame().unwrap().get_slot_to_close_from(),
-        }
+        self.bindings
+            .iter()
+            .filter_map(
+                |(_, b)| if b.closing_kind != ClosingKind::None { Some(b.slot) } else { None },
+            )
+            .min()
     }
 
     /// Ge the next available up-value index, panicking if there is no more.
@@ -206,28 +203,10 @@ impl Frame {
     /// Update the frame information to close the slot associated to the
     /// provided name. This function assumes that the binding is present in the
     /// current frame.
-    fn close_binding(&mut self, binding: &mut BindingData) {
-        // Update the binding closing kind
-        if !binding.is_init {
-            binding.closing_kind = ClosingKind::Unsafe;
-        } else if binding.closing_kind == ClosingKind::None {
-            binding.closing_kind = ClosingKind::Safe;
-        }
-
-        // Mark the bound slot as closed
-        self.close_slot(binding.slot);
-    }
-
-    /// Update the frame information to close the provided slot.
-    fn close_slot(&mut self, slot: u8) {
-        match &mut self.variant {
-            FrameVariant::Semantic { close_from, .. } => {
-                if close_from.is_none() || close_from.unwrap() > slot {
-                    let _ = close_from.insert(slot);
-                }
-            }
-            FrameVariant::Lexical => self.parent_frame_mut().unwrap().close_slot(slot),
-        }
+    fn close_binding(&mut self, name: &str) {
+        let binding = self.bindings.get_mut(name).unwrap();
+        binding.closing_kind =
+            if binding.is_init { ClosingKind::Safe } else { ClosingKind::Unsafe };
     }
 
     // --- Temporary values

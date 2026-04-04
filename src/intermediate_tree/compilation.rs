@@ -601,7 +601,7 @@ impl Node {
                 let body_name = &ctx.unit.children_units[*body_index as usize].name;
                 ctx.frame
                     .borrow_mut()
-                    .bind_local(body_name, &self.origin_location);
+                    .add_local(body_name, &self.origin_location);
                 Self::compile_child_unit(ctx, &self.origin_location, *body_index as usize);
                 let body_binding = ctx.frame.borrow().get_local(body_name).unwrap();
                 emit_table_member_write(
@@ -878,7 +878,7 @@ impl Node {
                 let lambda_name = &ctx.unit.children_units[*child_index as usize].name;
                 ctx.frame
                     .borrow_mut()
-                    .bind_local(lambda_name, &self.origin_location);
+                    .add_local(lambda_name, &self.origin_location);
 
                 // Compile the child unit
                 Self::compile_child_unit(ctx, &self.origin_location, *child_index as usize);
@@ -1155,7 +1155,7 @@ impl Node {
                 let lambda_name = &ctx.unit.children_units[*child_index as usize].name;
                 ctx.frame
                     .borrow_mut()
-                    .bind_local(lambda_name, &self.origin_location);
+                    .add_local(lambda_name, &self.origin_location);
 
                 // Compile the child unit
                 Self::compile_child_unit(ctx, &self.origin_location, *child_index as usize);
@@ -2430,7 +2430,7 @@ impl<'a> CompilationContext<'a> {
             } else {
                 self.frame
                     .borrow_mut()
-                    .bind_local(&symbol.text, &symbol.origin_location);
+                    .add_local(&symbol.text, &symbol.origin_location);
             }
         }
     }
