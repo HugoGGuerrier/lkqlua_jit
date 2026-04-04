@@ -8,7 +8,7 @@ use crate::{
         LKQL_IMPORT_GLOBAL_NAME, UNIT_SINGLETON_GLOBAL_NAME, get_builtin_bindings,
         traits::{BuiltinTrait, iterable::ITERATOR_FIELD},
         types::{
-            self, BuiltinType, TYPE_NAME_FIELD, TYPE_TAG_FIELD, TypeImplementation, namespace,
+            self, BuiltinType, TYPE_NAME_FIELD, TYPE_TAGS_FIELD, TypeImplementation, namespace,
             stream::lazy_comprehension,
         },
     },
@@ -568,7 +568,7 @@ impl Node {
                         collection.compile_as_access(ctx, Some(collection_slot));
                     emit_table_index_write(
                         ctx,
-                        &self.origin_location,
+                        Some(&self.origin_location),
                         collection_access.slot(),
                         collections_table_slot,
                         i + 1,
@@ -1676,7 +1676,13 @@ impl Node {
         // in the table.
         for (i, array_elem) in array_remains {
             let elem_access = array_elem.compile_as_access(ctx, None);
-            emit_table_index_write(ctx, origin_location, elem_access.slot(), result_slot, i + 1);
+            emit_table_index_write(
+                ctx,
+                Some(origin_location),
+                elem_access.slot(),
+                result_slot,
+                i + 1,
+            );
             elem_access.release(ctx);
         }
         for (name, hash_elem) in hash_remains {
@@ -2041,7 +2047,7 @@ fn emit_runtime_error(
 /// Util function to get a table element by its index.
 fn emit_table_index_read(
     ctx: &mut CompilationContext,
-    origin_location: &SourceSection,
+    origin_location: Option<&SourceSection>,
     result_slot: u8,
     table_slot: u8,
     index: usize,
@@ -2052,7 +2058,7 @@ fn emit_table_index_read(
 /// Util function to set a table element by its index.
 fn emit_table_index_write(
     ctx: &mut CompilationContext,
-    origin_location: &SourceSection,
+    origin_location: Option<&SourceSection>,
     source_slot: u8,
     table_slot: u8,
     index: usize,
@@ -2063,7 +2069,7 @@ fn emit_table_index_write(
 /// Internal function to factorize table index accesses. Do not use directly.
 fn _access_table_index(
     ctx: &mut CompilationContext,
-    origin_location: &SourceSection,
+    origin_location: Option<&SourceSection>,
     working_slot: u8,
     table_slot: u8,
     index: usize,
@@ -2071,7 +2077,7 @@ fn _access_table_index(
     slot_access_op: u8,
 ) {
     if index <= u8::MAX as usize {
-        ctx.instructions.abc(
+        ctx.instructions.abc_maybe_loc(
             origin_location,
             immediate_access_op,
             working_slot,
@@ -2082,9 +2088,14 @@ fn _access_table_index(
         let index_tmp = ctx.frame.borrow_mut().get_tmp();
         let index_cst = ctx.unit_data.constants.get_from_int(index as i32);
         ctx.instructions
-            .ad(origin_location, KNUM, index_tmp, index_cst);
-        ctx.instructions
-            .abc(origin_location, slot_access_op, working_slot, table_slot, index_tmp);
+            .ad_maybe_loc(origin_location, KNUM, index_tmp, index_cst);
+        ctx.instructions.abc_maybe_loc(
+            origin_location,
+            slot_access_op,
+            working_slot,
+            table_slot,
+            index_tmp,
+        );
         ctx.frame.borrow_mut().release_slot(index_tmp);
     } else {
         panic!("Big integers aren't handled for now")
@@ -2311,7 +2322,7 @@ fn emit_trait_requirement(
 
 /// Emit code that checks whether the value at `value_slot` is an instance
 /// of the `checked_type`. If so, jumps to the `target_label`.
-/// If `do_neq` is `true`, the checking logic is reversed and the emitted code
+/// If `reverse` is `true`, the checking logic is reversed and the emitted code
 /// will go to `target_label` if the value is NOT an instance of
 /// `checked_type`.
 fn emit_type_check(
@@ -2320,24 +2331,32 @@ fn emit_type_check(
     value_slot: u8,
     checked_type: &BuiltinType,
     target_label: Label,
-    do_neq: bool,
+    reverse_check: bool,
 ) {
     // First get the type tag of the actual value
-    let actual_tag = ctx.frame.borrow_mut().get_tmp();
-    emit_table_member_read(ctx, maybe_origin_location, actual_tag, value_slot, TYPE_TAG_FIELD);
+    let tags_tmp = ctx.frame.borrow_mut().get_tmp();
+    let check_res_tmp = ctx.frame.borrow_mut().get_tmp();
+    emit_table_member_read(ctx, maybe_origin_location, tags_tmp, value_slot, TYPE_TAGS_FIELD);
 
-    // Then compare type tags and if they're not equals jump to the provided
-    // label.
+    // Then get if the tags table contains the checked type
+    emit_table_index_read(
+        ctx,
+        maybe_origin_location,
+        check_res_tmp,
+        tags_tmp,
+        checked_type.tag as usize,
+    );
     ctx.instructions.ad_maybe_loc(
         maybe_origin_location,
-        if do_neq { ISNEN } else { ISEQN },
-        actual_tag,
-        ctx.unit_data
-            .constants
-            .get_from_int(checked_type.tag as i32),
+        if reverse_check { ISF } else { IST },
+        0,
+        check_res_tmp as u16,
     );
     ctx.goto(target_label);
-    ctx.frame.borrow_mut().release_slot(actual_tag);
+
+    // Release temporary slots
+    ctx.frame.borrow_mut().release_slot(tags_tmp);
+    ctx.frame.borrow_mut().release_slot(check_res_tmp);
 }
 
 /// Emit, if required, the instruction to close local values in the current

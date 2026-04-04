@@ -9,8 +9,8 @@ use crate::{
     builtins::{functions::lkql_img, traits::BuiltinTrait},
     engine::{FunctionValue, LuaValue, RuntimeValue},
     lua::{
-        LuaState, get_top, move_top_value, push_bool, push_integer, push_nil, push_string,
-        push_table, set_field, set_global, set_top,
+        LuaState, get_top, move_top_value, push_bool, push_nil, push_string, push_table, set_field,
+        set_global, set_index, set_top,
     },
 };
 
@@ -28,11 +28,10 @@ pub mod unit;
 /// Pseudo-field to use to get the name of the type of a value.
 pub const TYPE_NAME_FIELD: &str = "field@type_name";
 
-/// Pseudo-field to use to get the tag of the type of a value.
-pub const TYPE_TAG_FIELD: &str = "field@type_tag";
-
-/// Pseudo-field where all base type tags are stored.
-pub const BASE_TYPES_FIELD: &str = "field@base_type_tags";
+/// Pseudo-field where the tags table of the value is stored. This table maps
+/// type tags to boolean values, expressing whether the value is an instance of
+/// the corresponding tag.
+pub const TYPE_TAGS_FIELD: &str = "field@type_tags";
 
 /// This type represents a built-in type repository containing a collection of
 /// built-in types that are going to be available at runtime.
@@ -43,7 +42,7 @@ pub struct BuiltinTypeRepo {
 
 impl BuiltinTypeRepo {
     /// Get the immediate next tag that isn't used in this type repository.
-    pub fn next_free_tag(&self) -> isize {
+    pub fn next_free_tag(&self) -> i32 {
         self.registered_types
             .iter()
             .map(|t| t.tag)
@@ -55,7 +54,7 @@ impl BuiltinTypeRepo {
 /// This type represents an LKQL built-in type.
 #[derive(Debug)]
 pub struct BuiltinType {
-    pub tag: isize,
+    pub tag: i32,
     pub traits: &'static [&'static BuiltinTrait],
     pub implementation_variant: TypeImplementationVariant,
 }
@@ -163,16 +162,14 @@ impl BuiltinType {
         push_table(l, 0, 3);
 
         // Store the type tag
-        push_integer(l, self.tag);
-        set_field(l, -2, TYPE_TAG_FIELD);
+        push_table(l, 0, 0);
+        push_bool(l, true);
+        set_index(l, -2, self.tag as i32);
+        set_field(l, -2, TYPE_TAGS_FIELD);
 
         // Store the type display name
         push_string(l, self.display_name());
         set_field(l, -2, TYPE_NAME_FIELD);
-
-        // Store the type base types
-        push_table(l, 0, 0);
-        set_field(l, -2, BASE_TYPES_FIELD);
 
         // Store the type implemented traits
         for tr in self.traits {

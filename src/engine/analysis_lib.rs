@@ -9,15 +9,15 @@ use std::{cmp::min, ffi::c_int, i32, path::PathBuf};
 use crate::{
     Config,
     builtins::types::{
-        BASE_TYPES_FIELD, BuiltinType, BuiltinTypeRepo, TYPE_NAME_FIELD, TYPE_TAG_FIELD, TypeField,
+        BuiltinType, BuiltinTypeRepo, TYPE_NAME_FIELD, TYPE_TAGS_FIELD, TypeField,
         TypeImplementation, img_property, list, obj,
     },
     engine::LuaValue,
     errors::{ANALYSIS_LIBRARY_ERROR, ErrorInstance, ErrorInstanceArg},
     lua::{
         LuaState, copy_value, find_in_lua_path, get_field, get_global, get_index, get_length,
-        get_string, load_lua_file, pop, push_bool, push_c_function, push_integer, push_nil,
-        push_string, push_table, safe_call, set_field, set_global, set_index, set_metatable,
+        get_string, load_lua_file, pop, push_bool, push_c_function, push_nil, push_string,
+        push_table, safe_call, set_field, set_global, set_index, set_metatable,
     },
 };
 
@@ -191,7 +191,7 @@ impl AnalysisLibrary {
     }
 
     /// Get all node types defined by the loaded analysis library.
-    fn get_node_types(l: LuaState, first_tag: isize) -> NodeTypeRepo {
+    fn get_node_types(l: LuaState, first_tag: i32) -> NodeTypeRepo {
         // Get all node types in Lua
         get_global(l, ANALYSIS_LIB_GLOBAL_NAME);
         get_field(l, -1, "node_types");
@@ -261,8 +261,10 @@ impl AnalysisLibrary {
 
         // Fill constant fields
         get_field(l, -1, "__fields");
-        push_integer(l, builtin_type.tag);
-        set_field(l, -2, TYPE_TAG_FIELD);
+        push_table(l, 0, 0);
+        push_bool(l, true);
+        set_index(l, -2, builtin_type.tag);
+        set_field(l, -2, TYPE_TAGS_FIELD);
         push_string(l, builtin_type.display_name());
         set_field(l, -2, TYPE_NAME_FIELD);
 
@@ -308,21 +310,20 @@ impl AnalysisLibrary {
         get_global(l, ANALYSIS_LIB_GLOBAL_NAME);
         get_field(l, -1, &node_type.name);
 
-        // Fill constant fields
+        // Fill type tags
         get_field(l, -1, "__fields");
-        push_integer(l, node_type.tag);
-        set_field(l, -2, TYPE_TAG_FIELD);
-        push_string(l, &node_type.name);
-        set_field(l, -2, TYPE_NAME_FIELD);
-
-        // Fill base types
-        let array_size = min(node_type.base_types.len(), i32::MAX as usize) as i32;
-        push_table(l, array_size, 0);
+        push_table(l, 0, 0);
+        push_bool(l, true);
+        set_index(l, -2, node_type.tag);
         for base_type in &node_type.base_types {
             push_bool(l, true);
             set_index(l, -2, *base_type as i32);
         }
-        set_field(l, -2, BASE_TYPES_FIELD);
+        set_field(l, -2, TYPE_TAGS_FIELD);
+
+        // Then set the type name
+        push_string(l, &node_type.name);
+        set_field(l, -2, TYPE_NAME_FIELD);
         pop(l, 1);
 
         // Set the "img" property
@@ -364,8 +365,8 @@ impl NodeTypeRepo {
 #[derive(Debug)]
 pub struct NodeType {
     pub name: String,
-    pub tag: isize,
-    pub base_types: Vec<isize>,
+    pub tag: i32,
+    pub base_types: Vec<i32>,
 }
 
 /// Callback used to format an error from the analysis library

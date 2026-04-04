@@ -4,14 +4,14 @@
 //! runtime values.
 
 use crate::{
-    builtins::types::{self, BuiltinType, TYPE_NAME_FIELD, TYPE_TAG_FIELD},
+    builtins::types::{self, BuiltinType, TYPE_NAME_FIELD, TYPE_TAGS_FIELD},
     errors::{
         ErrorInstance, ErrorInstanceArg, INVALID_PARAM_VALUE, NO_VALUE_FOR_PARAM,
         POS_AND_NAMED_VALUE_FOR_PARAM, WRONG_PARAM_TYPE,
     },
     lua::{
-        LuaState, LuaType, get_boolean, get_field, get_integer, get_string, get_top, get_type,
-        is_nil, pop, raise_error,
+        LuaState, LuaType, get_boolean, get_field, get_index, get_integer, get_string, get_top,
+        get_type, is_nil, pop, raise_error,
     },
 };
 
@@ -166,8 +166,7 @@ extern "C" fn check_param_type(
     value_index: i32,
     expected_type: &BuiltinType,
 ) {
-    let param_type_tag = get_type_tag(l, value_index);
-    if param_type_tag != expected_type.tag {
+    if !instance_of(l, value_index, expected_type) {
         let param_type_name = get_type_name(l, value_index);
         raise_error(
             l,
@@ -212,13 +211,15 @@ pub extern "C" fn verify_param(
 // ----- Type checking functions -----
 
 /// Get the type tag of the value at the provided index if applicable.
-pub fn get_type_tag(l: LuaState, index: i32) -> isize {
-    get_field(l, index, TYPE_TAG_FIELD);
+pub fn instance_of(l: LuaState, index: i32, expected_type: &BuiltinType) -> bool {
+    get_field(l, index, TYPE_TAGS_FIELD);
     if is_nil(l, -1) {
-        panic!("Invalid runtime value");
-    } else {
-        let res = get_integer(l, -1);
         pop(l, 1);
+        false
+    } else {
+        get_index(l, -1, expected_type.tag);
+        let res = get_boolean(l, -1);
+        pop(l, 2);
         res
     }
 }
