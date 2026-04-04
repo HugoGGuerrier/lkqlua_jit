@@ -88,7 +88,7 @@ impl ExecutionUnit {
                 let mut module_elements = Vec::new();
                 for maybe_top_level_elem in top_level {
                     if let Some(top_level_elem) = maybe_top_level_elem? {
-                        module_elements.push(Node::lower_lkql_node(&top_level_elem, ctx)?);
+                        module_elements.push(Node::lower_lkql_node(ctx, &top_level_elem)?);
                     }
                 }
 
@@ -122,7 +122,7 @@ impl ExecutionUnit {
                                 Identifier::from_lkql_node(&param_decl.f_param_identifier()?, ctx)?;
                             let default_expr = param_decl
                                 .f_default_expr()?
-                                .map(|n| Node::lower_lkql_node(&n, ctx))
+                                .map(|n| Node::lower_lkql_node(ctx, &n))
                                 .transpose()?;
                             params.push((name, default_expr))
                         }
@@ -133,7 +133,7 @@ impl ExecutionUnit {
                 // Then create the function execution unit variant
                 ExecutionUnitVariant::Function {
                     params,
-                    body: Node::lower_lkql_node(&body_node, ctx)?,
+                    body: Node::lower_lkql_node(ctx, &body_node)?,
                 }
             }
             LkqlNode::ListComprehension(list_comp) => {
@@ -159,10 +159,10 @@ impl ExecutionUnit {
                     Some(guard) => Node {
                         origin_location: current_loc.clone(),
                         variant: NodeVariant::IfExpr {
-                            condition: Box::new(Node::lower_lkql_node(&guard, ctx)?),
+                            condition: Box::new(Node::lower_lkql_node(ctx, &guard)?),
                             consequence: Box::new(Node::lower_lkql_node(
-                                &list_comp.f_expr()?,
                                 ctx,
+                                &list_comp.f_expr()?,
                             )?),
                             alternative: Box::new(Node {
                                 origin_location: current_loc,
@@ -170,7 +170,7 @@ impl ExecutionUnit {
                             }),
                         },
                     },
-                    None => Node::lower_lkql_node(&list_comp.f_expr()?, ctx)?,
+                    None => Node::lower_lkql_node(ctx, &list_comp.f_expr()?)?,
                 };
 
                 // Then return the new function execution unit variant
@@ -192,7 +192,7 @@ impl ExecutionUnit {
 impl Node {
     /// Lower an LKQL node as an intermediate node. All LKQL node kinds should
     /// be accepted by this function.
-    fn lower_lkql_node(node: &LkqlNode, ctx: &mut LoweringContext) -> Result<Self, Report> {
+    fn lower_lkql_node(ctx: &mut LoweringContext, node: &LkqlNode) -> Result<Self, Report> {
         // Get the location of the node
         let origin_location = SourceSection::from_lkql_node(ctx.lowered_source, node)?;
 
@@ -208,7 +208,7 @@ impl Node {
             // --- Declarations
             LkqlNode::ValDecl(val_decl) => NodeVariant::InitLocal {
                 symbol: Identifier::from_lkql_node(&val_decl.f_identifier()?, ctx)?,
-                val: Box::new(Self::lower_lkql_node(&val_decl.f_value()?, ctx)?),
+                val: Box::new(Self::lower_lkql_node(ctx, &val_decl.f_value()?)?),
             },
             LkqlNode::FunDecl(_) | LkqlNode::SelectorDecl(_) => {
                 NodeVariant::InitLocalFun(*ctx.child_index_map.get(node).unwrap())
@@ -293,8 +293,8 @@ impl Node {
                                 // lowered yet.
                                 if named_args.is_empty() {
                                     positional_args.push(Self::lower_lkql_node(
-                                        &expr_arg.f_value_expr()?,
                                         ctx,
+                                        &expr_arg.f_value_expr()?,
                                     )?);
                                 } else {
                                     let (last_id, last_node) = named_args.last().unwrap();
@@ -318,7 +318,7 @@ impl Node {
                             }
                             LkqlNode::NamedArg(named_arg) => named_args.push((
                                 Identifier::from_lkql_node(&named_arg.f_arg_name()?, ctx)?,
-                                Self::lower_lkql_node(&named_arg.f_value_expr()?, ctx)?,
+                                Self::lower_lkql_node(ctx, &named_arg.f_value_expr()?)?,
                             )),
                             _ => unreachable!(),
                         }
@@ -342,7 +342,7 @@ impl Node {
                         };
 
                         // Lower receiver and field name
-                        let prefix = Box::new(Self::lower_lkql_node(&receiver?, ctx)?);
+                        let prefix = Box::new(Self::lower_lkql_node(ctx, &receiver?)?);
                         let suffix = Identifier::from_lkql_node(&member?, ctx)?;
 
                         // Create a new named temporary value to compute the
@@ -377,7 +377,7 @@ impl Node {
                         NodeVariant::Let { id: prefix_id, value: prefix, r#in: type_condition }
                     }
                     _ => NodeVariant::FunCall {
-                        callee: Box::new(Self::lower_lkql_node(&name, ctx)?),
+                        callee: Box::new(Self::lower_lkql_node(ctx, &name)?),
                         positional_args,
                         named_args,
                     },
@@ -396,7 +396,7 @@ impl Node {
                     _ => unreachable!(),
                 };
                 NodeVariant::DottedExpr {
-                    prefix: Box::new(Self::lower_lkql_node(&receiver?, ctx)?),
+                    prefix: Box::new(Self::lower_lkql_node(ctx, &receiver?)?),
                     suffix: Identifier::from_lkql_node(&member?, ctx)?,
                     is_safe,
                 }
@@ -414,7 +414,7 @@ impl Node {
                     _ => unreachable!(),
                 };
                 NodeVariant::IndexExpr {
-                    indexed_val: Box::new(Self::lower_lkql_node(&coll_expr?, ctx)?.with_wrapper(
+                    indexed_val: Box::new(Self::lower_lkql_node(ctx, &coll_expr?)?.with_wrapper(
                         |indexed_val| {
                             Ok(NodeVariant::RequireTrait {
                                 expression: Box::new(indexed_val),
@@ -422,7 +422,7 @@ impl Node {
                             })
                         },
                     )?),
-                    index: Box::new(Self::lower_lkql_node(&index?, ctx)?.with_wrapper(|i| {
+                    index: Box::new(Self::lower_lkql_node(ctx, &index?)?.with_wrapper(|i| {
                         Ok({
                             NodeVariant::RequireType {
                                 expression: Box::new(i),
@@ -436,9 +436,9 @@ impl Node {
 
             // --- In clause
             LkqlNode::InClause(in_clause) => NodeVariant::InClause {
-                value: Box::new(Self::lower_lkql_node(&in_clause.f_value_expr()?, ctx)?),
+                value: Box::new(Self::lower_lkql_node(ctx, &in_clause.f_value_expr()?)?),
                 collection: Box::new(
-                    Self::lower_lkql_node(&in_clause.f_list_expr()?, ctx)?.with_wrapper(|n| {
+                    Self::lower_lkql_node(ctx, &in_clause.f_list_expr()?)?.with_wrapper(|n| {
                         Ok(NodeVariant::RequireTrait {
                             expression: Box::new(n),
                             required_trait: &traits::iterable::TRAIT,
@@ -449,11 +449,11 @@ impl Node {
 
             // --- If expression
             LkqlNode::CondExpr(cond_expr) => NodeVariant::IfExpr {
-                condition: Box::new(Self::lower_lkql_node(&cond_expr.f_condition()?, ctx)?),
-                consequence: Box::new(Self::lower_lkql_node(&cond_expr.f_then_expr()?, ctx)?),
+                condition: Box::new(Self::lower_lkql_node(ctx, &cond_expr.f_condition()?)?),
+                consequence: Box::new(Self::lower_lkql_node(ctx, &cond_expr.f_then_expr()?)?),
                 alternative: cond_expr
                     .f_else_expr()?
-                    .map(|n| Self::lower_lkql_node(&n, ctx))
+                    .map(|n| Self::lower_lkql_node(ctx, &n))
                     .transpose()?
                     .map_or(
                         Box::new(Node {
@@ -473,19 +473,19 @@ impl Node {
                 let mut body = Vec::with_capacity(body_node.children_count()?);
                 for maybe_body_part_node in &body_node {
                     if let Some(ref body_part_node) = maybe_body_part_node? {
-                        body.push(Self::lower_lkql_node(body_part_node, ctx)?);
+                        body.push(Self::lower_lkql_node(ctx, body_part_node)?);
                     }
                 }
                 NodeVariant::BlockExpr {
                     body,
-                    val: Box::new(Self::lower_lkql_node(&block_expr.f_expr()?, ctx)?),
+                    val: Box::new(Self::lower_lkql_node(ctx, &block_expr.f_expr()?)?),
                 }
             }
             LkqlNode::BlockBodyDecl(body_decl) => {
-                return Self::lower_lkql_node(&body_decl.f_decl()?, ctx);
+                return Self::lower_lkql_node(ctx, &body_decl.f_decl()?);
             }
             LkqlNode::BlockBodyExpr(body_expr) => {
-                return Self::lower_lkql_node(&body_expr.f_expr()?, ctx);
+                return Self::lower_lkql_node(ctx, &body_expr.f_expr()?);
             }
 
             // --- List comprehension
@@ -500,7 +500,7 @@ impl Node {
                             _ => unreachable!(),
                         })
                     })
-                    .map(|n| Self::lower_lkql_node(&n?.unwrap(), ctx))
+                    .map(|n| Self::lower_lkql_node(ctx, &n?.unwrap()))
                     .map(|n| {
                         n?.with_wrapper(|coll_expr| {
                             Ok(NodeVariant::RequireTrait {
@@ -515,19 +515,19 @@ impl Node {
 
             // --- Binary operation
             LkqlNode::ArithBinOp(arith_bin_op) => NodeVariant::ArithBinOp {
-                left: Box::new(Self::lower_lkql_node(&arith_bin_op.f_left()?, ctx)?),
+                left: Box::new(Self::lower_lkql_node(ctx, &arith_bin_op.f_left()?)?),
                 operator: ArithOperator::lower_lkql_node(&arith_bin_op.f_op()?, ctx)?,
-                right: Box::new(Self::lower_lkql_node(&arith_bin_op.f_right()?, ctx)?),
+                right: Box::new(Self::lower_lkql_node(ctx, &arith_bin_op.f_right()?)?),
             },
             LkqlNode::RelBinOp(rel_bin_op) => NodeVariant::CompBinOp {
-                left: Box::new(Self::lower_lkql_node(&rel_bin_op.f_left()?, ctx)?),
+                left: Box::new(Self::lower_lkql_node(ctx, &rel_bin_op.f_left()?)?),
                 operator: CompOperator::lower_lkql_node(&rel_bin_op.f_op()?, ctx)?,
-                right: Box::new(Self::lower_lkql_node(&rel_bin_op.f_right()?, ctx)?),
+                right: Box::new(Self::lower_lkql_node(ctx, &rel_bin_op.f_right()?)?),
             },
             LkqlNode::BinOp(bin_op) => {
                 let operator_node = bin_op.f_op()?;
-                let left = Box::new(Self::lower_lkql_node(&bin_op.f_left()?, ctx)?);
-                let right = Box::new(Self::lower_lkql_node(&bin_op.f_right()?, ctx)?);
+                let left = Box::new(Self::lower_lkql_node(ctx, &bin_op.f_left()?)?);
+                let right = Box::new(Self::lower_lkql_node(ctx, &bin_op.f_right()?)?);
                 match &operator_node {
                     LkqlNode::OpAnd(_) | LkqlNode::OpOr(_) | LkqlNode::OpNot(_) => {
                         NodeVariant::LogicBinOp {
@@ -547,7 +547,7 @@ impl Node {
 
             // --- Unary operation
             LkqlNode::UnOp(un_op) => {
-                let operand = Box::new(Self::lower_lkql_node(&un_op.f_operand()?, ctx)?);
+                let operand = Box::new(Self::lower_lkql_node(ctx, &un_op.f_operand()?)?);
                 let operator_node = un_op.f_op()?;
                 match &operator_node {
                     LkqlNode::OpPlus(_) | LkqlNode::OpMinus(_) => NodeVariant::ArithUnOp {
@@ -587,7 +587,7 @@ impl Node {
                 let mut items = Vec::with_capacity(items_node.children_count()?);
                 for maybe_item_node in &items_node {
                     if let Some(ref item_node) = maybe_item_node? {
-                        items.push(Self::lower_lkql_node(item_node, ctx)?);
+                        items.push(Self::lower_lkql_node(ctx, item_node)?);
                     }
                 }
                 NodeVariant::TupleLiteral(items)
@@ -597,7 +597,7 @@ impl Node {
                 let mut items = Vec::with_capacity(items_node.children_count()?);
                 for maybe_item_node in &items_node {
                     if let Some(ref item_node) = maybe_item_node? {
-                        items.push(Self::lower_lkql_node(item_node, ctx)?);
+                        items.push(Self::lower_lkql_node(ctx, item_node)?);
                     }
                 }
                 NodeVariant::ListLiteral(items)
@@ -609,7 +609,7 @@ impl Node {
                     if let Some(LkqlNode::ObjectAssoc(ref assoc_node)) = maybe_assoc_node? {
                         assocs.push((
                             Identifier::from_lkql_node(&assoc_node.f_name()?, ctx)?,
-                            Self::lower_lkql_node(&assoc_node.f_expr()?, ctx)?,
+                            Self::lower_lkql_node(ctx, &assoc_node.f_expr()?)?,
                         ));
                     }
                 }
