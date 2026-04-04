@@ -894,26 +894,26 @@ impl Node {
             }
 
             // --- Temporary values
-            NodeVariant::WithTemporary { id, value, body } => {
+            NodeVariant::Let { id, value, r#in } => {
                 // Get an access to the value and set it as a temporary
                 let value_access = value.compile_as_access(ctx, None);
                 ctx.frame
                     .borrow_mut()
-                    .temporaries
+                    .let_values
                     .insert(*id, value_access.slot());
 
                 // Compile the body
-                body.compile_as_value(ctx, result_slot);
+                r#in.compile_as_value(ctx, result_slot);
 
                 // Release access the the value and remove it from temporaries table
-                ctx.frame.borrow_mut().temporaries.remove(id);
+                ctx.frame.borrow_mut().let_values.remove(id);
                 value_access.release(ctx);
             }
-            NodeVariant::ReadTemporary(id) => {
+            NodeVariant::Read(id) => {
                 let tmp_slot = *ctx
                     .frame
                     .borrow()
-                    .temporaries
+                    .let_values
                     .get(id)
                     .expect("Unknown temporary identifier");
                 ctx.instructions
@@ -1164,30 +1164,30 @@ impl Node {
                 ValueAccess::BorrowedTmp(ctx.frame.borrow().get_local(lambda_name).unwrap().slot)
             }
 
-            NodeVariant::WithTemporary { id, value, body } => {
+            NodeVariant::Let { id, value, r#in: body } => {
                 // Get an access to the value and set it as a temporary
                 let value_access = value.compile_as_access(ctx, None);
                 ctx.frame
                     .borrow_mut()
-                    .temporaries
+                    .let_values
                     .insert(*id, value_access.slot());
 
                 // Compile the body
                 let res = body.compile_as_access(ctx, already_reserved_slot);
 
                 // Release access the the value and remove it from temporaries table
-                ctx.frame.borrow_mut().temporaries.remove(id);
+                ctx.frame.borrow_mut().let_values.remove(id);
                 value_access.release(ctx);
 
                 // Finally return the result on the body result
                 res
             }
 
-            NodeVariant::ReadTemporary(id) => {
+            NodeVariant::Read(id) => {
                 let tmp_slot = *ctx
                     .frame
                     .borrow()
-                    .temporaries
+                    .let_values
                     .get(id)
                     .expect("Unknown temporary identifier");
                 ValueAccess::BorrowedTmp(tmp_slot)

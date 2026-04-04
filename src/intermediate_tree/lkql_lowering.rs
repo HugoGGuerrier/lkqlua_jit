@@ -347,20 +347,19 @@ impl Node {
 
                         // Create a new named temporary value to compute the
                         // prefix part of the dot access only once.
-                        let dot_prefix_tmp = ctx.new_tmp_id();
-                        let dot_prefix_tmp_ref =
-                            related_node(NodeVariant::ReadTemporary(dot_prefix_tmp));
+                        let prefix_id = ctx.new_tmp_id();
+                        let prefix_ref = related_node(NodeVariant::Read(prefix_id));
 
                         // Create a new node to test the type of the dot access
                         // prefix.
                         let type_condition = related_node(NodeVariant::IfExpr {
                             condition: related_node(NodeVariant::InstanceOf {
-                                expression: dot_prefix_tmp_ref.clone(),
+                                expression: prefix_ref.clone(),
                                 expected_type: &types::namespace::TYPE,
                             }),
                             consequence: related_node(NodeVariant::FunCall {
                                 callee: related_node(NodeVariant::DottedExpr {
-                                    prefix: dot_prefix_tmp_ref.clone(),
+                                    prefix: prefix_ref.clone(),
                                     suffix: suffix.clone(),
                                     is_safe,
                                 }),
@@ -368,18 +367,14 @@ impl Node {
                                 named_args: named_args.clone(),
                             }),
                             alternative: related_node(NodeVariant::MethodCall {
-                                prefix: dot_prefix_tmp_ref,
+                                prefix: prefix_ref,
                                 method_name: suffix,
                                 is_safe,
                                 positional_args,
                                 named_args,
                             }),
                         });
-                        NodeVariant::WithTemporary {
-                            id: dot_prefix_tmp,
-                            value: prefix,
-                            body: type_condition,
-                        }
+                        NodeVariant::Let { id: prefix_id, value: prefix, r#in: type_condition }
                     }
                     _ => NodeVariant::FunCall {
                         callee: Box::new(Self::lower_lkql_node(&name, ctx)?),

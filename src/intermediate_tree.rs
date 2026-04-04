@@ -264,17 +264,17 @@ pub enum NodeVariant {
     // --- Lambda function access
     LambdaFun(u16),
 
-    // --- Temporary values
-    /// Create a referenceable temporary value, possibly usable in the
-    /// associated body.
-    /// This node may be used to avoid multiple computation of the same value.
-    WithTemporary {
+    // --- Let expression
+    /// This node should be used to introduce an identified value in the tree.
+    /// The provided value is going to be evaluated once an may be referenced
+    /// elsewhere in the sub-tree with the [`Self::Read`] node variant.
+    Let {
         id: usize,
         value: Box<Node>,
-        body: Box<Node>,
+        r#in: Box<Node>,
     },
-    /// Read the temporary value identified by the provided [`usize`].
-    ReadTemporary(usize),
+    /// Read the value identified by the provided [`usize`].
+    Read(usize),
 
     // --- Type checkers
     /// This node evaluates to `true` at runtime if the sub-expression is an
@@ -457,17 +457,15 @@ impl Node {
             NodeVariant::LambdaFun(child_index) => {
                 ("LambdaFun", vec![("child_index", child_index.to_string())])
             }
-            NodeVariant::WithTemporary { id, value, body } => (
-                "WithTemporary",
+            NodeVariant::Let { id, value, r#in } => (
+                "Let",
                 vec![
                     ("id", format!("\"{id}\"")),
                     ("value", value.pretty_print(child_level)),
-                    ("body", body.pretty_print(child_level)),
+                    ("in", r#in.pretty_print(child_level)),
                 ],
             ),
-            NodeVariant::ReadTemporary(name) => {
-                ("ReadTemporary", vec![("name", format!("\"{name}\""))])
-            }
+            NodeVariant::Read(id) => ("Read", vec![("id", format!("\"{id}\""))]),
             NodeVariant::InstanceOf { expression, expected_type } => (
                 "InstanceOf",
                 vec![

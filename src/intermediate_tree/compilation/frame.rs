@@ -23,8 +23,8 @@ pub struct Frame {
     /// related to its data.
     pub bindings: HashMap<String, BindingData>,
 
-    /// A map storing temporary values, mapping them to their slot.
-    pub temporaries: HashMap<usize, u8>,
+    /// A map storing value stored by "let-in" nodes.
+    pub let_values: HashMap<usize, u8>,
 
     /// Variant part of the frame, containing additional information.
     pub variant: FrameVariant,
@@ -65,7 +65,7 @@ impl Frame {
         Frame {
             parent_frame,
             bindings: HashMap::new(),
-            temporaries: HashMap::new(),
+            let_values: HashMap::new(),
             variant: FrameVariant::Semantic {
                 occupied_slots: [false; u8::MAX as usize],
                 maximum_size: 0,
@@ -81,7 +81,7 @@ impl Frame {
         Frame {
             parent_frame: Some(parent_frame),
             bindings: HashMap::new(),
-            temporaries: HashMap::new(),
+            let_values: HashMap::new(),
             variant: FrameVariant::Lexical,
         }
     }
