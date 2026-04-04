@@ -132,7 +132,7 @@ impl ExecutionContext {
 
         // Lower the parsing tree
         time_point = Instant::now();
-        let lowering_tree = ExecutionUnit::lower_lkql_node(source, &root)?;
+        let lowering_tree = ExecutionUnit::lower_lkql_node(self, source, &root)?;
         self.get_timings_for_source(source).lowering = time_point.elapsed();
 
         // If required, display the lowered tree

@@ -2,6 +2,7 @@
 //! to an intermediate representation.
 
 use crate::{
+    ExecutionContext,
     builtins::{
         traits,
         types::{self},
@@ -33,8 +34,12 @@ impl ExecutionUnit {
     ///
     /// If there is errors during the lowering of LKQL source, this function
     /// returns a [`Result::Err`] which contains all diagnostics.
-    pub fn lower_lkql_node(source: SourceId, node: &LkqlNode) -> Result<Self, Report> {
-        let mut lowering_context = LoweringContext::new(source);
+    pub fn lower_lkql_node(
+        execution_context: &ExecutionContext,
+        source: SourceId,
+        node: &LkqlNode,
+    ) -> Result<Self, Report> {
+        let mut lowering_context = LoweringContext::new(execution_context, source);
         let res = Self::internal_lower_lkql_node(node, &mut lowering_context)?;
         if lowering_context.diagnostics.is_empty() {
             Ok(res)
@@ -719,12 +724,15 @@ impl SourceSection {
     }
 }
 
-struct LoweringContext {
+struct LoweringContext<'a> {
+    /// Execution context the lowering takes place in.
+    execution_context: &'a ExecutionContext,
+
     /// The source that is currently being lowered.
     lowered_source: SourceId,
 
     /// Map each function declaration node to the "child index" of its produced
-    /// [`Function`] object.
+    /// [`ExecutionUnit`] object.
     child_index_map: HashMap<LkqlNode, u16>,
 
     /// Counter of encountered lambdas, used for naming them.
@@ -734,16 +742,20 @@ struct LoweringContext {
     /// execution units.
     lazy_comprehension_counter: usize,
 
-    /// Counter of created "named" temporary values.
+    /// Counter of created temporary values.
     tmp_counter: usize,
 
     /// The list of diagnostics emitted during the lowering.
     diagnostics: Vec<Report>,
 }
 
-impl LoweringContext {
-    pub fn new(lowered_source: SourceId) -> Self {
+impl<'a> LoweringContext<'a> {
+    pub fn new<'b>(execution_context: &'b ExecutionContext, lowered_source: SourceId) -> Self
+    where
+        'b: 'a,
+    {
         Self {
+            execution_context,
             lowered_source,
             child_index_map: HashMap::new(),
             lambda_counter: 0,
