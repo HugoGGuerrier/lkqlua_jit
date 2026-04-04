@@ -415,17 +415,21 @@ impl Node {
                 };
                 NodeVariant::IndexExpr {
                     indexed_val: Box::new(Self::lower_lkql_node(&coll_expr?, ctx)?.with_wrapper(
-                        |indexed_val| NodeVariant::RequireTrait {
-                            expression: Box::new(indexed_val),
-                            required_trait: &traits::indexable::TRAIT,
+                        |indexed_val| {
+                            Ok(NodeVariant::RequireTrait {
+                                expression: Box::new(indexed_val),
+                                required_trait: &traits::indexable::TRAIT,
+                            })
                         },
-                    )),
+                    )?),
                     index: Box::new(Self::lower_lkql_node(&index?, ctx)?.with_wrapper(|i| {
-                        NodeVariant::RequireType {
-                            expression: Box::new(i),
-                            expected_type: &types::int::TYPE,
-                        }
-                    })),
+                        Ok({
+                            NodeVariant::RequireType {
+                                expression: Box::new(i),
+                                expected_type: &types::int::TYPE,
+                            }
+                        })
+                    })?),
                     is_safe,
                 }
             }
@@ -435,11 +439,11 @@ impl Node {
                 value: Box::new(Self::lower_lkql_node(&in_clause.f_value_expr()?, ctx)?),
                 collection: Box::new(
                     Self::lower_lkql_node(&in_clause.f_list_expr()?, ctx)?.with_wrapper(|n| {
-                        NodeVariant::RequireTrait {
+                        Ok(NodeVariant::RequireTrait {
                             expression: Box::new(n),
                             required_trait: &traits::iterable::TRAIT,
-                        }
-                    }),
+                        })
+                    })?,
                 ),
             },
 
@@ -473,7 +477,6 @@ impl Node {
                     }
                 }
                 NodeVariant::BlockExpr {
-                    local_symbols: all_local_symbols(node, ctx)?,
                     body,
                     val: Box::new(Self::lower_lkql_node(&block_expr.f_expr()?, ctx)?),
                 }
@@ -499,10 +502,12 @@ impl Node {
                     })
                     .map(|n| Self::lower_lkql_node(&n?.unwrap(), ctx))
                     .map(|n| {
-                        Ok(n?.with_wrapper(|coll_expr| NodeVariant::RequireTrait {
-                            expression: Box::new(coll_expr),
-                            required_trait: &traits::iterable::TRAIT,
-                        }))
+                        n?.with_wrapper(|coll_expr| {
+                            Ok(NodeVariant::RequireTrait {
+                                expression: Box::new(coll_expr),
+                                required_trait: &traits::iterable::TRAIT,
+                            })
+                        })
                     })
                     .collect::<Result<_, Report>>()?,
                 body_index: *ctx.child_index_map.get(&node).unwrap(),
@@ -621,20 +626,32 @@ impl Node {
             _ => panic!("{} is not handled by the lowering phase", node.image()?),
         };
 
-        // Finally return the resulting node
-        Ok(Node { origin_location, variant })
+        // Create the result node
+        let lowered_node = Node { origin_location, variant };
+
+        // Return the result node, potentially wrapped in a lexical scope
+        Ok(if has_lexical_scope(node) {
+            lowered_node.with_wrapper(|n| {
+                Ok(NodeVariant::InLexicalScope {
+                    local_symbols: all_local_symbols(node, ctx)?,
+                    expr: Box::new(n),
+                })
+            })?
+        } else {
+            lowered_node
+        })
     }
 
     /// Wrap the current node using the provided wrapper creation function,
     /// propagating all information in the current node to the wrapper.
-    fn with_wrapper<F>(self, create_wrapper: F) -> Self
+    fn with_wrapper<F>(self, create_wrapper: F) -> Result<Self, Report>
     where
-        F: Fn(Self) -> NodeVariant,
+        F: Fn(Self) -> Result<NodeVariant, Report>,
     {
-        Node {
+        Ok(Node {
             origin_location: self.origin_location.clone(),
-            variant: create_wrapper(self),
-        }
+            variant: create_wrapper(self)?,
+        })
     }
 }
 
@@ -780,6 +797,15 @@ impl<'a> LoweringContext<'a> {
         let res = self.tmp_counter;
         self.tmp_counter += 1;
         res
+    }
+}
+
+/// Util function to get whether the provided LKQL parsing node introduce a
+/// new lexical scope.
+fn has_lexical_scope(node: &LkqlNode) -> bool {
+    match node {
+        LkqlNode::BlockExpr(_) => true,
+        _ => false,
     }
 }
 

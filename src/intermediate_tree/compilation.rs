@@ -538,21 +538,13 @@ impl Node {
                 alternative.compile_as_value(ctx, result_slot);
                 ctx.instructions.label(next_label);
             }
-            NodeVariant::BlockExpr { local_symbols, body, val } => {
+            NodeVariant::BlockExpr { body, val } => {
                 // Compile the block body
-                let parent_frame = Self::compile_block_body(ctx, result_slot, local_symbols, body);
+                Self::compile_block_body(ctx, result_slot, body);
 
                 // Then compile the expression representing the value of the
                 // block.
                 val.compile_as_value(ctx, result_slot);
-
-                // Release the block local bindings
-                let death_label = ctx.instructions.new_label();
-                ctx.release_locals(death_label);
-                ctx.instructions.label(death_label);
-
-                // Finally, restore the previous frame as the current one
-                ctx.frame = parent_frame;
             }
 
             // --- Lazy comprehension
@@ -754,6 +746,13 @@ impl Node {
                     operand_access.slot() as u16,
                 );
                 operand_access.release(ctx);
+            }
+
+            // --- Lexical scope introduction
+            NodeVariant::InLexicalScope { local_symbols, expr } => {
+                Self::open_lexical_frame(ctx, local_symbols);
+                expr.compile_as_value(ctx, result_slot);
+                Self::close_lexical_frame(ctx);
             }
 
             // --- Symbol introduction
@@ -1141,6 +1140,13 @@ impl Node {
                 ValueAccess::OwnedTmp(call_slots.first)
             }
 
+            NodeVariant::InLexicalScope { local_symbols, expr } => {
+                Self::open_lexical_frame(ctx, local_symbols);
+                let res = expr.compile_as_access(ctx, already_reserved_slot);
+                Self::close_lexical_frame(ctx);
+                res
+            }
+
             NodeVariant::ReadSymbol(identifier) => {
                 let maybe_local_binding = ctx.frame.borrow().get_local(&identifier.text);
                 if let Some(BindingData { slot, is_init: true, .. }) = maybe_local_binding {
@@ -1342,6 +1348,12 @@ impl Node {
                     }
                 }
 
+                NodeVariant::InLexicalScope { local_symbols, expr } => {
+                    Node::open_lexical_frame(ctx, local_symbols);
+                    internal_compile(expr, ctx, if_true_label, if_false_label, branching_kind);
+                    Node::close_lexical_frame(ctx);
+                }
+
                 NodeVariant::InstanceOf { expression, expected_type } => {
                     // Compile the expression
                     let expression_access = expression.compile_as_access(ctx, None);
@@ -1530,23 +1542,22 @@ impl Node {
             }
 
             // In the case of a block expression, compile its result as return
-            NodeVariant::BlockExpr { local_symbols, body, val } => {
+            NodeVariant::BlockExpr { body, val } => {
                 // Compile the block body
                 let body_elem_tmp = ctx.frame.borrow_mut().get_tmp();
-                let parent_frame =
-                    Self::compile_block_body(ctx, body_elem_tmp, local_symbols, body);
+                Self::compile_block_body(ctx, body_elem_tmp, body);
                 ctx.frame.borrow_mut().release_slot(body_elem_tmp);
 
                 // The compile the value as a returning node
                 val.compile_as_function_body(ctx);
+            }
 
-                // Release the block local bindings
-                let death_label = ctx.instructions.new_label();
-                ctx.release_locals(death_label);
-                ctx.instructions.label(death_label);
-
-                // Finally, restore the previous frame as the current one
-                ctx.frame = parent_frame;
+            // In the case of a new lexical scope, the wrapped expression is
+            // optimized.
+            NodeVariant::InLexicalScope { local_symbols, expr } => {
+                Self::open_lexical_frame(ctx, local_symbols);
+                expr.compile_as_function_body(ctx);
+                Self::close_lexical_frame(ctx);
             }
 
             // In the case of a `nil` literal, return nothing
@@ -1787,17 +1798,10 @@ impl Node {
         }
     }
 
-    /// Util function used to compile the body part of a block expression. Note
-    /// that this function is opening a new frame and filling it with block
-    /// locals without freeing it.
-    /// This function returns the parent frame for the caller to restore the
-    /// previous compilation context.
-    fn compile_block_body(
-        ctx: &mut CompilationContext,
-        working_slot: u8,
-        local_symbols: &Vec<Identifier>,
-        body: &Vec<Node>,
-    ) -> Rc<RefCell<Frame>> {
+    /// Util function to open a new lexical frame, initialize it with all its
+    /// local bindings, and return a reference to its parent frame for the
+    /// caller to restore the previous state.
+    fn open_lexical_frame(ctx: &mut CompilationContext, local_symbols: &Vec<Identifier>) {
         // Open a new lexical frame that will contains all symbols
         // declared in the block.
         let parent_frame = ctx.frame.clone();
@@ -1806,7 +1810,28 @@ impl Node {
 
         // Insert all locals in the frame
         ctx.declare_locals(local_symbols);
+    }
 
+    /// Util function to close the currently opened lexical frame. This
+    /// function release all bindings of the current frame and restore the
+    /// parent one.
+    /// This function panics if the current frame isn't a lexical one.
+    fn close_lexical_frame(ctx: &mut CompilationContext) {
+        // Ensure the current frame is a lexical one
+        assert!(matches!(ctx.frame.borrow().variant, FrameVariant::Lexical));
+
+        // Release the block local bindings
+        let death_label = ctx.instructions.new_label();
+        ctx.release_locals(death_label);
+        ctx.instructions.label(death_label);
+
+        // Finally, restore the previous frame as the current one
+        let parent_frame = ctx.frame.borrow().parent_frame.clone().unwrap();
+        ctx.frame = parent_frame;
+    }
+
+    /// Util function to compile the body of a block expression.
+    fn compile_block_body(ctx: &mut CompilationContext, working_slot: u8, body: &Vec<Node>) {
         // Compile the body of the block
         for body_elem in body {
             let elem_access = body_elem.compile_as_access(ctx, Some(working_slot));
@@ -1817,9 +1842,6 @@ impl Node {
 
             elem_access.release(ctx);
         }
-
-        // Return the parent frame
-        parent_frame
     }
 
     /// Util function factorizing the compilation process of a (potentially

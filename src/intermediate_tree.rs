@@ -203,7 +203,6 @@ pub enum NodeVariant {
         alternative: Box<Node>,
     },
     BlockExpr {
-        local_symbols: Vec<Identifier>,
         body: Vec<Node>,
         val: Box<Node>,
     },
@@ -244,8 +243,15 @@ pub enum NodeVariant {
         operand: Box<Node>,
     },
 
+    // --- Lexical scope introduction
+    /// Introduce a lexical scope in the tree.
+    InLexicalScope {
+        local_symbols: Vec<Identifier>,
+        expr: Box<Node>,
+    },
+
     // --- Symbol introduction
-    /// Standard local symbol initialization
+    /// Standard local symbol initialization.
     InitLocal {
         symbol: Identifier,
         val: Box<Node>,
@@ -370,13 +376,9 @@ impl Node {
                     ("alternative", alternative.pretty_print(child_level)),
                 ],
             ),
-            NodeVariant::BlockExpr { local_symbols, body, val } => (
+            NodeVariant::BlockExpr { body, val } => (
                 "BlockExpr",
                 vec![
-                    (
-                        "locals",
-                        format!("{:?}", local_symbols.iter().map(|i| &i.text).collect::<Vec<_>>()),
-                    ),
                     ("body", Self::pretty_print_vec(body, child_level)),
                     ("val", val.pretty_print(child_level)),
                 ],
@@ -432,6 +434,16 @@ impl Node {
                 vec![
                     ("operator", operator.to_string()),
                     ("operand", operand.pretty_print(child_level)),
+                ],
+            ),
+            NodeVariant::InLexicalScope { local_symbols, expr } => (
+                "InLexicalScope",
+                vec![
+                    (
+                        "symbols",
+                        format!("{:?}", local_symbols.iter().map(|i| &i.text).collect::<Vec<_>>()),
+                    ),
+                    ("expr", expr.pretty_print(child_level)),
                 ],
             ),
             NodeVariant::InitLocal { symbol, val } => (
