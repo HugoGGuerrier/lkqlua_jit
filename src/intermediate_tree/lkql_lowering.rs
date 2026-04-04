@@ -825,7 +825,7 @@ fn all_local_decls(node: &LkqlNode, output: &mut Vec<LkqlNode>) -> Result<(), Re
     for maybe_child in node {
         if let Some(child) = maybe_child? {
             match child {
-                LkqlNode::TopLevelList(_) => (),
+                // Symbol introducing nodes
                 LkqlNode::ValDecl(_) => {
                     all_local_decls(&child, output)?;
                     output.push(child);
@@ -833,9 +833,14 @@ fn all_local_decls(node: &LkqlNode, output: &mut Vec<LkqlNode>) -> Result<(), Re
                 LkqlNode::FunDecl(_) => output.push(child),
                 LkqlNode::SelectorDecl(_) => output.push(child),
                 LkqlNode::Import(_) => output.push(child),
-                LkqlNode::AnonymousFunction(_)
+
+                // Recursion bounds
+                LkqlNode::TopLevelList(_)
+                | LkqlNode::AnonymousFunction(_)
                 | LkqlNode::ListComprehension(_)
                 | LkqlNode::BlockExpr(_) => (),
+
+                // Default case, explore all children
                 _ => all_local_decls(&child, output)?,
             }
         }
@@ -849,24 +854,27 @@ fn all_local_decls(node: &LkqlNode, output: &mut Vec<LkqlNode>) -> Result<(), Re
 /// This function relies on [`all_local_decls`] to compute its result, meaning
 /// that all concepts described in the latter's doc are true for this function.
 fn all_local_symbols(node: &LkqlNode, ctx: &LoweringContext) -> Result<Vec<Identifier>, Report> {
+    // Declare working vectors and get all local declarations
     let mut local_decls = Vec::new();
+    let mut local_symbols = Vec::new();
     all_local_decls(node, &mut local_decls)?;
-    Ok(local_decls
-        .iter()
-        .map(|n| -> Result<Identifier, Report> {
-            let text = match n {
+
+    // For each declaration, create an identifier
+    for decl in &local_decls {
+        local_symbols.push(Identifier {
+            text: match decl {
                 LkqlNode::ValDecl(vd) => vd.f_identifier()?.text()?,
                 LkqlNode::FunDecl(fd) => fd.f_name()?.text()?,
                 LkqlNode::SelectorDecl(sd) => sd.f_name()?.text()?,
                 LkqlNode::Import(i) => i.f_name()?.text()?,
                 _ => unreachable!(),
-            };
-            Ok(Identifier {
-                origin_location: SourceSection::from_lkql_node(ctx.lowered_source, n)?,
-                text,
-            })
-        })
-        .collect::<Result<_, _>>()?)
+            },
+            origin_location: SourceSection::from_lkql_node(ctx.lowered_source, decl)?,
+        });
+    }
+
+    // Finally, return all symbols in the node
+    Ok(local_symbols)
 }
 
 /// Util function to find all execution units in the local environment of the
