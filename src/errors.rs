@@ -93,11 +93,18 @@ pub const MISSING_TRAIT: ErrorTemplate = ErrorTemplate {
     message_template: "Trait \"{}\" is required, the type \"{}\" isn't implementing it",
 };
 
+/// Error when encountering an unknown node type name.
+pub const UNKNOWN_NODE_TYPE: ErrorTemplate = ErrorTemplate {
+    id: MISSING_TRAIT.id + 1,
+    title: "Unknown node type",
+    message_template: "Cannot find the \"{}\" node type",
+};
+
 // --- Module related errors
 
 /// Error when a module file cannot be located.
 pub const MODULE_NOT_FOUND: ErrorTemplate = ErrorTemplate {
-    id: MISSING_TRAIT.id + 1,
+    id: UNKNOWN_NODE_TYPE.id + 1,
     title: "Module file not found",
     message_template: "Impossible to locate the file corresponding to the module \"{}\"",
 };
@@ -156,6 +163,7 @@ pub const ERROR_TEMPLATE_REPOSITORY: &[&ErrorTemplate] = &[
     &WRONG_TYPE,
     &WRONG_PARAM_TYPE,
     &MISSING_TRAIT,
+    &UNKNOWN_NODE_TYPE,
     &MODULE_NOT_FOUND,
     &AMBIGUOUS_IMPORT,
     &DEPENDENCY_CYCLE,

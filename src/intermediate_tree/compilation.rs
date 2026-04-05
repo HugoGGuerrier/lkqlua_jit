@@ -920,7 +920,7 @@ impl Node {
             }
 
             // --- Type checkers
-            NodeVariant::InstanceOf { expression, expected_type } => {
+            NodeVariant::InstanceOf { expression, expected_type_tag } => {
                 // Get an access to the tested expression
                 let expression_access = expression.compile_as_access(ctx, None);
 
@@ -934,7 +934,7 @@ impl Node {
                     ctx,
                     Some(&self.origin_location),
                     expression_access.slot(),
-                    expected_type,
+                    *expected_type_tag,
                     next_label,
                     false,
                 );
@@ -1354,7 +1354,7 @@ impl Node {
                     Node::close_lexical_frame(ctx);
                 }
 
-                NodeVariant::InstanceOf { expression, expected_type } => {
+                NodeVariant::InstanceOf { expression, expected_type_tag } => {
                     // Compile the expression
                     let expression_access = expression.compile_as_access(ctx, None);
 
@@ -1367,7 +1367,7 @@ impl Node {
                         ctx,
                         Some(&node.origin_location),
                         expression_access.slot(),
-                        expected_type,
+                        *expected_type_tag,
                         target_label,
                         reverse_check,
                     );
@@ -2256,7 +2256,14 @@ fn emit_type_requirement(
     let next_label = ctx.instructions.new_label();
 
     // Emit the type checking part
-    emit_type_check(ctx, maybe_origin_location, value_slot, required_type, next_label, false);
+    emit_type_check(
+        ctx,
+        maybe_origin_location,
+        value_slot,
+        required_type.tag,
+        next_label,
+        false,
+    );
 
     // Now emit the code to raise a runtime error in the case where type tags
     // don't match.
@@ -2329,7 +2336,7 @@ fn emit_type_check(
     ctx: &mut CompilationContext,
     maybe_origin_location: Option<&SourceSection>,
     value_slot: u8,
-    checked_type: &BuiltinType,
+    checked_type_tag: i32,
     target_label: Label,
     reverse_check: bool,
 ) {
@@ -2344,7 +2351,7 @@ fn emit_type_check(
         maybe_origin_location,
         check_res_tmp,
         tags_tmp,
-        checked_type.tag as usize,
+        checked_type_tag as usize,
     );
     ctx.instructions.ad_maybe_loc(
         maybe_origin_location,

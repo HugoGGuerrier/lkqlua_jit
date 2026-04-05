@@ -9,6 +9,7 @@ use crate::{
     },
     errors::{
         AMBIGUOUS_IMPORT, MODULE_NOT_FOUND, POS_AFTER_NAMED_ARGUMENT, PREVIOUS_NAMED_ARG_HINT,
+        UNKNOWN_NODE_TYPE,
     },
     intermediate_tree::{
         ArithOperator, ArithOperatorVariant, CompOperator, CompOperatorVariant, ExecutionUnit,
@@ -355,7 +356,7 @@ impl Node {
                         let type_condition = related_node(NodeVariant::IfExpr {
                             condition: related_node(NodeVariant::InstanceOf {
                                 expression: prefix_ref.clone(),
-                                expected_type: &types::namespace::TYPE,
+                                expected_type_tag: types::namespace::TYPE.tag,
                             }),
                             consequence: related_node(NodeVariant::FunCall {
                                 callee: related_node(NodeVariant::DottedExpr {
@@ -446,6 +447,20 @@ impl Node {
                     })?,
                 ),
             },
+
+            // --- Is clause
+            LkqlNode::IsClause(is_clause) => {
+                let value_id = ctx.new_tmp_id();
+                NodeVariant::Let {
+                    id: value_id,
+                    value: Box::new(Self::lower_lkql_node(ctx, &is_clause.f_node_expr()?)?),
+                    r#in: Box::new(Self::lower_lkql_pattern(
+                        ctx,
+                        &is_clause.f_pattern()?,
+                        value_id,
+                    )?),
+                }
+            }
 
             // --- If expression
             LkqlNode::CondExpr(cond_expr) => NodeVariant::IfExpr {
@@ -642,6 +657,189 @@ impl Node {
         })
     }
 
+    /// Lower the provided pattern node into a intermediate tree node that
+    /// expresses the matching logic.
+    /// The provided `matched_value_ref` should be the "let id" pointing to
+    /// the value to match.
+    fn lower_lkql_pattern(
+        ctx: &mut LoweringContext,
+        node: &LkqlNode,
+        matched_value_ref: usize,
+    ) -> Result<Self, Report> {
+        // Special handling of the parenthesized pattern
+        if let LkqlNode::ParenPattern(parent_pattern) = node {
+            return Self::lower_lkql_pattern(ctx, &parent_pattern.f_pattern()?, matched_value_ref);
+        }
+
+        // Get the location of the pattern node
+        let loc = SourceSection::from_lkql_node(ctx.lowered_source, node)?;
+
+        // Util function used to create a node related to the one currently
+        // lowered. The result node is wrapped in a Box and has the same origin
+        // location os the current one.
+        let related_node =
+            |variant: NodeVariant| Box::new(Node { origin_location: loc.clone(), variant });
+
+        // Create a node to read the matched value
+        let read_value = related_node(NodeVariant::Read(matched_value_ref));
+
+        // Lower the pattern not to an intermediate tree node variant
+        let variant = match node {
+            // --- Simple value patterns
+            LkqlNode::UniversalPattern(_) => NodeVariant::BoolLiteral(true),
+            LkqlNode::NullPattern(_)
+            | LkqlNode::BoolPatternTrue(_)
+            | LkqlNode::BoolPatternFalse(_)
+            | LkqlNode::IntegerPattern(_) => {
+                let target_literal = match node {
+                    LkqlNode::NullPattern(_) => NodeVariant::NullLiteral,
+                    LkqlNode::BoolPatternTrue(_) => NodeVariant::BoolLiteral(true),
+                    LkqlNode::BoolPatternFalse(_) => NodeVariant::BoolLiteral(false),
+                    LkqlNode::IntegerPattern(int_pattern) => {
+                        NodeVariant::IntLiteral(int_pattern.text()?)
+                    }
+                    _ => unreachable!(),
+                };
+                NodeVariant::CompBinOp {
+                    left: read_value,
+                    operator: CompOperator {
+                        origin_location: loc.clone(),
+                        variant: CompOperatorVariant::Equals,
+                    },
+                    right: related_node(target_literal),
+                }
+            }
+            LkqlNode::NodeKindPattern(node_kind_pattern) => {
+                let node_type_name = node_kind_pattern.f_kind_name()?.text()?;
+                let matched_node_type = ctx
+                    .execution_context
+                    .engine
+                    .analysis_lib
+                    .node_types
+                    .get_type_by_name(&node_type_name);
+                if let Some(node_type) = matched_node_type {
+                    NodeVariant::InstanceOf {
+                        expression: read_value,
+                        expected_type_tag: node_type.tag,
+                    }
+                } else {
+                    ctx.diagnostics.push(Report::from_error_template(
+                        &loc,
+                        &UNKNOWN_NODE_TYPE,
+                        &vec![&node_type_name],
+                    ));
+                    NodeVariant::BoolLiteral(false)
+                }
+            }
+
+            // --- Not pattern
+            LkqlNode::NotPattern(not_pattern) => NodeVariant::LogicUnOp {
+                operator: LogicOperator {
+                    origin_location: loc.clone(),
+                    variant: LogicOperatorVariant::Not,
+                },
+                operand: Box::new(Self::lower_lkql_pattern(
+                    ctx,
+                    &not_pattern.f_pattern()?,
+                    matched_value_ref,
+                )?),
+            },
+
+            // --- Or pattern
+            LkqlNode::OrPattern(or_pattern) => NodeVariant::LogicBinOp {
+                left: Box::new(Self::lower_lkql_pattern(
+                    ctx,
+                    &or_pattern.f_left()?,
+                    matched_value_ref,
+                )?),
+                operator: LogicOperator {
+                    origin_location: loc.clone(),
+                    variant: LogicOperatorVariant::Or,
+                },
+                right: Box::new(Self::lower_lkql_pattern(
+                    ctx,
+                    &or_pattern.f_right()?,
+                    matched_value_ref,
+                )?),
+            },
+
+            // --- Complex pattern
+            LkqlNode::ComplexPattern(complex_pattern) => {
+                // Lower the binding as a local initialization
+                let binding_in_vec = complex_pattern
+                    .f_binding()?
+                    .map(|b| {
+                        Ok::<Self, Report>(Self {
+                            origin_location: SourceSection::from_lkql_node(ctx.lowered_source, &b)?,
+                            variant: NodeVariant::InitLocal {
+                                symbol: Identifier::from_lkql_node(&b, ctx)?,
+                                val: read_value,
+                            },
+                        })
+                    })
+                    .transpose()?
+                    .into_iter()
+                    .collect::<Vec<_>>();
+
+                // Collect all checks in a vector
+                let mut matching_elems = Vec::new();
+
+                // Lower the value pattern
+                if let Some(pattern) = complex_pattern.f_pattern()? {
+                    matching_elems.push(Self::lower_lkql_pattern(ctx, &pattern, matched_value_ref)?)
+                }
+
+                // Lower the predicate
+                if let Some(predicate) = complex_pattern.f_predicate()? {
+                    matching_elems.push(Self::lower_lkql_node(ctx, &predicate)?);
+                }
+
+                // Compose all checks in a sequence of binary operations
+                let matching_logic_node = match matching_elems.len() {
+                    0 => related_node(NodeVariant::BoolLiteral(true)),
+                    1 => Box::new(matching_elems.remove(0)),
+                    _ => {
+                        let mut iter = matching_elems.into_iter().rev();
+                        let init = Box::new(iter.next().unwrap());
+                        iter.fold(init, |res, next| {
+                            related_node(NodeVariant::LogicBinOp {
+                                left: Box::new(next),
+                                operator: LogicOperator {
+                                    origin_location: loc.clone(),
+                                    variant: LogicOperatorVariant::And,
+                                },
+                                right: res,
+                            })
+                        })
+                    }
+                };
+
+                // Finally, return the lowered complex pattern
+                if binding_in_vec.is_empty() {
+                    matching_logic_node.variant
+                } else {
+                    NodeVariant::BlockExpr { body: binding_in_vec, val: matching_logic_node }
+                }
+            }
+            _ => unreachable!(),
+        };
+
+        // Create the result node
+        let lowered_node = Node { origin_location: loc, variant };
+
+        // Return the result node, potentially wrapped in a lexical scope
+        Ok(if has_lexical_scope(node) {
+            lowered_node.with_wrapper(|n| {
+                Ok(NodeVariant::InLexicalScope {
+                    local_symbols: all_local_symbols(node, ctx)?,
+                    expr: Box::new(n),
+                })
+            })?
+        } else {
+            lowered_node
+        })
+    }
+
     /// Wrap the current node using the provided wrapper creation function,
     /// propagating all information in the current node to the wrapper.
     fn with_wrapper<F>(self, create_wrapper: F) -> Result<Self, Report>
@@ -804,7 +1002,7 @@ impl<'a> LoweringContext<'a> {
 /// new lexical scope.
 fn has_lexical_scope(node: &LkqlNode) -> bool {
     match node {
-        LkqlNode::BlockExpr(_) => true,
+        LkqlNode::BlockExpr(_) | LkqlNode::IsClause(_) => true,
         _ => false,
     }
 }
@@ -824,7 +1022,7 @@ fn has_lexical_scope(node: &LkqlNode) -> bool {
 fn all_local_decls(node: &LkqlNode, output: &mut Vec<LkqlNode>) -> Result<(), Report> {
     for maybe_child in node {
         if let Some(child) = maybe_child? {
-            match child {
+            match &child {
                 // Symbol introducing nodes
                 LkqlNode::ValDecl(_) => {
                     all_local_decls(&child, output)?;
@@ -833,12 +1031,19 @@ fn all_local_decls(node: &LkqlNode, output: &mut Vec<LkqlNode>) -> Result<(), Re
                 LkqlNode::FunDecl(_) => output.push(child),
                 LkqlNode::SelectorDecl(_) => output.push(child),
                 LkqlNode::Import(_) => output.push(child),
+                LkqlNode::ComplexPattern(pattern) => {
+                    all_local_decls(&child, output)?;
+                    if let Some(binding) = pattern.f_binding()? {
+                        output.push(binding);
+                    }
+                }
 
                 // Recursion bounds
                 LkqlNode::TopLevelList(_)
                 | LkqlNode::AnonymousFunction(_)
                 | LkqlNode::ListComprehension(_)
-                | LkqlNode::BlockExpr(_) => (),
+                | LkqlNode::BlockExpr(_)
+                | LkqlNode::IsClause(_) => (),
 
                 // Default case, explore all children
                 _ => all_local_decls(&child, output)?,
@@ -867,6 +1072,7 @@ fn all_local_symbols(node: &LkqlNode, ctx: &LoweringContext) -> Result<Vec<Ident
                 LkqlNode::FunDecl(fd) => fd.f_name()?.text()?,
                 LkqlNode::SelectorDecl(sd) => sd.f_name()?.text()?,
                 LkqlNode::Import(i) => i.f_name()?.text()?,
+                LkqlNode::Identifier(id) => id.text()?,
                 _ => unreachable!(),
             },
             origin_location: SourceSection::from_lkql_node(ctx.lowered_source, decl)?,

@@ -287,7 +287,7 @@ pub enum NodeVariant {
     /// instance of the required type.
     InstanceOf {
         expression: Box<Node>,
-        expected_type: &'static BuiltinType,
+        expected_type_tag: i32,
     },
 
     /// Following nodes emit a runtime error if sub-expression isn't matching
@@ -478,11 +478,11 @@ impl Node {
                 ],
             ),
             NodeVariant::Read(id) => ("Read", vec![("id", format!("\"{id}\""))]),
-            NodeVariant::InstanceOf { expression, expected_type } => (
+            NodeVariant::InstanceOf { expression, expected_type_tag } => (
                 "InstanceOf",
                 vec![
                     ("expression", expression.pretty_print(child_level)),
-                    ("expected_type", expected_type.display_name().to_string()),
+                    ("expected_type", expected_type_tag.to_string()),
                 ],
             ),
             NodeVariant::RequireType { expression, expected_type } => (

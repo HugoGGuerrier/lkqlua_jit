@@ -31,8 +31,8 @@ pub const ANALYSIS_UNITS_GLOBAL_NAME: &str = "value@analysis_units";
 #[derive(Debug)]
 pub struct AnalysisLibrary {
     lua_state: LuaState,
-    pub struct_types: Vec<String>,
-    pub node_types: NodeTypeRepo,
+    pub(crate) struct_types: Vec<String>,
+    pub(crate) node_types: NodeTypeRepo,
 }
 
 impl AnalysisLibrary {
@@ -357,6 +357,11 @@ pub struct NodeTypeRepo {
 impl NodeTypeRepo {
     fn new() -> Self {
         Self { registered_types: Vec::new() }
+    }
+
+    /// Get the node type corresponding to the provided name if any.
+    pub(crate) fn get_type_by_name(&self, type_name: &str) -> Option<&NodeType> {
+        self.registered_types.iter().find(|n| n.name == type_name)
     }
 }
 

@@ -35,8 +35,8 @@ pub const CONTEXT_GLOBAL_NAME: &str = "value@execution_context";
 #[derive(Debug)]
 pub struct Engine {
     lua_state: LuaState,
-    builtin_types: BuiltinTypeRepo,
-    analysis_lib: AnalysisLibrary,
+    pub(crate) builtin_types: BuiltinTypeRepo,
+    pub(crate) analysis_lib: AnalysisLibrary,
 }
 
 impl Drop for Engine {
