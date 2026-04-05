@@ -248,6 +248,9 @@ impl ExecutionUnit {
                         .init_local(&param_id.text, next_label);
                 }
 
+                // Release the named arguments slot
+                ctx.frame.borrow_mut().release_slot(named_args_slot);
+
                 // The compile the body as a returning node
                 body.compile_as_function_body(ctx);
             }
@@ -555,7 +558,6 @@ impl Node {
                 // Then compile all source iterables, placing them in a table
                 // in the same order.
                 let collections_table_slot = ctx.frame.borrow_mut().get_tmp();
-                let collection_slot = ctx.frame.borrow_mut().get_tmp();
                 emit_new_table(
                     ctx,
                     &self.origin_location,
@@ -564,8 +566,7 @@ impl Node {
                     0,
                 );
                 for (i, collection) in source_iterables.iter().enumerate() {
-                    let collection_access =
-                        collection.compile_as_access(ctx, Some(collection_slot));
+                    let collection_access = collection.compile_as_access(ctx, None);
                     emit_table_index_write(
                         ctx,
                         Some(&self.origin_location),
@@ -585,7 +586,6 @@ impl Node {
                     result_slot,
                     lazy_comprehension::COLLECTIONS_FIELD,
                 );
-                ctx.frame.borrow_mut().release_slot(collection_slot);
                 ctx.frame.borrow_mut().release_slot(collections_table_slot);
 
                 // Get the child execution unit representing the comprehension
@@ -1080,17 +1080,13 @@ impl Node {
             already_reserved_slot: Option<u8>,
             node: &Node,
         ) -> ValueAccess {
-            let result_slot = if already_reserved_slot.is_some() {
-                already_reserved_slot.unwrap()
+            let result_access = if let Some(already_reserved) = already_reserved_slot {
+                ValueAccess::BorrowedTmp(already_reserved)
             } else {
-                ctx.frame.borrow_mut().get_tmp()
+                ValueAccess::OwnedTmp(ctx.frame.borrow_mut().get_tmp())
             };
-            node.compile_as_value(ctx, result_slot);
-            if already_reserved_slot.is_some() {
-                ValueAccess::BorrowedTmp(result_slot)
-            } else {
-                ValueAccess::OwnedTmp(result_slot)
-            }
+            node.compile_as_value(ctx, result_access.slot());
+            result_access
         }
 
         match &self.variant {
@@ -2307,8 +2303,8 @@ fn emit_trait_requirement(
     );
     ctx.instructions
         .ad_maybe_loc(maybe_origin_location, IST, 0, trait_res as u16);
-    ctx.goto(next_label);
     ctx.frame.borrow_mut().release_slot(trait_res);
+    ctx.goto(next_label);
 
     // Emit instructions to raise a runtime error
     let type_name = ctx.frame.borrow_mut().get_tmp();
@@ -2322,6 +2318,7 @@ fn emit_trait_requirement(
             ErrorInstanceArg::LocalValue(type_name),
         ],
     );
+    ctx.frame.borrow_mut().release_slot(type_name);
 
     // Finally label the next instructions
     ctx.instructions.label(next_label);
@@ -2341,29 +2338,25 @@ fn emit_type_check(
     reverse_check: bool,
 ) {
     // First get the type tag of the actual value
-    let tags_tmp = ctx.frame.borrow_mut().get_tmp();
-    let check_res_tmp = ctx.frame.borrow_mut().get_tmp();
-    emit_table_member_read(ctx, maybe_origin_location, tags_tmp, value_slot, TYPE_TAGS_FIELD);
+    let working_tmp = ctx.frame.borrow_mut().get_tmp();
+    emit_table_member_read(ctx, maybe_origin_location, working_tmp, value_slot, TYPE_TAGS_FIELD);
 
     // Then get if the tags table contains the checked type
     emit_table_index_read(
         ctx,
         maybe_origin_location,
-        check_res_tmp,
-        tags_tmp,
+        working_tmp,
+        working_tmp,
         checked_type_tag as usize,
     );
     ctx.instructions.ad_maybe_loc(
         maybe_origin_location,
         if reverse_check { ISF } else { IST },
         0,
-        check_res_tmp as u16,
+        working_tmp as u16,
     );
+    ctx.frame.borrow_mut().release_slot(working_tmp);
     ctx.goto(target_label);
-
-    // Release temporary slots
-    ctx.frame.borrow_mut().release_slot(tags_tmp);
-    ctx.frame.borrow_mut().release_slot(check_res_tmp);
 }
 
 /// Emit, if required, the instruction to close local values in the current
