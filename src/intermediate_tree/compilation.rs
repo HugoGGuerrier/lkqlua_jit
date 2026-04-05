@@ -5,7 +5,8 @@
 
 use crate::{
     builtins::{
-        LKQL_IMPORT_GLOBAL_NAME, UNIT_SINGLETON_GLOBAL_NAME, get_builtin_bindings,
+        LKQL_IMPORT_GLOBAL_NAME, NULL_SINGLETON_GLOBAL_NAME, UNIT_SINGLETON_GLOBAL_NAME,
+        get_builtin_bindings,
         traits::{BuiltinTrait, iterable::ITERATOR_FIELD},
         types::{
             self, BuiltinType, TYPE_NAME_FIELD, TYPE_TAGS_FIELD, TypeImplementation, namespace,
@@ -1891,7 +1892,12 @@ impl ConstantValue {
     fn try_to_compile(&self, ctx: &mut CompilationContext, result_slot: u8) -> bool {
         match &self.variant {
             ConstantValueVariant::Null => {
-                emit_global_read(ctx, Some(&self.origin_location), result_slot, "<lkql_null>");
+                emit_global_read(
+                    ctx,
+                    Some(&self.origin_location),
+                    result_slot,
+                    NULL_SINGLETON_GLOBAL_NAME,
+                );
                 true
             }
             ConstantValueVariant::Unit => {

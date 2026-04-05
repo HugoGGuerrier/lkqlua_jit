@@ -8,16 +8,19 @@ use std::{cmp::min, ffi::c_int, i32, path::PathBuf};
 
 use crate::{
     Config,
-    builtins::types::{
-        BuiltinType, BuiltinTypeRepo, TYPE_NAME_FIELD, TYPE_TAGS_FIELD, TypeField,
-        TypeImplementation, img_property, list, obj,
+    builtins::{
+        NULL_SINGLETON_GLOBAL_NAME,
+        types::{
+            BuiltinType, BuiltinTypeRepo, TYPE_NAME_FIELD, TYPE_TAGS_FIELD, TypeField,
+            TypeImplementation, img_property, list, obj,
+        },
     },
     engine::LuaValue,
     errors::{ANALYSIS_LIBRARY_ERROR, ErrorInstance, ErrorInstanceArg},
     lua::{
-        LuaState, copy_value, find_in_lua_path, get_field, get_global, get_index, get_length,
-        get_string, load_lua_file, pop, push_bool, push_c_function, push_nil, push_string,
-        push_table, safe_call, set_field, set_global, set_index, set_metatable,
+        LuaState, copy_value, dump_stack, find_in_lua_path, get_field, get_global, get_index,
+        get_length, get_string, load_lua_file, pop, push_bool, push_c_function, push_nil,
+        push_string, push_table, safe_call, set_field, set_global, set_index, set_metatable,
     },
 };
 
@@ -111,6 +114,9 @@ impl AnalysisLibrary {
         for node_type in &node_types.registered_types {
             Self::init_node_type(l, node_type);
         }
+
+        // Set the LKQL "null" value
+        Self::register_null_value(l);
 
         // Finally, register the analysis library error formatter
         Self::register_error_formatter(l);
@@ -333,6 +339,20 @@ impl AnalysisLibrary {
 
         // Cleanup the stack
         pop(l, 3);
+    }
+
+    fn register_null_value(l: LuaState) {
+        // Get the name of the root node type
+        get_global(l, ANALYSIS_LIB_GLOBAL_NAME);
+        get_field(l, -1, "root_node_type");
+        let root_node_type = get_string(l, -1).unwrap();
+        pop(l, 1);
+
+        // Then get the default value of the root node type
+        get_field(l, -1, root_node_type);
+        get_field(l, -1, "_default");
+        set_global(l, NULL_SINGLETON_GLOBAL_NAME);
+        pop(l, 2);
     }
 
     /// Internal helper to setup the error formatting function in the loaded

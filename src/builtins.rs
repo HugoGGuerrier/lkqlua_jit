@@ -18,6 +18,9 @@ pub mod traits;
 pub mod types;
 pub mod utils;
 
+/// Name of the global field where the "null" value is stored.
+pub const NULL_SINGLETON_GLOBAL_NAME: &str = "value@null";
+
 /// Name of the binding leading to the "Unit" singleton.
 pub const UNIT_SINGLETON_GLOBAL_NAME: &str = "value@unit";
 pub fn create_unit_value(l: LuaState) {
