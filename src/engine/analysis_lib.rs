@@ -18,9 +18,9 @@ use crate::{
     engine::LuaValue,
     errors::{ANALYSIS_LIBRARY_ERROR, ErrorInstance, ErrorInstanceArg},
     lua::{
-        LuaState, copy_value, dump_stack, find_in_lua_path, get_field, get_global, get_index,
-        get_length, get_string, load_lua_file, pop, push_bool, push_c_function, push_nil,
-        push_string, push_table, safe_call, set_field, set_global, set_index, set_metatable,
+        LuaState, copy_value, find_in_lua_path, get_field, get_global, get_index, get_length,
+        get_string, load_lua_file, pop, push_bool, push_c_function, push_nil, push_string,
+        push_table, safe_call, set_field, set_global, set_index, set_metatable,
     },
 };
 

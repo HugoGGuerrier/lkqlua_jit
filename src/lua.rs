@@ -228,6 +228,11 @@ pub fn push_user_data<T: Any>(l: LuaState, data: &T) {
     unsafe { lua_pushlightuserdata(l, data as *const T as *mut c_void) }
 }
 
+/// Push a pointer to arbitrary data on the Lua stack.
+pub fn push_user_data_ptr<T: Any>(l: LuaState, data: *mut T) {
+    unsafe { lua_pushlightuserdata(l, data as *mut c_void) }
+}
+
 /// Push a new C function value to the top of the Lua stack.
 pub fn push_c_function(l: LuaState, function: LuaCFunction) {
     unsafe { lua_pushcclosure(l, function, 0) }

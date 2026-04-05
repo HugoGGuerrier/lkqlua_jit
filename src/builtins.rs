@@ -5,7 +5,7 @@
 
 use crate::{
     builtins::{
-        functions::{lkql_img, lkql_import, lkql_print, lkql_units},
+        functions::{lkql_img, lkql_import, lkql_pattern, lkql_print, lkql_units},
         types::{BuiltinType, BuiltinTypeRepo},
     },
     engine::{FunctionValue, RuntimeValue},
@@ -46,6 +46,7 @@ pub fn get_builtin_bindings() -> Vec<BuiltinBinding> {
         BuiltinBinding { name, value }
     }
     vec![
+        b("pattern", RuntimeValue::Function(FunctionValue::CFunction(lkql_pattern))),
         b("print", RuntimeValue::Function(FunctionValue::CFunction(lkql_print))),
         b("img", RuntimeValue::Function(FunctionValue::CFunction(lkql_img))),
         b("units", RuntimeValue::Function(FunctionValue::CFunction(lkql_units))),
@@ -94,6 +95,7 @@ pub fn get_builtin_types() -> BuiltinTypeRepo {
             b(&types::bool::TYPE),
             b(&types::int::TYPE),
             b(&types::str::TYPE),
+            b(&types::pattern::TYPE),
             b(&types::tuple::TYPE),
             b(&types::list::TYPE),
             b(&types::stream::TYPE),

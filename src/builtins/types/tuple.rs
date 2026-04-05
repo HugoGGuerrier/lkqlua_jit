@@ -7,7 +7,7 @@ use crate::{
         traits,
         types::{
             BuiltinType, OverloadTarget, TypeField, TypeImplementation, TypeImplementationVariant,
-            img_property, str,
+            img_property, pattern,
         },
     },
     engine::FunctionValue,
@@ -16,7 +16,7 @@ use crate::{
 use std::ffi::c_int;
 
 pub const TYPE: BuiltinType = BuiltinType {
-    tag: str::TYPE.tag + 1,
+    tag: pattern::TYPE.tag + 1,
     traits: &[&traits::indexable::TRAIT],
     implementation_variant: TypeImplementationVariant::Monomorphic {
         implementation: IMPLEMENTATION,

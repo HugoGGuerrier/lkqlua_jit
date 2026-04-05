@@ -130,12 +130,28 @@ pub const ERROR_DURING_IMPORTATION: ErrorTemplate = ErrorTemplate {
     message_template: "An error occurred during the module importation, please check the related file",
 };
 
+// --- Regular expression errors
+
+/// Error when there is a syntax error in a regular expression.
+pub const REGEX_SYNTAX_ERROR: ErrorTemplate = ErrorTemplate {
+    id: ERROR_DURING_IMPORTATION.id + 1,
+    title: "Invalid regular expression syntax",
+    message_template: "Syntax error in the \"{}\" regular expression",
+};
+
+/// Error when a regular expression is too big to be compiled.
+pub const REGEX_TOO_BIG: ErrorTemplate = ErrorTemplate {
+    id: REGEX_SYNTAX_ERROR.id + 1,
+    title: "Regular expression is too big",
+    message_template: "Cannot compile the \"{}\" regular expression, consider splitting it",
+};
+
 // --- Misc errors
 
 /// Error coming from the Lua engine and that cannot be mapped to a more
 /// precise error.
 pub const LUA_ENGINE_ERROR: ErrorTemplate = ErrorTemplate {
-    id: ERROR_DURING_IMPORTATION.id + 1,
+    id: REGEX_TOO_BIG.id + 1,
     title: "Error from the Lua engine",
     message_template: "{}",
 };
@@ -168,6 +184,8 @@ pub const ERROR_TEMPLATE_REPOSITORY: &[&ErrorTemplate] = &[
     &AMBIGUOUS_IMPORT,
     &DEPENDENCY_CYCLE,
     &ERROR_DURING_IMPORTATION,
+    &REGEX_SYNTAX_ERROR,
+    &REGEX_TOO_BIG,
     &LUA_ENGINE_ERROR,
     &ANALYSIS_LIBRARY_ERROR,
 ];

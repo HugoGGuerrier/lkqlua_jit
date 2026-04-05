@@ -10,11 +10,11 @@ use crate::{
     engine::analysis_lib::AnalysisLibrary,
     errors::{ERROR_TEMPLATE_REPOSITORY, ErrorInstance, ErrorInstanceArg, LUA_ENGINE_ERROR},
     lua::{
-        LuaCFunction, LuaState, call, close_lua_state, debug_frame, debug_get_local,
-        debug_get_source, debug_info, debug_proto_and_pc, get_string, get_top, load_buffer,
-        load_lua_code, move_top_value, new_lua_state, open_lua_libs, pop, push_c_closure,
-        push_c_function, push_integer, push_string, push_user_data, remove_value, safe_call,
-        set_global, to_string,
+        LuaCFunction, LuaState, call, close_lua_state, copy_value, debug_frame, debug_get_local,
+        debug_get_source, debug_info, debug_proto_and_pc, get_global, get_metatable, get_string,
+        get_top, load_buffer, load_lua_code, move_top_value, new_lua_state, open_lua_libs, pop,
+        push_bool, push_c_closure, push_c_function, push_integer, push_string, push_user_data,
+        remove_value, safe_call, set_field, set_global, to_string,
     },
     report::Report,
 };
@@ -361,4 +361,29 @@ impl FunctionValue {
             }
         }
     }
+}
+
+/// Util function to register the table at the provided index for garbage
+/// collection. The meta-method "__gc" of the table is going to be called
+/// when it becomes unreachable.
+pub(crate) fn register_for_gc(l: LuaState, index: i32) {
+    // Create the proxy object
+    get_global(l, "newproxy");
+    push_bool(l, true);
+    call(l, 1, Some(1));
+
+    // Get the metatable of the proxy object
+    get_metatable(l, -1);
+
+    // Create a closure to forward the GC call
+    copy_value(l, -3);
+    FunctionValue::LuaFunction("function(_) getmetatable(__uv[1]).__gc(__uv[1]) end")
+        .push_on_stack_with_uv(l, 1);
+
+    // Set the GC forwarder in the proxy metatable
+    set_field(l, -2, "__gc");
+    pop(l, 1);
+
+    // Finally, place the proxy in the tracked table
+    set_field(l, index - 1, "field@proxy");
 }

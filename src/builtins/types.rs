@@ -20,6 +20,7 @@ pub mod int;
 pub mod list;
 pub mod namespace;
 pub mod obj;
+pub mod pattern;
 pub mod str;
 pub mod stream;
 pub mod tuple;
@@ -286,6 +287,7 @@ pub enum OverloadTarget {
     Len,
     Call,
     ToString,
+    Gc,
 }
 
 impl OverloadTarget {
@@ -304,6 +306,7 @@ impl OverloadTarget {
             OverloadTarget::Len => "__len",
             OverloadTarget::Call => "__call",
             OverloadTarget::ToString => "__tostring",
+            OverloadTarget::Gc => "__gc",
         }
     }
 }
