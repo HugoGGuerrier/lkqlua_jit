@@ -584,14 +584,16 @@ impl Node {
             LkqlNode::BoolLiteralTrue(_) => NodeVariant::BoolLiteral(true),
             LkqlNode::IntegerLiteral(_) => NodeVariant::IntLiteral(node.text()?),
             LkqlNode::StringLiteral(_) => {
-                NodeVariant::StringLiteral(String::from(node.text()?.trim_matches('"')))
+                NodeVariant::StringLiteral(unescape_string(node.text()?.trim_matches('"')))
             }
             LkqlNode::BlockStringLiteral(block_string) => {
                 let mut builder = String::new();
                 for maybe_str_part in &block_string.f_docs()? {
                     if let Some(str_part) = maybe_str_part? {
                         let text = str_part.text()?;
-                        builder.push_str(text.trim_start_matches("|\"").trim_start());
+                        builder.push_str(&unescape_string(
+                            text.trim_start_matches("|\"").trim_start(),
+                        ));
                         builder.push('\n');
                     }
                 }
@@ -1105,4 +1107,16 @@ fn all_local_execution_units(node: &LkqlNode, output: &mut Vec<LkqlNode>) -> Res
         }
     }
     Ok(())
+}
+
+/// Unescape the provided string following LKQL escaping sequences.
+fn unescape_string(string: &str) -> String {
+    string
+        .replace("\\n", "\n")
+        .replace("\\n", "\n")
+        .replace("\\r", "\r")
+        .replace("\\t", "\t")
+        .replace("\\\"", "\"")
+        .replace("\\'", "'")
+        .replace("\\\\", "\\")
 }
