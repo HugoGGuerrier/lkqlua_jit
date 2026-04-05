@@ -12,3 +12,6 @@
 
 # VS code workspace config
 .vscode
+
+# Python virtualenv
+/venv
