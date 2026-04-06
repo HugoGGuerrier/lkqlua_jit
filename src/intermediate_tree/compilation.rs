@@ -24,8 +24,8 @@ use crate::{
     },
     errors::{
         DUPLICATED_SYMBOL, ErrorInstance, ErrorInstanceArg, ErrorTemplate, INDEX_OUT_OF_BOUNDS,
-        MISSING_TRAIT, NO_VALUE_FOR_PARAM, POS_AND_NAMED_VALUE_FOR_PARAM, PREVIOUS_SYMBOL_HINT,
-        UNKNOWN_MEMBER, UNKNOWN_SYMBOL, WRONG_TYPE,
+        MISSING_TRAIT, NO_VALUE_FOR_PARAM, NONE_UNIT_BLOCK_ELEM, POS_AND_NAMED_VALUE_FOR_PARAM,
+        PREVIOUS_SYMBOL_HINT, UNKNOWN_MEMBER, UNKNOWN_SYMBOL, WRONG_TYPE,
     },
     intermediate_tree::{
         ArithOperator, ArithOperatorVariant, CompOperator, CompOperatorVariant, ExecutionUnit,
@@ -1835,16 +1835,38 @@ impl Node {
 
     /// Util function to compile the body of a block expression.
     fn compile_block_body(ctx: &mut CompilationContext, working_slot: u8, body: &Vec<Node>) {
+        // Get the unit value to compare it to element result
+        let unit_tmp = ctx.frame.borrow_mut().get_tmp();
+        emit_global_read(ctx, None, unit_tmp, UNIT_SINGLETON_GLOBAL_NAME);
+
         // Compile the body of the block
         for body_elem in body {
+            // Compile the element
             let elem_access = body_elem.compile_as_access(ctx, Some(working_slot));
 
-            // TODO: Check that the value returned by the body element
-            // is "unit".
-            // (https://github.com/HugoGGuerrier/lkqlua_jit/issues/4)
+            // Emit code to ensure the expression result is unit
+            let next_label = ctx.instructions.new_label();
+            ctx.instructions.ad(
+                &body_elem.origin_location,
+                ISEQV,
+                elem_access.slot(),
+                unit_tmp as u16,
+            );
+            ctx.goto(next_label);
+            emit_runtime_error(
+                ctx,
+                Some(&body_elem.origin_location),
+                &NONE_UNIT_BLOCK_ELEM,
+                &vec![],
+            );
 
+            // Release resources
             elem_access.release(ctx);
+            ctx.instructions.label(next_label);
         }
+
+        // Release the slot when "unit" is stored
+        ctx.frame.borrow_mut().release_slot(unit_tmp);
     }
 
     /// Util function factorizing the compilation process of a (potentially
