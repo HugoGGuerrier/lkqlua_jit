@@ -100,6 +100,14 @@ pub const UNKNOWN_NODE_TYPE: ErrorTemplate = ErrorTemplate {
     message_template: "Cannot find the \"{}\" node type",
 };
 
+/// Error when an element of a block expression body doesn't return the unit
+/// value.
+pub const NONE_UNIT_BLOCK_ELEM: ErrorTemplate = ErrorTemplate {
+    id: UNKNOWN_NODE_TYPE.id + 1,
+    title: "Ignored expression",
+    message_template: "Cannot ignore a non-unit expression in a block expression body",
+};
+
 // --- Module related errors
 
 /// Error when a module file cannot be located.
@@ -180,6 +188,7 @@ pub const ERROR_TEMPLATE_REPOSITORY: &[&ErrorTemplate] = &[
     &WRONG_PARAM_TYPE,
     &MISSING_TRAIT,
     &UNKNOWN_NODE_TYPE,
+    &NONE_UNIT_BLOCK_ELEM,
     &MODULE_NOT_FOUND,
     &AMBIGUOUS_IMPORT,
     &DEPENDENCY_CYCLE,
