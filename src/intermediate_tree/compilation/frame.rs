@@ -105,7 +105,7 @@ impl Frame {
     /// Add a new local value to this frame, updating the already registered
     /// one if any.
     pub fn add_local(&mut self, name: &str, declaration_location: &SourceSection) {
-        let local_slot = self.reserve_contiguous_slots(1).first;
+        let local_slot = self.get_slot();
         self.bindings.insert(
             String::from(name),
             BindingData::new(declaration_location.clone(), local_slot),
@@ -212,7 +212,7 @@ impl Frame {
     // --- Temporary values
 
     /// Get an unnamed temporary slot to store working values.
-    pub fn get_tmp(&mut self) -> u8 {
+    pub fn get_slot(&mut self) -> u8 {
         self.reserve_contiguous_slots(1).first
     }
 

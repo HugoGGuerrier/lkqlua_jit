@@ -129,7 +129,7 @@ impl ExecutionUnit {
                 }
 
                 // Reserve a slot for the module table
-                let result_tmp = ctx.frame.borrow_mut().get_tmp();
+                let result_tmp = ctx.frame.borrow_mut().get_slot();
 
                 // Create a source section at the end of the module
                 let end_source_section = SourceSection {
@@ -171,7 +171,7 @@ impl ExecutionUnit {
 
                 // Reserve the first slot of the frame, by convention, this
                 // slot is used to provide named arguments.
-                let named_args_slot = ctx.frame.borrow_mut().get_tmp();
+                let named_args_slot = ctx.frame.borrow_mut().get_slot();
 
                 // Get the function parameters identifiers
                 let param_identifiers = params.iter().map(|(s, _)| s.clone()).collect::<Vec<_>>();
@@ -559,7 +559,7 @@ impl Node {
 
                 // Then compile all source iterables, placing them in a table
                 // in the same order.
-                let collections_table_slot = ctx.frame.borrow_mut().get_tmp();
+                let collections_table_slot = ctx.frame.borrow_mut().get_slot();
                 emit_new_table(
                     ctx,
                     &self.origin_location,
@@ -1105,7 +1105,7 @@ impl Node {
             let result_access = if let Some(already_reserved) = already_reserved_slot {
                 ValueAccess::BorrowedTmp(already_reserved)
             } else {
-                ValueAccess::OwnedTmp(ctx.frame.borrow_mut().get_tmp())
+                ValueAccess::OwnedTmp(ctx.frame.borrow_mut().get_slot())
             };
             node.compile_as_value(ctx, result_access.slot());
             result_access
@@ -1562,7 +1562,7 @@ impl Node {
             // In the case of a block expression, compile its result as return
             NodeVariant::BlockExpr { body, val } => {
                 // Compile the block body
-                let body_elem_tmp = ctx.frame.borrow_mut().get_tmp();
+                let body_elem_tmp = ctx.frame.borrow_mut().get_slot();
                 Self::compile_block_body(ctx, body_elem_tmp, body);
                 ctx.frame.borrow_mut().release_slot(body_elem_tmp);
 
@@ -1857,7 +1857,7 @@ impl Node {
     /// Util function to compile the body of a block expression.
     fn compile_block_body(ctx: &mut CompilationContext, working_slot: u8, body: &Vec<Node>) {
         // Get the unit value to compare it to element result
-        let unit_tmp = ctx.frame.borrow_mut().get_tmp();
+        let unit_tmp = ctx.frame.borrow_mut().get_slot();
         emit_global_read(ctx, None, unit_tmp, UNIT_SINGLETON_GLOBAL_NAME);
 
         // Compile the body of the block
@@ -2032,8 +2032,8 @@ fn emit_iteration<F>(
     F: Fn(&mut CompilationContext, u8),
 {
     // Start by allocating two slots to work with
-    let iterator_tmp = ctx.frame.borrow_mut().get_tmp();
-    let variant_tmp = ctx.frame.borrow_mut().get_tmp();
+    let iterator_tmp = ctx.frame.borrow_mut().get_slot();
+    let variant_tmp = ctx.frame.borrow_mut().get_slot();
 
     // Create a label to flag the loop start
     let loop_start = ctx.instructions.new_label();
@@ -2140,7 +2140,7 @@ fn _access_table_index(
             index as u8,
         );
     } else if index <= i32::MAX as usize {
-        let index_tmp = ctx.frame.borrow_mut().get_tmp();
+        let index_tmp = ctx.frame.borrow_mut().get_slot();
         let index_cst = ctx.unit_data.constants.get_from_int(index as i32);
         ctx.instructions
             .ad_maybe_loc(origin_location, KNUM, index_tmp, index_cst);
@@ -2217,7 +2217,7 @@ fn _access_table_field(
             member_name_cst as u8,
         );
     } else {
-        let field_tmp = ctx.frame.borrow_mut().get_tmp();
+        let field_tmp = ctx.frame.borrow_mut().get_slot();
         ctx.instructions
             .ad_maybe_loc(maybe_origin_location, KSTR, field_tmp, member_name_cst);
         ctx.instructions.abc_maybe_loc(
@@ -2322,7 +2322,7 @@ fn emit_type_requirement(
 
     // Now emit the code to raise a runtime error in the case where type tags
     // don't match.
-    let actual_name = ctx.frame.borrow_mut().get_tmp();
+    let actual_name = ctx.frame.borrow_mut().get_slot();
     emit_table_member_read(ctx, maybe_origin_location, actual_name, value_slot, TYPE_NAME_FIELD);
     emit_runtime_error(
         ctx,
@@ -2352,7 +2352,7 @@ fn emit_trait_requirement(
     let next_label = ctx.instructions.new_label();
 
     // Then get the field corresponding to the trait name in the traits table
-    let trait_res = ctx.frame.borrow_mut().get_tmp();
+    let trait_res = ctx.frame.borrow_mut().get_slot();
     emit_table_member_read(
         ctx,
         maybe_origin_location,
@@ -2366,7 +2366,7 @@ fn emit_trait_requirement(
     ctx.goto(next_label);
 
     // Emit instructions to raise a runtime error
-    let type_name = ctx.frame.borrow_mut().get_tmp();
+    let type_name = ctx.frame.borrow_mut().get_slot();
     emit_table_member_read(ctx, maybe_origin_location, type_name, value_slot, TYPE_NAME_FIELD);
     emit_runtime_error(
         ctx,
@@ -2397,7 +2397,7 @@ fn emit_type_check(
     reverse_check: bool,
 ) {
     // First get the type tag of the actual value
-    let working_tmp = ctx.frame.borrow_mut().get_tmp();
+    let working_tmp = ctx.frame.borrow_mut().get_slot();
     emit_table_member_read(ctx, maybe_origin_location, working_tmp, value_slot, TYPE_TAGS_FIELD);
 
     // Then get if the tags table contains the checked type
