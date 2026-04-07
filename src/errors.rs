@@ -44,7 +44,7 @@ pub const NO_VALUE_FOR_PARAM: ErrorTemplate = ErrorTemplate {
 pub const POS_AND_NAMED_VALUE_FOR_PARAM: ErrorTemplate = ErrorTemplate {
     id: NO_VALUE_FOR_PARAM.id + 1,
     title: "Both positional and named value",
-    message_template: "The parameter \"{}\" has a positional and a named value",
+    message_template: "The parameter \"{}\" has been provided a positional and a named value",
 };
 
 /// Error when a positional argument is specified after a named one.
