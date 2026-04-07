@@ -119,6 +119,16 @@ impl Frame {
         binding.birth_label = birth_label;
     }
 
+    /// Release a local binding, removing it from frame locals and making its
+    /// associated slot as free. This function assumes that the provided `name`
+    /// is associated to a binding and return the latter.
+    pub fn release_local(&mut self, name: &str, death_label: Label) -> BindingData {
+        let mut released_binding = self.bindings.remove(name).unwrap();
+        released_binding.death_label = death_label;
+        self.release_slot(released_binding.slot);
+        released_binding
+    }
+
     // --- Up-values
 
     /// Get the up-value associate to the provided name in the current semantic

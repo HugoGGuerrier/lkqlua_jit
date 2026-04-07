@@ -51,6 +51,9 @@ use std::{
 
 pub mod frame;
 
+/// Pseudo symbol to name the slot where named args are provided.
+const NAMED_ARGS_LOCAL_NAME: &str = "<named_args>";
+
 // ----- Compilation processes -----
 
 impl ExecutionUnit {
@@ -169,9 +172,22 @@ impl ExecutionUnit {
                 // Set the argument count
                 arg_count = params.len() + 1;
 
-                // Reserve the first slot of the frame, by convention, this
-                // slot is used to provide named arguments.
-                let named_args_slot = ctx.frame.borrow_mut().get_slot();
+                // Declare a local value for the named arguments table, this
+                // is required for debug purposes.
+                ctx.frame
+                    .borrow_mut()
+                    .add_local(NAMED_ARGS_LOCAL_NAME, &self.origin_location);
+                let named_args_birth_label = ctx.instructions.new_label();
+                ctx.instructions.label(named_args_birth_label);
+                ctx.frame
+                    .borrow_mut()
+                    .init_local(NAMED_ARGS_LOCAL_NAME, named_args_birth_label);
+                let named_args_slot = ctx
+                    .frame
+                    .borrow()
+                    .get_local(NAMED_ARGS_LOCAL_NAME)
+                    .unwrap()
+                    .slot;
 
                 // Get the function parameters identifiers
                 let param_identifiers = params.iter().map(|(s, _)| s.clone()).collect::<Vec<_>>();
@@ -225,15 +241,17 @@ impl ExecutionUnit {
                     ctx.instructions.label(test_both_label);
                     ctx.instructions.ad_no_loc(ISEQP, named_args_slot, PRIM_NIL);
                     ctx.goto(next_label);
+                    let named_value_tmp = ctx.frame.borrow_mut().get_slot();
                     emit_table_member_read(
                         ctx,
                         None,
-                        param_slot.slot,
+                        named_value_tmp,
                         named_args_slot,
                         &param_id.text,
                     );
-                    ctx.instructions.ad_no_loc(ISEQP, param_slot.slot, PRIM_NIL);
+                    ctx.instructions.ad_no_loc(ISEQP, named_value_tmp, PRIM_NIL);
                     ctx.goto(next_label);
+                    ctx.frame.borrow_mut().release_slot(named_value_tmp);
                     emit_runtime_error(
                         ctx,
                         None,
@@ -249,9 +267,6 @@ impl ExecutionUnit {
                         .borrow_mut()
                         .init_local(&param_id.text, next_label);
                 }
-
-                // Release the named arguments slot
-                ctx.frame.borrow_mut().release_slot(named_args_slot);
 
                 // The compile the body as a returning node
                 body.compile_as_function_body(ctx);
@@ -771,9 +786,26 @@ impl Node {
                 // the slot as initialized in the current frame.
                 ctx.instructions.label(birth_label);
                 ctx.frame.borrow_mut().init_local(&symbol.text, birth_label);
+
+                // Finally, set the result to unit
+                emit_global_read(
+                    ctx,
+                    Some(&self.origin_location),
+                    result_slot,
+                    UNIT_SINGLETON_GLOBAL_NAME,
+                );
             }
             NodeVariant::InitLocalFun(child_index) => {
+                // Compile the child unit
                 Self::compile_child_unit(ctx, &self.origin_location, *child_index as usize);
+
+                // Set the result to unit
+                emit_global_read(
+                    ctx,
+                    Some(&self.origin_location),
+                    result_slot,
+                    UNIT_SINGLETON_GLOBAL_NAME,
+                );
             }
             NodeVariant::ImportModule { name, file } => {
                 // Create the birth label of the local variable
@@ -1846,8 +1878,8 @@ impl Node {
 
         // Release the block local bindings
         let death_label = ctx.instructions.new_label();
-        ctx.release_locals(death_label);
         ctx.instructions.label(death_label);
+        ctx.release_locals(death_label);
 
         // Finally, restore the previous frame as the current one
         let parent_frame = ctx.frame.borrow().parent_frame.clone().unwrap();
@@ -2539,16 +2571,23 @@ impl<'a> CompilationContext<'a> {
     /// store remaining data in the current [`ExecUnitCompilationData`]
     /// instance.
     fn release_locals(&mut self, death_label: Label) {
-        let old_bindings = self.frame.borrow_mut().bindings.drain().collect::<Vec<_>>();
-        for (name, mut old_binding) in old_bindings {
-            old_binding.death_label = death_label;
-            self.unit_data.dead_bindings.insert(name, old_binding);
+        let all_bindings = self
+            .frame
+            .borrow()
+            .bindings
+            .keys()
+            .map(|n| n.clone())
+            .collect::<Vec<_>>();
+        for binding in all_bindings {
+            let old_binding = self.frame.borrow_mut().release_local(&binding, death_label);
+            self.unit_data.dead_bindings.insert(binding, old_binding);
         }
     }
 }
 
 /// This type contains all data required to compile an [`ExecutionUnit`] object
 /// into a bytecode [`Prototype`].
+#[derive(Debug)]
 struct ExecUnitCompilationData {
     has_child: bool,
     constants: ConstantRepository,
@@ -2567,6 +2606,7 @@ impl ExecUnitCompilationData {
 
 /// This type stores all runtime constants, it is meant to be store in a
 /// [`ExecUnitCompilationData`] instance.
+#[derive(Debug)]
 struct ConstantRepository {
     complex_constants: Vec<ComplexConstant>,
     numeric_constants: Vec<NumericConstant>,
