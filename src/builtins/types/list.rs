@@ -37,7 +37,10 @@ pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
             TypeField::Property(FunctionValue::LuaFunction(LIST_ITERATOR)),
         ),
     ],
-    overloads: &[(OverloadTarget::ToString, FunctionValue::CFunction(list_tostring))],
+    overloads: &[
+        (OverloadTarget::ToString, FunctionValue::CFunction(list_tostring)),
+        (OverloadTarget::Eq, LIST_EQ),
+    ],
     index_method: None,
     registering_function: None,
 };
@@ -74,3 +77,26 @@ unsafe extern "C" fn list_tostring(l: LuaState) -> c_int {
     push_string(l, &format!("[{}]", item_images.join(", ")));
     1
 }
+
+/// Overload of "__eq" for the "List" type
+const LIST_EQ: FunctionValue = FunctionValue::LuaFunction(
+    "function(self, other)
+        -- Start by checking types
+        if getmetatable(self) ~= getmetatable(other) then
+            return false
+        end
+
+        -- Compare sizes
+        if self.length ~= other.length then
+            return false
+        end
+
+        -- Then compare elements
+        for i, elem in ipairs(self) do
+            if other[i] ~= elem then
+                return false
+            end
+        end
+        return true
+    end",
+);

@@ -23,12 +23,15 @@ pub const TYPE: BuiltinType = BuiltinType {
 pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
     name: "Object",
     fields: &[("img", TypeField::Property(FunctionValue::CFunction(img_property)))],
-    overloads: &[(OverloadTarget::ToString, FunctionValue::CFunction(obj_tostring))],
+    overloads: &[
+        (OverloadTarget::ToString, FunctionValue::CFunction(obj_tostring)),
+        (OverloadTarget::Eq, OBJ_EQ),
+    ],
     index_method: None,
     registering_function: None,
 };
 
-/// Overload of "__tostring" for the "Object" type
+/// Overload of "__tostring" for the "Object" type.
 #[unsafe(no_mangle)]
 unsafe extern "C" fn obj_tostring(l: LuaState) -> c_int {
     // Create the vector to place pairs in
@@ -59,3 +62,30 @@ unsafe extern "C" fn obj_tostring(l: LuaState) -> c_int {
     );
     1
 }
+
+/// Overload of "__eq" for the "Object" type.
+const OBJ_EQ: FunctionValue = FunctionValue::LuaFunction(
+    "function(self, other)
+        -- Start by checking types
+        if getmetatable(self) ~= getmetatable(other) then
+            return false
+        end
+
+        -- Iterate on self keys and check their values
+        for key, elem in pairs(self) do
+            if self[key] ~= other[key] then
+                return false
+            end
+        end
+
+        -- Check extra keys in the other object
+        for key, _ in pairs(other) do
+            if self[key] == nil then
+                return false
+            end
+        end
+
+        -- Finally, return the positive result
+        return true
+    end",
+);

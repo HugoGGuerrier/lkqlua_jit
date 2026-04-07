@@ -26,7 +26,10 @@ pub const TYPE: BuiltinType = BuiltinType {
 pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
     name: "Tuple",
     fields: &[("img", TypeField::Property(FunctionValue::CFunction(img_property)))],
-    overloads: &[(OverloadTarget::ToString, FunctionValue::CFunction(tuple_tostring))],
+    overloads: &[
+        (OverloadTarget::ToString, FunctionValue::CFunction(tuple_tostring)),
+        (OverloadTarget::Eq, TUPLE_EQ),
+    ],
     index_method: None,
     registering_function: None,
 };
@@ -48,3 +51,26 @@ unsafe extern "C" fn tuple_tostring(l: LuaState) -> c_int {
     push_string(l, &format!("({})", item_images.join(", ")));
     1
 }
+
+/// Overload of "__eq" for the "Tuple" type
+const TUPLE_EQ: FunctionValue = FunctionValue::LuaFunction(
+    "function(self, other)
+        -- Start by checking types
+        if getmetatable(self) ~= getmetatable(other) then
+            return false
+        end
+
+        -- Compare sizes
+        if #self ~= #other then
+            return false
+        end
+
+        -- Then compare elements
+        for i, elem in ipairs(self) do
+            if other[i] ~= elem then
+                return false
+            end
+        end
+        return true
+    end",
+);
