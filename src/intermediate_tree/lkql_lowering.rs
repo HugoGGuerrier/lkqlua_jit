@@ -464,7 +464,14 @@ impl Node {
 
             // --- If expression
             LkqlNode::CondExpr(cond_expr) => NodeVariant::IfExpr {
-                condition: Box::new(Self::lower_lkql_node(ctx, &cond_expr.f_condition()?)?),
+                condition: Box::new(
+                    Self::lower_lkql_node(ctx, &cond_expr.f_condition()?)?.with_wrapper(|c| {
+                        Ok(NodeVariant::RequireType {
+                            expression: Box::new(c),
+                            expected_type: &types::bool::TYPE,
+                        })
+                    })?,
+                ),
                 consequence: Box::new(Self::lower_lkql_node(ctx, &cond_expr.f_then_expr()?)?),
                 alternative: cond_expr
                     .f_else_expr()?
