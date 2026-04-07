@@ -23,9 +23,10 @@ use crate::{
         op_codes::*,
     },
     errors::{
-        DUPLICATED_SYMBOL, ErrorInstance, ErrorInstanceArg, ErrorTemplate, INDEX_OUT_OF_BOUNDS,
-        MISSING_TRAIT, NO_VALUE_FOR_PARAM, NONE_UNIT_BLOCK_ELEM, POS_AND_NAMED_VALUE_FOR_PARAM,
-        PREVIOUS_SYMBOL_HINT, UNKNOWN_MEMBER, UNKNOWN_SYMBOL, WRONG_TYPE,
+        DUPLICATED_KEY, DUPLICATED_SYMBOL, ErrorInstance, ErrorInstanceArg, ErrorTemplate,
+        INDEX_OUT_OF_BOUNDS, MISSING_TRAIT, NO_VALUE_FOR_PARAM, NONE_UNIT_BLOCK_ELEM,
+        POS_AND_NAMED_VALUE_FOR_PARAM, PREVIOUS_SYMBOL_HINT, UNKNOWN_MEMBER, UNKNOWN_SYMBOL,
+        WRONG_TYPE,
     },
     intermediate_tree::{
         ArithOperator, ArithOperatorVariant, CompOperator, CompOperatorVariant, ExecutionUnit,
@@ -982,6 +983,26 @@ impl Node {
                 emit_set_metatable(ctx, Some(&self.origin_location), result_slot, type_impl);
             }
             NodeVariant::ObjectLiteral(items) => {
+                // Check if there is the same key multiple times and report
+                // errors if so.
+                let mut seen_keys: HashSet<&Identifier> = HashSet::new();
+                for (key, _) in items {
+                    if let Some(previous_key) = seen_keys.get(key) {
+                        ctx.diagnostics.push(Report::from_error_template_with_hints(
+                            &key.origin_location,
+                            &DUPLICATED_KEY,
+                            &vec![key.text.clone()],
+                            vec![Hint {
+                                message: String::from("Previous key declared here"),
+                                location: previous_key.origin_location.clone(),
+                            }],
+                        ));
+                    } else {
+                        seen_keys.insert(key);
+                    }
+                }
+
+                // Then compile the object value
                 Self::compile_table(ctx, result_slot, &self.origin_location, &Vec::new(), items);
                 emit_set_metatable(
                     ctx,

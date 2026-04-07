@@ -24,11 +24,18 @@ pub const DUPLICATED_SYMBOL: ErrorTemplate = ErrorTemplate {
     message_template: "The symbol \"{}\" already exists in the current scope",
 };
 
+/// Error when a key is present multiple times in an object literal.
+pub const DUPLICATED_KEY: ErrorTemplate = ErrorTemplate {
+    id: DUPLICATED_SYMBOL.id + 1,
+    title: "Duplicated key",
+    message_template: "The key \"{}\" is present multiple times in the object",
+};
+
 // --- Parameter and argument errors
 
 /// Error when a parameter has no value.
 pub const NO_VALUE_FOR_PARAM: ErrorTemplate = ErrorTemplate {
-    id: DUPLICATED_SYMBOL.id + 1,
+    id: DUPLICATED_KEY.id + 1,
     title: "No value for parameter",
     message_template: "Missing value for the \"{}\" parameter",
 };
@@ -178,6 +185,7 @@ pub const ANALYSIS_LIBRARY_ERROR: ErrorTemplate = ErrorTemplate {
 pub const ERROR_TEMPLATE_REPOSITORY: &[&ErrorTemplate] = &[
     &UNKNOWN_SYMBOL,
     &DUPLICATED_SYMBOL,
+    &DUPLICATED_KEY,
     &NO_VALUE_FOR_PARAM,
     &POS_AND_NAMED_VALUE_FOR_PARAM,
     &POS_AFTER_NAMED_ARGUMENT,
