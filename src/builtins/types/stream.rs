@@ -61,10 +61,10 @@ end",
 
 /// Lua function to get an iterator for a stream.
 const STREAM_ITERATOR: FunctionValue = FunctionValue::LuaFunction(
-    "function (self)
+    "function(self)
     local cursor = 1
     local finished = false
-    return function ()
+    return function()
         if not finished then
             local res = self[cursor]
             if res == nil then
@@ -92,7 +92,7 @@ const CACHE_SIZE_FIELD: &str = "field@cache_size";
 
 /// Lua function used to index inside a stream.
 const STREAM_INDEX: FunctionValue = FunctionValue::LuaFunction(formatcp!(
-    "function (self, field)
+    "function(self, field)
     -- Check if the field is a number, in that case initialize the cache to
     -- this index.
     if type(field) == 'number' then
@@ -120,7 +120,7 @@ const STREAM_INDEX: FunctionValue = FunctionValue::LuaFunction(formatcp!(
     -- Check in type properties
     res = __uv[2][field]
     if res ~= nil then
-        return res(nil, self)
+        return res(self)
     end
 
     -- Then get the result in type fields

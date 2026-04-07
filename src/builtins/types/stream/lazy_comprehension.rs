@@ -48,7 +48,7 @@ const ARGS_FIELD: &str = "field@args";
 /// Lua function called when fetching the next element of the comprehension.
 /// This function mutates the internal state of the `self` value.
 const LIST_COMP_NEXT_METHOD: &str = formatcp!(
-    "function (self)
+    "function(self)
     -- First of all check that there are remaining work
     if self['{finished}'] then
         return nil
