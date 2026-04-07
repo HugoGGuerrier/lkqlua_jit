@@ -77,11 +77,18 @@ pub const UNKNOWN_MEMBER: ErrorTemplate = ErrorTemplate {
     message_template: "No member named \"{}\" on the value",
 };
 
+/// Error when trying to get a member of a "null" value.
+pub const NULL_DOT_RECEIVER: ErrorTemplate = ErrorTemplate {
+    id: UNKNOWN_MEMBER.id + 1,
+    title: "Null receiver",
+    message_template: "Trying to access the member of a null value",
+};
+
 // --- Type checking errors
 
 /// Error when an expression if not of the valid type.
 pub const WRONG_TYPE: ErrorTemplate = ErrorTemplate {
-    id: UNKNOWN_MEMBER.id + 1,
+    id: NULL_DOT_RECEIVER.id + 1,
     title: "Invalid expression type",
     message_template: "Expecting a \"{}\", got a \"{}\"",
 };
@@ -192,6 +199,7 @@ pub const ERROR_TEMPLATE_REPOSITORY: &[&ErrorTemplate] = &[
     &INVALID_PARAM_VALUE,
     &INDEX_OUT_OF_BOUNDS,
     &UNKNOWN_MEMBER,
+    &NULL_DOT_RECEIVER,
     &WRONG_TYPE,
     &WRONG_PARAM_TYPE,
     &MISSING_TRAIT,

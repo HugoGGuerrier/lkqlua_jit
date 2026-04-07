@@ -25,8 +25,8 @@ use crate::{
     errors::{
         DUPLICATED_KEY, DUPLICATED_SYMBOL, ErrorInstance, ErrorInstanceArg, ErrorTemplate,
         INDEX_OUT_OF_BOUNDS, MISSING_TRAIT, NO_VALUE_FOR_PARAM, NONE_UNIT_BLOCK_ELEM,
-        POS_AND_NAMED_VALUE_FOR_PARAM, PREVIOUS_SYMBOL_HINT, UNKNOWN_MEMBER, UNKNOWN_SYMBOL,
-        WRONG_TYPE,
+        NULL_DOT_RECEIVER, POS_AND_NAMED_VALUE_FOR_PARAM, PREVIOUS_SYMBOL_HINT, UNKNOWN_MEMBER,
+        UNKNOWN_SYMBOL, WRONG_TYPE,
     },
     intermediate_tree::{
         ArithOperator, ArithOperatorVariant, CompOperator, CompOperatorVariant, ExecutionUnit,
@@ -1901,25 +1901,35 @@ impl Node {
         suffix: &Identifier,
         is_safe: bool,
     ) {
-        // Get the table member corresponding to the suffix in the
-        // result slot
+        // Prepare working labels
+        let do_access_label = ctx.instructions.new_label();
+        let next_label = ctx.instructions.new_label();
+
+        // First we check if the prefix is null
+        emit_global_read(ctx, Some(origin_location), result_slot, NULL_SINGLETON_GLOBAL_NAME);
+        ctx.instructions
+            .ad(origin_location, ISNEV, prefix, result_slot as u16);
+        ctx.goto(do_access_label);
+        if is_safe {
+            ctx.goto(next_label);
+        } else {
+            emit_runtime_error(ctx, Some(origin_location), &NULL_DOT_RECEIVER, &vec![]);
+        }
+
+        // Then we get the table member corresponding to the suffix
+        ctx.instructions.label(do_access_label);
         emit_table_member_read(ctx, Some(origin_location), result_slot, prefix, &suffix.text);
 
         // Emit post access check
-        let next_label = ctx.instructions.new_label();
         ctx.instructions
             .ad(origin_location, ISNEP, result_slot, PRIM_NIL);
         ctx.goto(next_label);
-        if is_safe {
-            emit_global_read(ctx, Some(origin_location), result_slot, UNIT_SINGLETON_GLOBAL_NAME);
-        } else {
-            emit_runtime_error(
-                ctx,
-                Some(&suffix.origin_location),
-                &UNKNOWN_MEMBER,
-                &vec![ErrorInstanceArg::Static(suffix.text.clone())],
-            );
-        }
+        emit_runtime_error(
+            ctx,
+            Some(&suffix.origin_location),
+            &UNKNOWN_MEMBER,
+            &vec![ErrorInstanceArg::Static(suffix.text.clone())],
+        );
 
         // Label the next instruction
         ctx.instructions.label(next_label);
