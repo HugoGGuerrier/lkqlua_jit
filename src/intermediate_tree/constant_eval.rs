@@ -63,12 +63,18 @@ impl Node {
                         (
                             Some(ConstantValueVariant::Int(ref li)),
                             Some(ConstantValueVariant::Int(ref ri)),
-                        ) => Some(ConstantValueVariant::Int(match operator.variant {
-                            ArithOperatorVariant::Plus => li + ri,
-                            ArithOperatorVariant::Minus => li - ri,
-                            ArithOperatorVariant::Multiply => li * ri,
-                            ArithOperatorVariant::Divide => li / ri,
-                        })),
+                        ) => {
+                            let result = match operator.variant {
+                                ArithOperatorVariant::Plus => Some(li + ri),
+                                ArithOperatorVariant::Minus => Some(li - ri),
+                                ArithOperatorVariant::Multiply => Some(li * ri),
+                                ArithOperatorVariant::Divide if ri != &BigInt::ZERO => {
+                                    Some(li / ri)
+                                }
+                                _ => None,
+                            };
+                            result.map(|v| ConstantValueVariant::Int(v))
+                        }
                         _ => None,
                     }
                 }
@@ -704,6 +710,12 @@ mod tests {
             left: Box::new(_int_node("40")),
             operator: _new_arith_op(ArithOperatorVariant::Plus),
             right: Box::new(_str_node("not an int")),
+        });
+        assert_eq!(intermediate_tree.eval_as_constant(), None);
+        intermediate_tree = _new_node(NodeVariant::ArithBinOp {
+            left: Box::new(_int_node("40")),
+            operator: _new_arith_op(ArithOperatorVariant::Divide),
+            right: Box::new(_int_node("0")),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), None);
     }

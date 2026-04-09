@@ -23,10 +23,10 @@ use crate::{
         op_codes::*,
     },
     errors::{
-        DUPLICATED_KEY, DUPLICATED_SYMBOL, ErrorInstance, ErrorInstanceArg, ErrorTemplate,
-        INDEX_OUT_OF_BOUNDS, MISSING_TRAIT, NO_VALUE_FOR_PARAM, NONE_UNIT_BLOCK_ELEM,
-        NULL_DOT_RECEIVER, POS_AND_NAMED_VALUE_FOR_PARAM, PREVIOUS_SYMBOL_HINT, UNKNOWN_MEMBER,
-        UNKNOWN_SYMBOL, WRONG_TYPE,
+        DIV_BY_ZERO, DUPLICATED_KEY, DUPLICATED_SYMBOL, ErrorInstance, ErrorInstanceArg,
+        ErrorTemplate, INDEX_OUT_OF_BOUNDS, MISSING_TRAIT, NO_VALUE_FOR_PARAM,
+        NONE_UNIT_BLOCK_ELEM, NULL_DOT_RECEIVER, POS_AND_NAMED_VALUE_FOR_PARAM,
+        PREVIOUS_SYMBOL_HINT, UNKNOWN_MEMBER, UNKNOWN_SYMBOL, WRONG_TYPE,
     },
     intermediate_tree::{
         ArithOperator, ArithOperatorVariant, CompOperator, CompOperatorVariant, ExecutionUnit,
@@ -665,8 +665,20 @@ impl Node {
                 // If the node hasn't been compile yet, fallback on emitting
                 // the fully slot-based variant.
                 if !already_compiled {
+                    // Compile operands
                     let left_access = left.compile_as_access(ctx, Some(result_slot));
                     let right_access = right.compile_as_access(ctx, None);
+
+                    // Emit code to check the divider isn't equal to zero
+                    if matches!(operator.variant, ArithOperatorVariant::Divide) {
+                        emit_div_by_zero_check(
+                            ctx,
+                            Some(&self.origin_location),
+                            right_access.slot(),
+                        );
+                    }
+
+                    // Finally emit the code to perform the operation
                     let op = match operator.variant {
                         ArithOperatorVariant::Plus => ADDVV,
                         ArithOperatorVariant::Minus => SUBVV,
@@ -682,6 +694,11 @@ impl Node {
                     );
                     left_access.release(ctx);
                     right_access.release(ctx);
+                }
+
+                // Emit a call to floor the division result
+                if matches!(operator.variant, ArithOperatorVariant::Divide) {
+                    emit_flooring(ctx, Some(&self.origin_location), result_slot);
                 }
             }
             NodeVariant::LogicBinOp { .. } | NodeVariant::CompBinOp { .. } => {
@@ -1069,6 +1086,17 @@ impl Node {
             constant_operand: NumericConstant,
             is_constant_left: bool,
         ) -> bool {
+            // If the right operand is 0 and the operation is a division, we
+            // statically know that the code is invalid.
+            if !is_constant_left && constant_operand == NumericConstant::Integer(0) {
+                ctx.diagnostics.push(Report::from_error_template::<&str>(
+                    &operation.origin_location,
+                    &DIV_BY_ZERO,
+                    &vec![],
+                ));
+                return true;
+            }
+
             // Get the operation code regarding the arithmetic operator
             let op = match operator.variant {
                 ArithOperatorVariant::Plus => ADDVN,
@@ -1095,9 +1123,20 @@ impl Node {
                 .constants
                 .try_from_numeric_constant_as_u8(constant_operand)
             {
+                // First compile the variable operand
+                let operand_access = variable_operand.compile_as_access(ctx, Some(result_slot));
+
+                // Emit code to check the divider isn't equal to zero
+                if is_constant_left && matches!(operator.variant, ArithOperatorVariant::Divide) {
+                    emit_div_by_zero_check(
+                        ctx,
+                        Some(&operation.origin_location),
+                        operand_access.slot(),
+                    );
+                }
+
                 // Emit the code the perform the arithmetic operation with the
                 // constant operand.
-                let operand_access = variable_operand.compile_as_access(ctx, Some(result_slot));
                 ctx.instructions.abc(
                     &operation.origin_location,
                     op,
@@ -2460,6 +2499,56 @@ fn emit_closing_instruction(ctx: &mut CompilationContext) {
     if let Some(close_from) = ctx.frame.borrow().get_slot_to_close_from() {
         ctx.instructions.ad_no_loc(UCLO, close_from, JUMP_BIASING);
     }
+}
+
+/// Emit required instructions to check if the divider in the `divider_slot` is
+/// zero.
+fn emit_div_by_zero_check(
+    ctx: &mut CompilationContext,
+    maybe_origin_location: Option<&SourceSection>,
+    divider_slot: u8,
+) {
+    let next_label = ctx.instructions.new_label();
+    let zero_cst = ctx.unit_data.constants.get_from_int(0);
+    ctx.instructions
+        .ad_maybe_loc(maybe_origin_location, ISNEN, divider_slot, zero_cst);
+    ctx.goto(next_label);
+    emit_runtime_error(ctx, maybe_origin_location, &DIV_BY_ZERO, &vec![]);
+    ctx.instructions.label(next_label);
+}
+
+/// Emit required instructions to preform a flooring operation on the provided
+/// `working_slot`. The result is also placed in this slot.
+fn emit_flooring(
+    ctx: &mut CompilationContext,
+    maybe_origin_location: Option<&SourceSection>,
+    working_slot: u8,
+) {
+    // Reserve calling slots
+    let call_slots = ctx.frame.borrow_mut().reserve_contiguous_slots(3);
+
+    // Load the flooring function
+    emit_global_read(ctx, maybe_origin_location, call_slots.first, "math");
+    emit_table_member_read(ctx, maybe_origin_location, call_slots.first, call_slots.first, "floor");
+
+    // Move the value to floor
+    ctx.instructions
+        .ad_maybe_loc(maybe_origin_location, MOV, call_slots.last, working_slot as u16);
+
+    // Do the call
+    ctx.instructions
+        .abc_maybe_loc(maybe_origin_location, CALL, call_slots.first, 1, 2);
+
+    // Finally move the result in the result slot
+    ctx.instructions.ad_maybe_loc(
+        maybe_origin_location,
+        MOV,
+        working_slot,
+        call_slots.first as u16,
+    );
+
+    // Release calling slots
+    ctx.frame.borrow_mut().release_slots(call_slots);
 }
 
 // ----- Compilation support -----

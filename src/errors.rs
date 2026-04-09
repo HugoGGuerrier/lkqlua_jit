@@ -61,11 +61,18 @@ pub const INVALID_PARAM_VALUE: ErrorTemplate = ErrorTemplate {
     message_template: "Invalid value for the \"{}\" parameter, {}",
 };
 
+/// Error when a division by zero occurs.
+pub const DIV_BY_ZERO: ErrorTemplate = ErrorTemplate {
+    id: INVALID_PARAM_VALUE.id + 1,
+    title: "Division by zero",
+    message_template: "Cannot perform a division by zero",
+};
+
 // --- Indexing and member errors
 
 /// Error when an index is out of the indexable value bounds.
 pub const INDEX_OUT_OF_BOUNDS: ErrorTemplate = ErrorTemplate {
-    id: INVALID_PARAM_VALUE.id + 1,
+    id: DIV_BY_ZERO.id + 1,
     title: "Index out of bounds",
     message_template: "Cannot access index {} in the value, it is out of bounds",
 };
@@ -197,6 +204,7 @@ pub const ERROR_TEMPLATE_REPOSITORY: &[&ErrorTemplate] = &[
     &POS_AND_NAMED_VALUE_FOR_PARAM,
     &POS_AFTER_NAMED_ARGUMENT,
     &INVALID_PARAM_VALUE,
+    &DIV_BY_ZERO,
     &INDEX_OUT_OF_BOUNDS,
     &UNKNOWN_MEMBER,
     &NULL_DOT_RECEIVER,
