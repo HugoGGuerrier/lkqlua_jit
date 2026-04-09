@@ -2011,7 +2011,11 @@ impl ConstantValue {
                 if value <= &BigInt::from(i16::MAX) && value >= &BigInt::from(i16::MIN) {
                     let mut le_bytes = [0 as u8; 2];
                     for i in 0..le_bytes.len() {
-                        le_bytes[i] = *value_le_bytes.get(i).unwrap_or(&0);
+                        le_bytes[i] = *value_le_bytes.get(i).unwrap_or(if value < &BigInt::ZERO {
+                            &0xFF
+                        } else {
+                            &0
+                        });
                     }
                     ctx.instructions.ad(
                         &self.origin_location,

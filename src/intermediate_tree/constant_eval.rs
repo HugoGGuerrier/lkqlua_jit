@@ -324,8 +324,12 @@ impl ConstantValue {
                 if value >= &BigInt::from(i32::MIN) && value <= &BigInt::from(i32::MAX) {
                     let value_le_bytes = value.to_signed_bytes_le();
                     let mut le_bytes = [0 as u8; 4];
-                    for i in 0..value_le_bytes.len() {
-                        le_bytes[i] = *value_le_bytes.get(i).unwrap_or(&0);
+                    for i in 0..le_bytes.len() {
+                        le_bytes[i] = *value_le_bytes.get(i).unwrap_or(if value < &BigInt::ZERO {
+                            &0xFF
+                        } else {
+                            &0
+                        });
                     }
                     Some(NumericConstant::Integer(i32::from_le_bytes(le_bytes)))
                 } else {
@@ -344,11 +348,15 @@ impl ConstantValue {
                 Some(if *value { TableConstantElement::True } else { TableConstantElement::False })
             }
             ConstantValueVariant::Int(value) => {
-                if value <= &BigInt::from(i32::MAX) {
+                if value >= &BigInt::from(i32::MIN) && value <= &BigInt::from(i32::MAX) {
                     let value_le_bytes = value.to_signed_bytes_le();
                     let mut le_bytes = [0 as u8; 4];
                     for i in 0..le_bytes.len() {
-                        le_bytes[i] = *value_le_bytes.get(i).unwrap_or(&0);
+                        le_bytes[i] = *value_le_bytes.get(i).unwrap_or(if value < &BigInt::ZERO {
+                            &0xFF
+                        } else {
+                            &0
+                        });
                     }
                     Some(TableConstantElement::Integer(i32::from_le_bytes(le_bytes)))
                 } else {
@@ -601,6 +609,13 @@ mod tests {
             right: Box::new(_int_node("-2")),
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(_int_cst("40")));
+
+        intermediate_tree = _new_node(NodeVariant::ArithBinOp {
+            left: Box::new(_int_node("2")),
+            operator: _new_arith_op(ArithOperatorVariant::Plus),
+            right: Box::new(_int_node("-5")),
+        });
+        assert_eq!(intermediate_tree.eval_as_constant(), Some(_int_cst("-3")));
         intermediate_tree = _new_node(NodeVariant::ArithBinOp {
             left: Box::new(_int_node("10")),
             operator: _new_arith_op(ArithOperatorVariant::Plus),
@@ -613,7 +628,7 @@ mod tests {
         assert_eq!(intermediate_tree.eval_as_constant(), Some(_int_cst("26")));
 
         // Test subtractions
-        let mut intermediate_tree = _new_node(NodeVariant::ArithBinOp {
+        intermediate_tree = _new_node(NodeVariant::ArithBinOp {
             left: Box::new(_int_node("40")),
             operator: _new_arith_op(ArithOperatorVariant::Minus),
             right: Box::new(_int_node("2")),
@@ -637,7 +652,7 @@ mod tests {
         assert_eq!(intermediate_tree.eval_as_constant(), Some(_int_cst("14")));
 
         // Test multiplications
-        let mut intermediate_tree = _new_node(NodeVariant::ArithBinOp {
+        intermediate_tree = _new_node(NodeVariant::ArithBinOp {
             left: Box::new(_int_node("40")),
             operator: _new_arith_op(ArithOperatorVariant::Multiply),
             right: Box::new(_int_node("2")),
@@ -661,7 +676,7 @@ mod tests {
         assert_eq!(intermediate_tree.eval_as_constant(), Some(_int_cst("600")));
 
         // Test divisions
-        let mut intermediate_tree = _new_node(NodeVariant::ArithBinOp {
+        intermediate_tree = _new_node(NodeVariant::ArithBinOp {
             left: Box::new(_int_node("40")),
             operator: _new_arith_op(ArithOperatorVariant::Divide),
             right: Box::new(_int_node("2")),
