@@ -188,6 +188,9 @@ pub struct Config {
     /// Writable to use as error output.
     pub std_err: Writable,
 
+    /// Whether to perform profiling during the run.
+    pub do_profiling: bool,
+
     /// All elements to display additional information about.
     pub verbose_elements: HashSet<VerboseElement>,
 

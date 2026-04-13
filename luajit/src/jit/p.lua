@@ -80,11 +80,11 @@ local function prof_cb(th, samples, vmmode)
   end
   if prof_fmt then
     key_stack = profile.dumpstack(th, prof_fmt, prof_depth)
-    key_stack = key_stack:gsub("%[builtin#(%d+)%]", function(x)
+    key_stack = string.gsub(key_stack, "%[builtin#(%d+)%]", function(x)
       return vmdef.ffnames[tonumber(x)]
     end)
     if prof_split == 2 then
-      local k1, k2 = key_stack:match("(.-) [<>] (.*)")
+      local k1, k2 = string.match(key_stack, "(.-) [<>] (.*)")
       if k2 then key_stack, key_stack2 = k1, k2 end
     elseif prof_split == 3 then
       key_stack2 = profile.dumpstack(th, "l", 1)
@@ -167,7 +167,7 @@ local function prof_annotate(count1, samples)
   if prof_raw then
     local n = math.max(5, math.ceil(math.log10(ms)))
     fmtv = "%"..n.."d | %s\n"
-    fmtn = (" "):rep(n).." | %s\n"
+    fmtn = string.rep(" ", n).." | %s\n"
   end
   local ann = prof_ann
   for _, file in ipairs(files) do
@@ -244,13 +244,13 @@ end
 -- Start profiling.
 local function prof_start(mode)
   local interval = ""
-  mode = mode:gsub("i%d*", function(s) interval = s; return "" end)
+  mode = string.gsub(mode, "i%d*", function(s) interval = s; return "" end)
   prof_min = 3
-  mode = mode:gsub("m(%d+)", function(s) prof_min = tonumber(s); return "" end)
+  mode = string.gsub(mode, "m(%d+)", function(s) prof_min = tonumber(s); return "" end)
   prof_depth = 1
-  mode = mode:gsub("%-?%d+", function(s) prof_depth = tonumber(s); return "" end)
+  mode = string.gsub(mode, "%-?%d+", function(s) prof_depth = tonumber(s); return "" end)
   local m = {}
-  for c in mode:gmatch(".") do m[c] = c end
+  for c in string.gmatch(mode, ".") do m[c] = c end
   prof_states = m.z or m.v
   if prof_states == "z" then zone = require("jit.zone") end
   local scope = m.l or m.f or m.F or (prof_states and "" or "f")
@@ -260,11 +260,11 @@ local function prof_start(mode)
     prof_split = 2
     if prof_depth == -1 or m["-"] then prof_depth = -2
     elseif prof_depth == 1 then prof_depth = 2 end
-  elseif mode:find("[fF].*l") then
+  elseif string.find(mode, "[fF].*l") then
     scope = "l"
     prof_split = 3
   else
-    prof_split = (scope == "" or mode:find("[zv].*[lfF]")) and 1 or 0
+    prof_split = (scope == "" or string.find(mode, "[zv].*[lfF]")) and 1 or 0
   end
   prof_ann = m.A and 0 or (m.a and 3)
   if prof_ann then
@@ -286,7 +286,7 @@ local function prof_start(mode)
   prof_count1 = {}
   prof_count2 = {}
   prof_samples = 0
-  profile.start(scope:lower()..interval, prof_cb)
+  profile.start(string.lower(scope)..interval, prof_cb)
   prof_ud = newproxy(true)
   getmetatable(prof_ud).__gc = prof_finish
 end
@@ -308,4 +308,3 @@ return {
   start = start, -- For -j command line option.
   stop = prof_finish
 }
-

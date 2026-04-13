@@ -43,6 +43,9 @@ struct LauncherArgs {
     )]
     timings: bool,
 
+    #[arg(long, short, help = "Enable profiling information collection and display")]
+    profiling: bool,
+
     #[arg(
         help = "Additional options for the LKQL engine",
         allow_hyphen_values = true,
@@ -106,6 +109,7 @@ fn main() {
     let config = Config {
         std_out: Writable::Stdout(stdout()),
         std_err: Writable::Stderr(stderr()),
+        do_profiling: args.profiling,
         verbose_elements: args.verbose.into_iter().collect(),
         analyzed_lang_name: args.lang_name,
         files_to_analyze: args.analyzed_files,

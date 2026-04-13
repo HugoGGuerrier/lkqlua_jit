@@ -11,10 +11,11 @@ use crate::{
     errors::{ERROR_TEMPLATE_REPOSITORY, ErrorInstance, ErrorInstanceArg, LUA_ENGINE_ERROR},
     lua::{
         LuaCFunction, LuaState, call, close_lua_state, copy_value, debug_frame, debug_get_local,
-        debug_get_source, debug_info, debug_proto_and_pc, get_global, get_metatable, get_string,
-        get_top, load_buffer, load_lua_code, move_top_value, new_lua_state, open_lua_libs, pop,
-        push_bool, push_c_closure, push_c_function, push_integer, push_string, push_user_data,
-        remove_value, safe_call, set_field, set_global, to_string,
+        debug_get_source, debug_info, debug_proto_and_pc, dump_stack, get_field, get_global,
+        get_metatable, get_string, get_top, load_buffer, load_lua_code, move_top_value,
+        new_lua_state, open_lua_libs, pop, push_bool, push_c_closure, push_c_function,
+        push_integer, push_string, push_user_data, remove_value, safe_call, set_field, set_global,
+        to_string,
     },
     report::Report,
 };
@@ -80,6 +81,8 @@ impl Engine {
         ctx: &ExecutionContext,
         bytecode_unit: &ExtendedBytecodeUnit,
     ) -> Result<(), Report> {
+        let l = self.lua_state;
+
         // Encode the bytecode unit
         let mut encoded_bytecode_unit = Vec::new();
         bytecode_unit
@@ -107,7 +110,24 @@ impl Engine {
         }
 
         // Call the loaded buffer and analyze the result
+        if ctx.config.do_profiling {
+            get_global(l, "require");
+            push_string(l, "jit.p");
+            call(l, 1, None);
+            get_field(l, -1, "start");
+            push_string(l, "f10");
+            call(l, 1, None);
+            pop(l, 1);
+        }
         let call_res = safe_call(self.lua_state, 0, None, Some(error_handler));
+        if ctx.config.do_profiling {
+            get_global(l, "require");
+            push_string(l, "jit.p");
+            call(l, 1, None);
+            get_field(l, -1, "stop");
+            call(l, 0, None);
+            pop(l, 1);
+        }
 
         // Pop the error handler
         remove_value(self.lua_state, error_handler);
