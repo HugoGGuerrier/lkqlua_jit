@@ -18,7 +18,6 @@ use std::{
 
 pub mod compilation;
 pub mod constant_eval;
-pub mod lkql_lowering;
 
 const INDENT_STR: &str = "|  ";
 const EMPTY_STR: &str = "[EMPTY]";
@@ -28,16 +27,16 @@ const EMPTY_STR: &str = "[EMPTY]";
 /// to map parsing structures to the [`crate::bytecode::Prototype`] concept.
 pub struct ExecutionUnit {
     /// Source location that was used to create this function object.
-    origin_location: SourceSection,
+    pub origin_location: SourceSection,
 
     /// Name of the execution unit.
-    name: String,
+    pub name: String,
 
     /// List of children execution units.
-    children_units: Vec<ExecutionUnit>,
+    pub children_units: Vec<ExecutionUnit>,
 
     /// Variant part, containing specific data.
-    variant: ExecutionUnitVariant,
+    pub variant: ExecutionUnitVariant,
 }
 
 pub enum ExecutionUnitVariant {

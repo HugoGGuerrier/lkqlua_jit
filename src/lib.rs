@@ -25,6 +25,7 @@ pub mod bytecode;
 pub mod engine;
 pub mod errors;
 pub mod intermediate_tree;
+pub mod lowering;
 pub mod lua;
 pub mod report;
 pub mod sources;

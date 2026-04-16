@@ -1,5 +1,8 @@
-//! This module contains all required operations to lower an LKQL parse source
-//! to an intermediate representation.
+//! # LKQL lowering module
+//!
+//! This module contains all required operations to lower an LKQL parsing tree
+//! to the intermediate representation defined in the
+//! [`crate::intermediate_tree`] module.
 
 use crate::{
     ExecutionContext,
@@ -16,12 +19,12 @@ use crate::{
         ExecutionUnitVariant, Identifier, LogicOperator, LogicOperatorVariant, MiscOperator,
         MiscOperatorVariant, Node, NodeVariant,
     },
+    lowering::{LoweringContext, unescape_string},
     report::{Hint, Report},
     sources::{Location, SourceId, SourceSection},
 };
 use liblkqllang::{BaseFunction, Exception, LkqlNode};
 use std::{
-    collections::HashMap,
     env,
     path::{Path, PathBuf},
 };
@@ -52,7 +55,7 @@ impl ExecutionUnit {
     /// Internal function to lower an [`LkqlNode`] to an [`ExecutionUnit`].
     fn internal_lower_lkql_node(
         node: &LkqlNode,
-        ctx: &mut LoweringContext,
+        ctx: &mut LoweringContext<LkqlNode>,
     ) -> Result<Self, Report> {
         // First, we get the name of the currently lowered execution unit.
         let name = match &node {
@@ -193,7 +196,10 @@ impl ExecutionUnit {
 impl Node {
     /// Lower an LKQL node as an intermediate node. All LKQL node kinds should
     /// be accepted by this function.
-    fn lower_lkql_node(ctx: &mut LoweringContext, node: &LkqlNode) -> Result<Self, Report> {
+    fn lower_lkql_node(
+        ctx: &mut LoweringContext<LkqlNode>,
+        node: &LkqlNode,
+    ) -> Result<Self, Report> {
         // Get the location of the node
         let origin_location = SourceSection::from_lkql_node(ctx.lowered_source, node)?;
 
@@ -671,7 +677,7 @@ impl Node {
     /// The provided `matched_value_ref` should be the "let id" pointing to
     /// the value to match.
     fn lower_lkql_pattern(
-        ctx: &mut LoweringContext,
+        ctx: &mut LoweringContext<LkqlNode>,
         node: &LkqlNode,
         matched_value_ref: usize,
     ) -> Result<Self, Report> {
@@ -863,7 +869,7 @@ impl Node {
 }
 
 impl ArithOperator {
-    fn lower_lkql_node(node: &LkqlNode, ctx: &LoweringContext) -> Result<Self, Report> {
+    fn lower_lkql_node(node: &LkqlNode, ctx: &LoweringContext<LkqlNode>) -> Result<Self, Report> {
         Ok(ArithOperator {
             origin_location: SourceSection::from_lkql_node(ctx.lowered_source, node)?,
             variant: match node {
@@ -878,7 +884,7 @@ impl ArithOperator {
 }
 
 impl LogicOperator {
-    fn lower_lkql_node(node: &LkqlNode, ctx: &LoweringContext) -> Result<Self, Report> {
+    fn lower_lkql_node(node: &LkqlNode, ctx: &LoweringContext<LkqlNode>) -> Result<Self, Report> {
         Ok(LogicOperator {
             origin_location: SourceSection::from_lkql_node(ctx.lowered_source, node)?,
             variant: match node {
@@ -892,7 +898,7 @@ impl LogicOperator {
 }
 
 impl CompOperator {
-    fn lower_lkql_node(node: &LkqlNode, ctx: &LoweringContext) -> Result<Self, Report> {
+    fn lower_lkql_node(node: &LkqlNode, ctx: &LoweringContext<LkqlNode>) -> Result<Self, Report> {
         Ok(CompOperator {
             origin_location: SourceSection::from_lkql_node(ctx.lowered_source, node)?,
             variant: match node {
@@ -909,7 +915,7 @@ impl CompOperator {
 }
 
 impl MiscOperator {
-    fn lower_lkql_node(node: &LkqlNode, ctx: &LoweringContext) -> Result<Self, Report> {
+    fn lower_lkql_node(node: &LkqlNode, ctx: &LoweringContext<LkqlNode>) -> Result<Self, Report> {
         Ok(MiscOperator {
             origin_location: SourceSection::from_lkql_node(ctx.lowered_source, node)?,
             variant: match node {
@@ -922,7 +928,7 @@ impl MiscOperator {
 
 impl Identifier {
     /// Util function to easily create an identifier from an LKQL node.
-    fn from_lkql_node(node: &LkqlNode, ctx: &LoweringContext) -> Result<Self, Report> {
+    fn from_lkql_node(node: &LkqlNode, ctx: &LoweringContext<LkqlNode>) -> Result<Self, Report> {
         Ok(Self {
             origin_location: SourceSection::from_lkql_node(ctx.lowered_source, node)?,
             text: node.text()?,
@@ -940,70 +946,6 @@ impl SourceSection {
             start: Location::from_lkql_location(sloc_range.start),
             end: Location::from_lkql_location(sloc_range.end),
         })
-    }
-}
-
-struct LoweringContext<'a> {
-    /// Execution context the lowering takes place in.
-    execution_context: &'a ExecutionContext,
-
-    /// The source that is currently being lowered.
-    lowered_source: SourceId,
-
-    /// Map each function declaration node to the "child index" of its produced
-    /// [`ExecutionUnit`] object.
-    child_index_map: HashMap<LkqlNode, u16>,
-
-    /// Counter of encountered lambdas, used for naming them.
-    lambda_counter: usize,
-
-    /// Counter of encountered list comprehension, used for naming their
-    /// execution units.
-    lazy_comprehension_counter: usize,
-
-    /// Counter of created temporary values.
-    tmp_counter: usize,
-
-    /// The list of diagnostics emitted during the lowering.
-    diagnostics: Vec<Report>,
-}
-
-impl<'a> LoweringContext<'a> {
-    pub fn new<'b>(execution_context: &'b ExecutionContext, lowered_source: SourceId) -> Self
-    where
-        'b: 'a,
-    {
-        Self {
-            execution_context,
-            lowered_source,
-            child_index_map: HashMap::new(),
-            lambda_counter: 0,
-            lazy_comprehension_counter: 0,
-            tmp_counter: 0,
-            diagnostics: Vec::new(),
-        }
-    }
-
-    /// Get the next available lambda name, incrementing the counter.
-    fn next_lambda_name(&mut self) -> String {
-        let res = format!("#lambda_{}", self.lambda_counter);
-        self.lambda_counter += 1;
-        res
-    }
-
-    /// Get the next available list comprehension name, incrementing the
-    /// counter.
-    fn next_lazy_comprehension_name(&mut self) -> String {
-        let res = format!("#lazy_comprehension_{}", self.lazy_comprehension_counter);
-        self.lazy_comprehension_counter += 1;
-        res
-    }
-
-    /// Get a fresh temporary value identifier.
-    fn new_tmp_id(&mut self) -> usize {
-        let res = self.tmp_counter;
-        self.tmp_counter += 1;
-        res
     }
 }
 
@@ -1067,7 +1009,10 @@ fn all_local_decls(node: &LkqlNode, output: &mut Vec<LkqlNode>) -> Result<(), Re
 /// the declaration location.
 /// This function relies on [`all_local_decls`] to compute its result, meaning
 /// that all concepts described in the latter's doc are true for this function.
-fn all_local_symbols(node: &LkqlNode, ctx: &LoweringContext) -> Result<Vec<Identifier>, Report> {
+fn all_local_symbols(
+    node: &LkqlNode,
+    ctx: &LoweringContext<LkqlNode>,
+) -> Result<Vec<Identifier>, Report> {
     // Declare working vectors and get all local declarations
     let mut local_decls = Vec::new();
     let mut local_symbols = Vec::new();
@@ -1114,16 +1059,4 @@ fn all_local_execution_units(node: &LkqlNode, output: &mut Vec<LkqlNode>) -> Res
         }
     }
     Ok(())
-}
-
-/// Unescape the provided string following LKQL escaping sequences.
-fn unescape_string(string: &str) -> String {
-    string
-        .replace("\\n", "\n")
-        .replace("\\n", "\n")
-        .replace("\\r", "\r")
-        .replace("\\t", "\t")
-        .replace("\\\"", "\"")
-        .replace("\\'", "'")
-        .replace("\\\\", "\\")
 }
