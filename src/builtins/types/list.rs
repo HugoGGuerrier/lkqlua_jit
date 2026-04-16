@@ -14,7 +14,7 @@ use crate::{
             img_property, tuple,
         },
     },
-    engine::FunctionValue,
+    engine::{FunctionValue, RuntimeValue},
     lua::{LuaState, get_field, get_index, get_length, get_string, push_string, set_top},
 };
 use std::ffi::c_int;
@@ -36,6 +36,7 @@ pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
             ITERATOR_FIELD,
             TypeField::Property(FunctionValue::LuaFunction(LIST_ITERATOR)),
         ),
+        ("reduce", TypeField::Value(LIST_REDUCE)),
     ],
     overloads: &[
         (OverloadTarget::ToString, FunctionValue::CFunction(list_tostring)),
@@ -59,6 +60,17 @@ const LIST_ITERATOR: &str = "function (self)
         end
     end
 end";
+
+/// Implementation of the "reduce" function on values of the "List" type.
+const LIST_REDUCE: RuntimeValue = RuntimeValue::Function(FunctionValue::LuaFunction(
+    "function (_, self, fn, init)
+        local res = init
+        for _, next in ipairs(self) do
+            res = fn(nil, res, next)
+        end
+        return res
+    end",
+));
 
 /// Overload of "__tostring" for the "List" type
 #[unsafe(no_mangle)]

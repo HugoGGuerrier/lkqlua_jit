@@ -6,7 +6,12 @@
 //! Iterators are represented by functional values that are called to get the
 //! "next" element in the source iterable.
 
-use crate::builtins::traits::{BuiltinTrait, RequiredField};
+use const_format::formatcp;
+
+use crate::{
+    builtins::traits::{BuiltinTrait, RequiredField},
+    engine::{FunctionValue, RuntimeValue},
+};
 
 /// Name of the field to access to get an iterator for a value.
 pub const ITERATOR_FIELD: &str = "field@iterator";
@@ -14,5 +19,25 @@ pub const ITERATOR_FIELD: &str = "field@iterator";
 pub const TRAIT: BuiltinTrait = BuiltinTrait {
     name: "Iterable",
     required_overloads: &[],
-    required_fields: &[RequiredField::Property(ITERATOR_FIELD)],
+    required_fields: &[
+        RequiredField::Property(ITERATOR_FIELD),
+        RequiredField::Value("reduce"),
+    ],
 };
+
+/// This is the default implementation for the "reduce" method on iterable
+/// values.
+pub const DEFAULT_ITERABLE_REDUCE: RuntimeValue =
+    RuntimeValue::Function(FunctionValue::LuaFunction(formatcp!(
+        "function(_, self, fn, init)
+            local it = self['{iterator}']
+            local next = it()
+            local res = init
+            while next ~= nil do
+                res = fn(nil, res, next)
+                next = it()
+            end
+            return res
+        end",
+        iterator = ITERATOR_FIELD,
+    )));
