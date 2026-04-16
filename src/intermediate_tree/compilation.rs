@@ -1,7 +1,7 @@
 //! # Intermediate tree compilation module
 //!
 //! This module contains all required operations to compile any intermediate
-//! tree into a [`crate::bytecode::BytecodeBuffer`].
+//! tree into a [`ExtendedBytecodeUnit`].
 
 use crate::{
     builtins::{
@@ -1977,15 +1977,19 @@ impl Node {
         let next_label = ctx.instructions.new_label();
 
         // First we check if the prefix is null
-        emit_global_read(ctx, Some(origin_location), result_slot, NULL_SINGLETON_GLOBAL_NAME);
+        let null_tmp = ctx.frame.borrow_mut().get_slot();
+        emit_global_read(ctx, Some(origin_location), null_tmp, NULL_SINGLETON_GLOBAL_NAME);
         ctx.instructions
-            .ad(origin_location, ISNEV, prefix, result_slot as u16);
+            .ad(origin_location, ISNEV, prefix, null_tmp as u16);
         ctx.goto(do_access_label);
         if is_safe {
+            ctx.instructions
+                .ad(origin_location, MOV, result_slot, null_tmp as u16);
             ctx.goto(next_label);
         } else {
             emit_runtime_error(ctx, Some(origin_location), &NULL_DOT_RECEIVER, &vec![]);
         }
+        ctx.frame.borrow_mut().release_slot(null_tmp);
 
         // Then we get the table member corresponding to the suffix
         ctx.instructions.label(do_access_label);
