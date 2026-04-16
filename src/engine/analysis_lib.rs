@@ -10,6 +10,7 @@ use crate::{
     Config,
     builtins::{
         NULL_SINGLETON_GLOBAL_NAME,
+        traits::indexable,
         types::{
             BuiltinType, BuiltinTypeRepo, TYPE_NAME_FIELD, TYPE_TAGS_FIELD, TypeField,
             TypeImplementation, img_property, list, obj,
@@ -73,7 +74,7 @@ impl AnalysisLibrary {
         // Parse all sources to analyze and store resulting units
         Self::parse_sources(l, &config.files_to_analyze)?;
 
-        // Now initialize constant types in the analysis library
+        // Add the "img" property to all constant analysis library types
         get_global(l, ANALYSIS_LIB_GLOBAL_NAME);
         for lua_type in [
             "BigInt",
@@ -91,7 +92,7 @@ impl AnalysisLibrary {
         }
         pop(l, 1);
 
-        // Configure pseudo-object type type be compatible with the "Object"
+        // Configure struct based type type be compatible with the "Object"
         // LKQL type.
         for obj_type in ["SourceLocation", "SourceLocationRange", "Diagnostic"] {
             Self::init_type_compatibility(l, obj_type, &obj::TYPE, &obj::IMPLEMENTATION);
@@ -330,6 +331,10 @@ impl AnalysisLibrary {
         // Then set the type name
         push_string(l, &node_type.name);
         set_field(l, -2, TYPE_NAME_FIELD);
+
+        // Make node indexable values
+        push_bool(l, true);
+        set_field(l, -2, &indexable::TRAIT.runtime_field());
         pop(l, 1);
 
         // Set the "img" property
