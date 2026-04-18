@@ -14,7 +14,7 @@ pub mod sized;
 /// This type represents an LKQL built-in trait. A trait represents a set of
 /// constraints that can be applied to a built-in type. A type may implements
 /// multiple traits in the same time.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct BuiltinTrait {
     pub name: &'static str,
     pub required_overloads: &'static [OverloadTarget],
@@ -94,7 +94,7 @@ impl BuiltinTrait {
 /// This type represents a field that is required by a trait, it is used to
 /// check that a type which implements a trait is defining required field. Each
 /// variant has a string corresponding the name of the required field.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum RequiredField {
     Value(&'static str),
     Property(&'static str),

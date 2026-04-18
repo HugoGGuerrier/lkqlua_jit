@@ -60,6 +60,14 @@ pub struct BuiltinType {
     pub implementation_variant: TypeImplementationVariant,
 }
 
+impl Eq for BuiltinType {}
+
+impl PartialEq for BuiltinType {
+    fn eq(&self, other: &Self) -> bool {
+        self.tag == other.tag
+    }
+}
+
 /// This type represents the way a built-in type is implemented.
 /// An LKQL type may be either mono or polymorphic. This means that a type can
 /// have multiple implementations, while staying the same type to the user.
