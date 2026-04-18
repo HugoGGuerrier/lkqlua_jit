@@ -541,6 +541,21 @@ impl Node {
                 iterable_access.release(ctx);
             }
             NodeVariant::IfExpr { condition, consequence, alternative } => {
+                // In a first place, we try to evaluate the condition as a
+                // boolean constant. If it succeeds, we only compile the useful
+                // branch.
+                if let Some(ConstantValue {
+                    variant: ConstantValueVariant::Bool(const_cond), ..
+                }) = condition.eval_as_constant()
+                {
+                    if const_cond {
+                        consequence.compile_as_value(ctx, result_slot);
+                    } else {
+                        alternative.compile_as_value(ctx, result_slot);
+                    }
+                    return;
+                }
+
                 // Create required labels
                 let alternative_label = ctx.instructions.new_label();
                 let next_label = ctx.instructions.new_label();
@@ -707,7 +722,7 @@ impl Node {
                 let next_label = ctx.instructions.new_label();
 
                 // Compile the current node as branching to emit short
-                // circuiting instructions
+                // circuiting instructions.
                 self.compile_as_branching(ctx, if_false_label);
 
                 // Emit the code to set the result to "true"
@@ -1630,6 +1645,21 @@ impl Node {
             // In the case of a conditional expression, avoid useless jump and
             // compile each branch as returning.
             NodeVariant::IfExpr { condition, consequence, alternative } => {
+                // In a first place, we try to evaluate the condition as a
+                // boolean constant. If it succeeds, we only compile the useful
+                // branch.
+                if let Some(ConstantValue {
+                    variant: ConstantValueVariant::Bool(const_cond), ..
+                }) = condition.eval_as_constant()
+                {
+                    if const_cond {
+                        consequence.compile_as_function_body(ctx);
+                    } else {
+                        alternative.compile_as_function_body(ctx);
+                    }
+                    return;
+                }
+
                 // Prepare the alternative label
                 let alternative_label = ctx.instructions.new_label();
 
