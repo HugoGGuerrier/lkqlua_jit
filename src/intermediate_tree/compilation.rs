@@ -426,7 +426,7 @@ impl Node {
                     _ => unreachable!(),
                 };
 
-                // Finally emit a call instruction and place the result in the required slot
+                // Finally emit a call instruction and place the result in the result slot
                 ctx.instructions.abc(
                     &self.origin_location,
                     CALL,
@@ -784,9 +784,9 @@ impl Node {
 
             // --- Lexical scope introduction
             NodeVariant::InLexicalScope { local_symbols, expr } => {
-                Self::open_lexical_frame(ctx, local_symbols);
+                ctx.open_lexical_frame(local_symbols);
                 expr.compile_as_value(ctx, result_slot);
-                Self::close_lexical_frame(ctx);
+                ctx.close_lexical_frame();
             }
 
             // --- Symbol introduction
@@ -1230,9 +1230,9 @@ impl Node {
             }
 
             NodeVariant::InLexicalScope { local_symbols, expr } => {
-                Self::open_lexical_frame(ctx, local_symbols);
+                ctx.open_lexical_frame(local_symbols);
                 let res = expr.compile_as_access(ctx, already_reserved_slot);
-                Self::close_lexical_frame(ctx);
+                ctx.close_lexical_frame();
                 res
             }
 
@@ -1438,9 +1438,9 @@ impl Node {
                 }
 
                 NodeVariant::InLexicalScope { local_symbols, expr } => {
-                    Node::open_lexical_frame(ctx, local_symbols);
+                    ctx.open_lexical_frame(local_symbols);
                     internal_compile(expr, ctx, if_true_label, if_false_label, branching_kind);
-                    Node::close_lexical_frame(ctx);
+                    ctx.close_lexical_frame();
                 }
 
                 NodeVariant::InstanceOf { expression, expected_type_tag } => {
@@ -1644,9 +1644,9 @@ impl Node {
             // In the case of a new lexical scope, the wrapped expression is
             // optimized.
             NodeVariant::InLexicalScope { local_symbols, expr } => {
-                Self::open_lexical_frame(ctx, local_symbols);
+                ctx.open_lexical_frame(local_symbols);
                 expr.compile_as_function_body(ctx);
-                Self::close_lexical_frame(ctx);
+                ctx.close_lexical_frame();
             }
 
             // In the case of a `nil` literal, return nothing
@@ -1891,38 +1891,6 @@ impl Node {
         for (i, positional_arg) in positional_args.iter().enumerate() {
             positional_arg.compile_as_value(ctx, first_positional_arg_slot + i as u8);
         }
-    }
-
-    /// Util function to open a new lexical frame, initialize it with all its
-    /// local bindings, and return a reference to its parent frame for the
-    /// caller to restore the previous state.
-    fn open_lexical_frame(ctx: &mut CompilationContext, local_symbols: &Vec<Identifier>) {
-        // Open a new lexical frame that will contains all symbols
-        // declared in the block.
-        let parent_frame = ctx.frame.clone();
-        let current_frame = Rc::new(RefCell::new(Frame::new_lexical(parent_frame.clone())));
-        ctx.frame = current_frame;
-
-        // Insert all locals in the frame
-        ctx.declare_locals(local_symbols);
-    }
-
-    /// Util function to close the currently opened lexical frame. This
-    /// function release all bindings of the current frame and restore the
-    /// parent one.
-    /// This function panics if the current frame isn't a lexical one.
-    fn close_lexical_frame(ctx: &mut CompilationContext) {
-        // Ensure the current frame is a lexical one
-        assert!(matches!(ctx.frame.borrow().variant, FrameVariant::Lexical));
-
-        // Release the block local bindings
-        let death_label = ctx.instructions.new_label();
-        ctx.instructions.label(death_label);
-        ctx.release_locals(death_label);
-
-        // Finally, restore the previous frame as the current one
-        let parent_frame = ctx.frame.borrow().parent_frame.clone().unwrap();
-        ctx.frame = parent_frame;
     }
 
     /// Util function to compile the body of a block expression.
@@ -2637,6 +2605,38 @@ impl<'a> CompilationContext<'a> {
     fn r#loop(&mut self, label: Label) {
         let next_available_slot = self.frame.borrow_mut().peek_next_slot();
         self.instructions.r#loop(label, next_available_slot);
+    }
+
+    /// Util function to open a new lexical frame, initialize it with all its
+    /// local bindings, and return a reference to its parent frame for the
+    /// caller to restore the previous state.
+    fn open_lexical_frame(&mut self, local_symbols: &Vec<Identifier>) {
+        // Open a new lexical frame that will contains all symbols
+        // declared in the block.
+        let parent_frame = self.frame.clone();
+        let current_frame = Rc::new(RefCell::new(Frame::new_lexical(parent_frame.clone())));
+        self.frame = current_frame;
+
+        // Insert all locals in the frame
+        self.declare_locals(local_symbols);
+    }
+
+    /// Util function to close the currently opened lexical frame. This
+    /// function release all bindings of the current frame and restore the
+    /// parent one.
+    /// This function panics if the current frame isn't a lexical one.
+    fn close_lexical_frame(&mut self) {
+        // Ensure the current frame is a lexical one
+        assert!(matches!(self.frame.borrow().variant, FrameVariant::Lexical));
+
+        // Release all local bindings
+        let death_label = self.instructions.new_label();
+        self.instructions.label(death_label);
+        self.release_locals(death_label);
+
+        // Finally, restore the previous frame as the current one
+        let parent_frame = self.frame.borrow().parent_frame.clone().unwrap();
+        self.frame = parent_frame;
     }
 
     /// Util function to add a collection of symbols in the current frame as local
