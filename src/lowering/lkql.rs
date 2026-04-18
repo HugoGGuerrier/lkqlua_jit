@@ -7,8 +7,8 @@
 use crate::{
     ExecutionContext,
     builtins::{
-        traits,
-        types::{self},
+        traits::{self, BuiltinTrait},
+        types::{self, BuiltinType},
     },
     errors::{
         AMBIGUOUS_IMPORT, MODULE_NOT_FOUND, POS_AFTER_NAMED_ARGUMENT, PREVIOUS_NAMED_ARG_HINT,
@@ -413,30 +413,22 @@ impl Node {
             LkqlNode::Indexing(_) | LkqlNode::SafeIndexing(_) => {
                 let (coll_expr, index, is_safe) = match node {
                     LkqlNode::Indexing(indexing) => {
-                        (indexing.f_collection_expr(), indexing.f_index_expr(), false)
+                        (indexing.f_collection_expr()?, indexing.f_index_expr()?, false)
                     }
                     LkqlNode::SafeIndexing(safe_indexing) => {
-                        (safe_indexing.f_collection_expr(), safe_indexing.f_index_expr(), true)
+                        (safe_indexing.f_collection_expr()?, safe_indexing.f_index_expr()?, true)
                     }
                     _ => unreachable!(),
                 };
                 NodeVariant::IndexExpr {
-                    indexed_val: Box::new(Self::lower_lkql_node(ctx, &coll_expr?)?.with_wrapper(
-                        |indexed_val| {
-                            Ok(NodeVariant::RequireTrait {
-                                expression: Box::new(indexed_val),
-                                required_trait: &traits::indexable::TRAIT,
-                            })
-                        },
-                    )?),
-                    index: Box::new(Self::lower_lkql_node(ctx, &index?)?.with_wrapper(|i| {
-                        Ok({
-                            NodeVariant::RequireType {
-                                expression: Box::new(i),
-                                expected_type: &types::int::TYPE,
-                            }
-                        })
-                    })?),
+                    indexed_val: Box::new(
+                        Self::lower_lkql_node(ctx, &coll_expr)?
+                            .with_trait_requirement(&traits::indexable::TRAIT)?,
+                    ),
+                    index: Box::new(
+                        Self::lower_lkql_node(ctx, &index)?
+                            .with_type_requirement(&types::int::TYPE)?,
+                    ),
                     is_safe,
                 }
             }
@@ -445,12 +437,8 @@ impl Node {
             LkqlNode::InClause(in_clause) => NodeVariant::InClause {
                 value: Box::new(Self::lower_lkql_node(ctx, &in_clause.f_value_expr()?)?),
                 collection: Box::new(
-                    Self::lower_lkql_node(ctx, &in_clause.f_list_expr()?)?.with_wrapper(|n| {
-                        Ok(NodeVariant::RequireTrait {
-                            expression: Box::new(n),
-                            required_trait: &traits::iterable::TRAIT,
-                        })
-                    })?,
+                    Self::lower_lkql_node(ctx, &in_clause.f_list_expr()?)?
+                        .with_trait_requirement(&traits::iterable::TRAIT)?,
                 ),
             },
 
@@ -471,12 +459,8 @@ impl Node {
             // --- If expression
             LkqlNode::CondExpr(cond_expr) => NodeVariant::IfExpr {
                 condition: Box::new(
-                    Self::lower_lkql_node(ctx, &cond_expr.f_condition()?)?.with_wrapper(|c| {
-                        Ok(NodeVariant::RequireType {
-                            expression: Box::new(c),
-                            expected_type: &types::bool::TYPE,
-                        })
-                    })?,
+                    Self::lower_lkql_node(ctx, &cond_expr.f_condition()?)?
+                        .with_type_requirement(&types::bool::TYPE)?,
                 ),
                 consequence: Box::new(Self::lower_lkql_node(ctx, &cond_expr.f_then_expr()?)?),
                 alternative: cond_expr
@@ -528,14 +512,9 @@ impl Node {
                             _ => unreachable!(),
                         })
                     })
-                    .map(|n| Self::lower_lkql_node(ctx, &n?.unwrap()))
                     .map(|n| {
-                        n?.with_wrapper(|coll_expr| {
-                            Ok(NodeVariant::RequireTrait {
-                                expression: Box::new(coll_expr),
-                                required_trait: &traits::iterable::TRAIT,
-                            })
-                        })
+                        let expr = Self::lower_lkql_node(ctx, &n?.unwrap())?;
+                        expr.with_trait_requirement(&traits::iterable::TRAIT)
                     })
                     .collect::<Result<_, Report>>()?,
                 body_index: *ctx.child_index_map.get(&node).unwrap(),
@@ -864,6 +843,23 @@ impl Node {
         Ok(Node {
             origin_location: self.origin_location.clone(),
             variant: create_wrapper(self)?,
+        })
+    }
+
+    /// Wrap the node in a type requirement one.
+    fn with_type_requirement(self, required_type: &'static BuiltinType) -> Result<Self, Report> {
+        self.with_wrapper(|n| {
+            Ok(NodeVariant::RequireType { expression: Box::new(n), expected_type: required_type })
+        })
+    }
+
+    /// Wrap the node in a trait requirement one.
+    fn with_trait_requirement(self, required_trait: &'static BuiltinTrait) -> Result<Self, Report> {
+        self.with_wrapper(|n| {
+            Ok(NodeVariant::RequireTrait {
+                expression: Box::new(n),
+                required_trait: required_trait,
+            })
         })
     }
 }
