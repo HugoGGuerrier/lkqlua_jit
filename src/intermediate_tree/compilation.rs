@@ -999,23 +999,36 @@ impl Node {
                 ctx.instructions.label(next_label);
             }
             NodeVariant::RequireType { expression, expected_type } => {
-                // Compile the expression in the result slot
-                expression.compile_as_value(ctx, result_slot);
-
-                // Then emit type checking instructions
-                emit_type_requirement(ctx, Some(&self.origin_location), result_slot, expected_type);
+                let expr_slot = Self::compile_type_requirement(
+                    ctx,
+                    expression,
+                    expected_type,
+                    Some(result_slot),
+                );
+                if expr_slot.slot() != result_slot {
+                    ctx.instructions.ad(
+                        &self.origin_location,
+                        MOV,
+                        result_slot,
+                        expr_slot.slot() as u16,
+                    );
+                }
             }
             NodeVariant::RequireTrait { expression, required_trait } => {
-                // Compile the expression in the result slot
-                expression.compile_as_value(ctx, result_slot);
-
-                // Then emit trait checking instructions
-                emit_trait_requirement(
+                let expr_slot = Self::compile_trait_requirement(
                     ctx,
-                    Some(&self.origin_location),
-                    result_slot,
+                    expression,
                     required_trait,
+                    Some(result_slot),
                 );
+                if expr_slot.slot() != result_slot {
+                    ctx.instructions.ad(
+                        &self.origin_location,
+                        MOV,
+                        result_slot,
+                        expr_slot.slot() as u16,
+                    );
+                }
             }
 
             // --- Non-trivial literals
@@ -1289,20 +1302,21 @@ impl Node {
             }
 
             NodeVariant::RequireType { expression, expected_type } => {
-                let res = expression.compile_as_access(ctx, already_reserved_slot);
-                emit_type_requirement(ctx, Some(&self.origin_location), res.slot(), expected_type);
-                res
+                Self::compile_type_requirement(
+                    ctx,
+                    expression,
+                    expected_type,
+                    already_reserved_slot,
+                )
             }
 
             NodeVariant::RequireTrait { expression, required_trait } => {
-                let res = expression.compile_as_access(ctx, already_reserved_slot);
-                emit_trait_requirement(
+                Self::compile_trait_requirement(
                     ctx,
-                    Some(&self.origin_location),
-                    res.slot(),
+                    expression,
                     required_trait,
-                );
-                res
+                    already_reserved_slot,
+                )
             }
             _ => fallback(ctx, already_reserved_slot, self),
         }
@@ -1977,6 +1991,132 @@ impl Node {
         // Label the next instruction
         ctx.instructions.label(next_label);
     }
+
+    /// Util function to compile a type requirement operation. This function
+    /// first tries to determine the type of `expr_to_check` statically, and
+    /// if it is not possible, the code require to check it at runtime is
+    /// emitted.
+    /// The function returns an access to the value of the expression to check.
+    fn compile_type_requirement(
+        ctx: &mut CompilationContext,
+        expression: &Node,
+        required_type: &BuiltinType,
+        already_reserved_slot: Option<u8>,
+    ) -> ValueAccess {
+        let res = expression.compile_as_access(ctx, already_reserved_slot);
+        match expression.expr_type() {
+            Some(t) if t == required_type => (),
+            Some(t) => ctx.diagnostics.push(Report::from_error_template(
+                &expression.origin_location,
+                &WRONG_TYPE,
+                &vec![required_type.display_name(), t.display_name()],
+            )),
+            None => {
+                // Create the next label
+                let next_label = ctx.instructions.new_label();
+
+                // Emit the type checking part
+                emit_type_check(
+                    ctx,
+                    Some(&expression.origin_location),
+                    res.slot(),
+                    required_type.tag,
+                    next_label,
+                    false,
+                );
+
+                // Now emit the code to raise a runtime error in the case where
+                // the value isn't of the required type.
+                let actual_name = ctx.frame.borrow_mut().get_slot();
+                emit_table_member_read(
+                    ctx,
+                    Some(&expression.origin_location),
+                    actual_name,
+                    res.slot(),
+                    TYPE_NAME_FIELD,
+                );
+                emit_runtime_error(
+                    ctx,
+                    Some(&expression.origin_location),
+                    &WRONG_TYPE,
+                    &vec![
+                        ErrorInstanceArg::Static(String::from(required_type.display_name())),
+                        ErrorInstanceArg::LocalValue(actual_name),
+                    ],
+                );
+                ctx.frame.borrow_mut().release_slot(actual_name);
+
+                // Finally label the next instruction
+                ctx.instructions.label(next_label);
+            }
+        };
+        res
+    }
+
+    /// Util function to compile a type requirement operation. This function
+    /// first tries to determine the type of `expr_to_check` statically, and
+    /// if it is not possible, the code require to check it at runtime is
+    /// emitted.
+    /// The function returns an access to the value of the expression to check.
+    fn compile_trait_requirement(
+        ctx: &mut CompilationContext,
+        expression: &Node,
+        required_trait: &BuiltinTrait,
+        already_reserved_slot: Option<u8>,
+    ) -> ValueAccess {
+        let res = expression.compile_as_access(ctx, already_reserved_slot);
+        match expression.expr_type() {
+            Some(t) if t.traits.contains(&required_trait) => (),
+            Some(t) => ctx.diagnostics.push(Report::from_error_template(
+                &expression.origin_location,
+                &MISSING_TRAIT,
+                &vec![required_trait.name, t.display_name()],
+            )),
+            None => {
+                // Create the label for the next instruction
+                let next_label = ctx.instructions.new_label();
+
+                // Then get the field corresponding to the trait name in the
+                // traits table.
+                let trait_res = ctx.frame.borrow_mut().get_slot();
+                emit_table_member_read(
+                    ctx,
+                    Some(&expression.origin_location),
+                    trait_res,
+                    res.slot(),
+                    &required_trait.runtime_field(),
+                );
+                ctx.instructions
+                    .ad(&expression.origin_location, IST, 0, trait_res as u16);
+                ctx.frame.borrow_mut().release_slot(trait_res);
+                ctx.goto(next_label);
+
+                // Emit instructions to raise a runtime error
+                let type_name = ctx.frame.borrow_mut().get_slot();
+                emit_table_member_read(
+                    ctx,
+                    Some(&expression.origin_location),
+                    type_name,
+                    res.slot(),
+                    TYPE_NAME_FIELD,
+                );
+                emit_runtime_error(
+                    ctx,
+                    Some(&expression.origin_location),
+                    &MISSING_TRAIT,
+                    &vec![
+                        ErrorInstanceArg::Static(String::from(required_trait.name)),
+                        ErrorInstanceArg::LocalValue(type_name),
+                    ],
+                );
+                ctx.frame.borrow_mut().release_slot(type_name);
+
+                // Finally label the next instructions
+                ctx.instructions.label(next_label);
+            }
+        };
+        res
+    }
 }
 
 impl ConstantValue {
@@ -2342,92 +2482,6 @@ fn emit_set_metatable(
 
     // Release call slot
     ctx.frame.borrow_mut().release_slots(call_slots);
-}
-
-/// Emit instructions to check that the type of the value stored in the
-/// `actual_value` slot is corresponding to `expected_type`. If types don't
-/// match a runtime error is raised.
-fn emit_type_requirement(
-    ctx: &mut CompilationContext,
-    maybe_origin_location: Option<&SourceSection>,
-    value_slot: u8,
-    required_type: &BuiltinType,
-) {
-    // First create a label for the instruction next to what this function is
-    // emitting.
-    let next_label = ctx.instructions.new_label();
-
-    // Emit the type checking part
-    emit_type_check(
-        ctx,
-        maybe_origin_location,
-        value_slot,
-        required_type.tag,
-        next_label,
-        false,
-    );
-
-    // Now emit the code to raise a runtime error in the case where type tags
-    // don't match.
-    let actual_name = ctx.frame.borrow_mut().get_slot();
-    emit_table_member_read(ctx, maybe_origin_location, actual_name, value_slot, TYPE_NAME_FIELD);
-    emit_runtime_error(
-        ctx,
-        maybe_origin_location,
-        &WRONG_TYPE,
-        &vec![
-            ErrorInstanceArg::Static(String::from(required_type.display_name())),
-            ErrorInstanceArg::LocalValue(actual_name),
-        ],
-    );
-    ctx.frame.borrow_mut().release_slot(actual_name);
-
-    // Finally label the next instruction
-    ctx.instructions.label(next_label);
-}
-
-/// Emit instructions to check that the value stored in the `value_slot` slot
-/// is implementing the required built-in trait. If not, a runtime error is
-/// raised.
-fn emit_trait_requirement(
-    ctx: &mut CompilationContext,
-    maybe_origin_location: Option<&SourceSection>,
-    value_slot: u8,
-    required_trait: &BuiltinTrait,
-) {
-    // Create the label for the next instruction
-    let next_label = ctx.instructions.new_label();
-
-    // Then get the field corresponding to the trait name in the traits table
-    let trait_res = ctx.frame.borrow_mut().get_slot();
-    emit_table_member_read(
-        ctx,
-        maybe_origin_location,
-        trait_res,
-        value_slot,
-        &required_trait.runtime_field(),
-    );
-    ctx.instructions
-        .ad_maybe_loc(maybe_origin_location, IST, 0, trait_res as u16);
-    ctx.frame.borrow_mut().release_slot(trait_res);
-    ctx.goto(next_label);
-
-    // Emit instructions to raise a runtime error
-    let type_name = ctx.frame.borrow_mut().get_slot();
-    emit_table_member_read(ctx, maybe_origin_location, type_name, value_slot, TYPE_NAME_FIELD);
-    emit_runtime_error(
-        ctx,
-        maybe_origin_location,
-        &MISSING_TRAIT,
-        &vec![
-            ErrorInstanceArg::Static(String::from(required_trait.name)),
-            ErrorInstanceArg::LocalValue(type_name),
-        ],
-    );
-    ctx.frame.borrow_mut().release_slot(type_name);
-
-    // Finally label the next instructions
-    ctx.instructions.label(next_label);
 }
 
 /// Emit code that checks whether the value at `value_slot` is an instance
