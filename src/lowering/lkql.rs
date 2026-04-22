@@ -533,20 +533,18 @@ impl Node {
             },
             LkqlNode::BinOp(bin_op) => {
                 let operator_node = bin_op.f_op()?;
-                let left = Box::new(Self::lower_lkql_node(ctx, &bin_op.f_left()?)?);
-                let right = Box::new(Self::lower_lkql_node(ctx, &bin_op.f_right()?)?);
+                let left = Self::lower_lkql_node(ctx, &bin_op.f_left()?)?;
+                let right = Self::lower_lkql_node(ctx, &bin_op.f_right()?)?;
                 match &operator_node {
-                    LkqlNode::OpAnd(_) | LkqlNode::OpOr(_) | LkqlNode::OpNot(_) => {
-                        NodeVariant::LogicBinOp {
-                            left,
-                            operator: LogicOperator::lower_lkql_node(&operator_node, ctx)?,
-                            right,
-                        }
-                    }
+                    LkqlNode::OpAnd(_) | LkqlNode::OpOr(_) => NodeVariant::LogicBinOp {
+                        left: Box::new(left.with_type_requirement(&types::bool::TYPE)?),
+                        operator: LogicOperator::lower_lkql_node(&operator_node, ctx)?,
+                        right: Box::new(right.with_type_requirement(&types::bool::TYPE)?),
+                    },
                     LkqlNode::OpConcat(_) => NodeVariant::MiscBinOp {
-                        left,
+                        left: Box::new(left),
                         operator: MiscOperator::lower_lkql_node(&operator_node, ctx)?,
-                        right,
+                        right: Box::new(right),
                     },
                     _ => unreachable!(),
                 }
