@@ -3,8 +3,6 @@
 //! This module defines the LKQL "Pattern" type. This type represents
 //! compiled regular expression and can be used as such.
 
-use regex::Regex;
-
 use crate::{
     builtins::types::{
         BuiltinType, OverloadTarget, TypeField, TypeImplementation, TypeImplementationVariant,
@@ -13,6 +11,7 @@ use crate::{
     engine::FunctionValue,
     lua::{LuaState, get_field, get_user_data, pop, push_string},
 };
+use regex::Regex;
 use std::ffi::c_int;
 
 pub const TYPE: BuiltinType = BuiltinType {

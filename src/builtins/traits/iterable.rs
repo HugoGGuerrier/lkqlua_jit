@@ -6,12 +6,11 @@
 //! Iterators are represented by functional values that are called to get the
 //! "next" element in the source iterable.
 
-use const_format::formatcp;
-
 use crate::{
     builtins::traits::{BuiltinTrait, RequiredField},
     engine::{FunctionValue, RuntimeValue},
 };
+use const_format::formatcp;
 
 /// Name of the field to access to get an iterator for a value.
 pub const ITERATOR_FIELD: &str = "field@iterator";

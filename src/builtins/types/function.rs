@@ -2,8 +2,6 @@
 //!
 //! This module defines the LKQL "Function" type.
 
-use std::ffi::c_int;
-
 use crate::{
     ExecutionContext,
     builtins::types::{
@@ -16,6 +14,7 @@ use crate::{
         get_user_data, load_lua_code, pop, push_string, set_metatable,
     },
 };
+use std::ffi::c_int;
 
 pub const TYPE: BuiltinType = BuiltinType {
     tag: namespace::TYPE.tag + 1,

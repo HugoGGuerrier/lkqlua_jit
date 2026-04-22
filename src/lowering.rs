@@ -3,9 +3,8 @@
 //! This module is the base of all the source lowering process. Its purpose is
 //! to hold all common logic used by source lowering passes.
 
-use std::collections::HashMap;
-
 use crate::{ExecutionContext, report::Report, sources::SourceId};
+use std::collections::HashMap;
 
 pub mod lkql;
 

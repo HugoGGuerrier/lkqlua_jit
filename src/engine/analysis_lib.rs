@@ -4,8 +4,6 @@
 //! that is going to be used by the LKQL engine to perform queries on the
 //! analyzed code base.
 
-use std::{cmp::min, ffi::c_int, i32, path::PathBuf};
-
 use crate::{
     Config,
     builtins::{
@@ -24,6 +22,7 @@ use crate::{
         push_table, safe_call, set_field, set_global, set_index, set_metatable,
     },
 };
+use std::{cmp::min, ffi::c_int, i32, path::PathBuf};
 
 pub const ANALYSIS_LIB_GLOBAL_NAME: &str = "value@analysis_lib";
 pub const ANALYSIS_CONTEXT_GLOBAL_NAME: &str = "value@analysis_context";

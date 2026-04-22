@@ -2,8 +2,6 @@
 //!
 //! This module contains all LKQL built-in functions and utils for them.
 
-use regex::RegexBuilder;
-
 use crate::{
     ExecutionContext,
     builtins::{
@@ -21,6 +19,7 @@ use crate::{
         push_table, push_user_data_ptr, raise_error, set_field, set_metatable, to_string,
     },
 };
+use regex::RegexBuilder;
 use std::io::Write;
 use std::{ffi::c_int, path::Path};
 

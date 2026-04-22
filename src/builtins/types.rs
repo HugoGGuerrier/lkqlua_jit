@@ -3,8 +3,6 @@
 //! This module contains all LKQL built-in types and their associated working
 //! values.
 
-use std::ffi::c_int;
-
 use crate::{
     builtins::{functions::lkql_img, traits::BuiltinTrait},
     engine::{FunctionValue, LuaValue, RuntimeValue},
@@ -13,6 +11,7 @@ use crate::{
         set_global, set_index, set_top,
     },
 };
+use std::ffi::c_int;
 
 pub mod bool;
 pub mod function;
