@@ -10,17 +10,20 @@ use crate::{
             sized::{self, DEFAULT_SIZED_LENGTH},
         },
         types::{
-            BuiltinType, OverloadTarget, TypeField, TypeImplementation, TypeImplementationVariant,
-            img_property, tuple,
+            BuiltinType, OverloadTarget, TYPE_NAME_FIELD, TYPE_TAGS_FIELD, TypeField,
+            TypeImplementation, TypeImplementationVariant, img_property, tuple,
         },
     },
     engine::{FunctionValue, RuntimeValue},
     lua::{LuaState, get_field, get_index, get_length, get_string, push_string, set_top},
 };
+use const_format::formatcp;
 use std::ffi::c_int;
 
+const TYPE_TAG: i32 = tuple::TYPE.tag + 1;
+
 pub const TYPE: BuiltinType = BuiltinType {
-    tag: tuple::TYPE.tag + 1,
+    tag: TYPE_TAG,
     traits: &[&indexable::TRAIT, &iterable::TRAIT, &sized::TRAIT],
     implementation_variant: TypeImplementationVariant::Monomorphic {
         implementation: IMPLEMENTATION,
@@ -41,6 +44,7 @@ pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
     overloads: &[
         (OverloadTarget::ToString, FunctionValue::CFunction(list_tostring)),
         (OverloadTarget::Eq, LIST_EQ),
+        (OverloadTarget::Concat, LIST_CONCAT),
     ],
     index_method: None,
     registering_function: None,
@@ -91,10 +95,10 @@ unsafe extern "C" fn list_tostring(l: LuaState) -> c_int {
 }
 
 /// Overload of "__eq" for the "List" type
-const LIST_EQ: FunctionValue = FunctionValue::LuaFunction(
+const LIST_EQ: FunctionValue = FunctionValue::LuaFunction(formatcp!(
     "function(self, other)
         -- Start by checking types
-        if getmetatable(self) ~= getmetatable(other) then
+        if not other['{tags_field}'][{list_type_tag}] then
             return false
         end
 
@@ -111,4 +115,46 @@ const LIST_EQ: FunctionValue = FunctionValue::LuaFunction(
         end
         return true
     end",
-);
+    tags_field = TYPE_TAGS_FIELD,
+    list_type_tag = tuple::TYPE.tag + 1,
+));
+
+/// Overload of "__concat" for the "List" type
+const LIST_CONCAT: FunctionValue = FunctionValue::LuaFunction(formatcp!(
+    "function(self, other)
+        -- Start by checking types
+        if not self['{tags_field}'][{list_type_tag}] then
+            error(
+                'Attempt to concatenate a list with a \"' ..
+                self['{name_field}'] ..
+                '\"'
+            )
+        end
+
+        if not other['{tags_field}'][{list_type_tag}] then
+            error(
+                'Attempt to concatenate a list with a \"' ..
+                other['{name_field}'] ..
+                '\"'
+            )
+        end
+
+        -- Create a new result
+        local res = setmetatable({{}}, _G['type@List'])
+
+        -- Place self elements in the result
+        local self_len = #self
+        for i, v in ipairs(self) do
+            res[i] = v
+        end
+        for i, v in ipairs(other) do
+            res[i+self_len] = v
+        end
+
+        -- Finally return the result
+        return res
+    end",
+    tags_field = TYPE_TAGS_FIELD,
+    list_type_tag = TYPE_TAG,
+    name_field = TYPE_NAME_FIELD,
+));
