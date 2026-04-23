@@ -57,30 +57,17 @@ struct LauncherArgs {
 /// Get a styles descriptor destined to clap.
 fn get_styles() -> Styles {
     Styles::styled()
-        .header(
-            Style::new()
-                .bold()
-                .underline()
-                .fg_color(Some(Color::Ansi(AnsiColor::BrightGreen))),
-        )
+        .header(Style::new().bold().underline())
         .usage(
             Style::new()
                 .bold()
                 .italic()
                 .fg_color(Some(Color::Ansi(AnsiColor::BrightBlack))),
         )
-        .placeholder(
-            Style::new()
-                // .dimmed()
-                .fg_color(Some(Color::Ansi(AnsiColor::Cyan))),
-        )
-        .context_value(Style::new().fg_color(Some(Color::Ansi(AnsiColor::BrightBlue))))
-        .literal(
-            Style::new()
-                .bold()
-                .fg_color(Some(Color::Ansi(AnsiColor::BrightCyan))),
-        )
-        .valid(Style::new().fg_color(Some(Color::Ansi(AnsiColor::BrightCyan))))
+        .placeholder(Style::new().dimmed())
+        .context_value(Style::new().italic().dimmed())
+        .literal(Style::new().bold())
+        .valid(Style::new().fg_color(Some(Color::Ansi(AnsiColor::Green))))
         .error(
             Style::new()
                 .bold()
