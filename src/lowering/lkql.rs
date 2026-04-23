@@ -552,16 +552,16 @@ impl Node {
 
             // --- Unary operation
             LkqlNode::UnOp(un_op) => {
-                let operand = Box::new(Self::lower_lkql_node(ctx, &un_op.f_operand()?)?);
+                let operand = Self::lower_lkql_node(ctx, &un_op.f_operand()?)?;
                 let operator_node = un_op.f_op()?;
                 match &operator_node {
                     LkqlNode::OpPlus(_) | LkqlNode::OpMinus(_) => NodeVariant::ArithUnOp {
                         operator: ArithOperator::lower_lkql_node(&operator_node, ctx)?,
-                        operand,
+                        operand: Box::new(operand.with_type_requirement(&types::int::TYPE)?),
                     },
                     LkqlNode::OpNot(_) => NodeVariant::LogicUnOp {
                         operator: LogicOperator::lower_lkql_node(&operator_node, ctx)?,
-                        operand,
+                        operand: Box::new(operand.with_type_requirement(&types::bool::TYPE)?),
                     },
                     _ => unreachable!(),
                 }
