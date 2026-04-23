@@ -1,0 +1,2 @@
+val l1 = ["This", "Is"]
+print(l1 & 1)

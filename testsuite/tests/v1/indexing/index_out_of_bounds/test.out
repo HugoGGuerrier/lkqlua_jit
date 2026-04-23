@@ -1,0 +1,7 @@
+Error: Index out of bounds
+   ╭─[ <working-dir>/script.lkql:2:11 ]
+   │
+ 2 │ print(lst[3])
+   │           ┬  
+   │           ╰── Cannot access index 3 in the value, it is out of bounds
+───╯

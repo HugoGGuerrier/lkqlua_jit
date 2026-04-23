@@ -1,0 +1,12 @@
+Error: No value for parameter
+   ╭─[ <working-dir>/script.lkql:1:1 ]
+   │
+ 1 │ fun add(a, b) = a + b
+   │ ──────────┬──────────  
+   │           ╰──────────── Missing value for the "b" parameter
+───╯
+Advice: Called in "script.lkql"
+   ╭─[ <working-dir>/script.lkql:2:7 ]
+   │
+ 2 │ print(add(1))
+───╯

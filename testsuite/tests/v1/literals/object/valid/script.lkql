@@ -1,0 +1,1 @@
+print({a: 1, b: 2, inner_object: {c: 3, d: "hello"}})

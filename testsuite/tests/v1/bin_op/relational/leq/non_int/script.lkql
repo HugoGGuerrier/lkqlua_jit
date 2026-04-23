@@ -1,0 +1,3 @@
+val int = 42
+
+print(int <= "Hello")

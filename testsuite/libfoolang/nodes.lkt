@@ -1,0 +1,328 @@
+# Test that Rust API is properly working
+
+lexer foo_lexer {
+
+    @trivia()
+    Whitespace <- p"[ \n\r\t]+"
+
+    family alphanumericals {
+        Def <- "def"
+        Var <- "var"
+    }
+
+    family alphanumericals {
+        Error <- "error"
+        Example <- "example"
+        Null <- "null"
+
+        KwA <- "kwA"
+        KwB <- "kwB"
+        KwC <- "kwC"
+        KwD <- "kwD"
+        KwE <- "kwE"
+        KwF <- "kwF"
+    }
+
+
+    family punctuation {
+        Comma <- ","
+        Dot <- "."
+        Semicolon <- ";"
+        Colon <- ":"
+        LPar <- "("
+        RPar <- ")"
+        LBrace <- "{"
+        RBrace <- "}"
+        Equal <- or("=" | ":=")
+        Plus <- "+"
+    }
+
+    Minus <- "-"
+    LessThan <- "<"
+    LessThanOrEqual <- "<="
+    GreaterThan <- ">"
+    GreaterThanOrEqual <- ">="
+
+    @unparsing_spacing(with=alphanumericals)
+    family alphanumericals {
+        Number <- p"[0-9]+|0x[0-9a-f]+"
+        @symbol()
+        Identifier <- p"[a-zA-Z_][a-zA-Z0-9_]*"
+    }
+
+    String <- p"\"[^\"]*\""
+
+    family comments {
+        @with_unparsing_newline
+        @trivia(comment=true)
+        Comment <- p"#(.?)+"
+    }
+
+}
+
+@with_lexer(foo_lexer)
+grammar foo_grammar {
+    @main_rule main_rule <- Sequence+(node)
+    node <- or(example | null_node | var | ident | string)
+    example <- Example("example")
+    null_node <- Null("null")
+    var <- Var("var" "(" main_rule ")")
+    ident <- Ident(@Identifier)
+    string <- StringLiteral(@String)
+}
+
+enum Color {
+    case red, green, blue
+}
+
+@abstract
+@with_abstract_list
+class FooNode implements Node[FooNode] {
+    @exported
+    fun with_md(eq_used: Bool, eq_ignored: Bool): Entity[FooNode] =
+        Entity[FooNode](
+            node=node, info=EntityInfo(
+                md=Metadata(eq_used=eq_used, eq_ignored=eq_ignored),
+                rebindings=self.info.rebindings,
+                from_rebound=self.info.from_rebound
+            )
+        )
+
+    # --- Booleans
+
+    @exported
+    fun get_bool(): Bool = true
+
+    @exported
+    fun bool_id(b: Bool): Bool = b
+
+    @exported
+    fun bool_image(b: Bool): String = if b then "true" else "false"
+
+    @exported
+    fun null_bool(): Bool = null[Bool]
+
+    # --- Integers
+
+    @exported
+    fun get_int(i: Int = 42): Int = i
+
+    @exported
+    fun int_id(i: Int): Int = i
+
+    @exported
+    fun int_double(i: Int): Int = i + i
+
+    # --- Big integers
+
+    @exported
+    fun big_int_double(c: BigInt): BigInt = c + c
+
+    # --- Characters
+
+    @exported
+    fun get_char(c: Char = 'a'): Char = c
+
+    @exported
+    fun get_eacute(c: Char = '\xe9'): Char = c
+
+    @exported
+    fun char_id(c: Char): Char = c
+
+    # --- Strings
+
+    @exported
+    fun get_string(): String = "Hello world!"
+
+    @exported
+    fun null_string(): String = null[String]
+
+    @exported
+    fun string_id(s: String): String = s
+
+    # --- Symbols
+
+    @exported
+    fun get_symbol(): Symbol = s"a_symbol"
+
+    @exported
+    fun symbol_id(s: Symbol): Symbol = s
+
+    @exported
+    fun null_symbol(): Symbol = null[Symbol]
+
+    # --- Source locations
+
+    @exported
+    @external()
+    fun get_sloc(line: Int, col: Int): SourceLocation
+
+    @exported
+    @external()
+    fun get_line_from_sloc(sloc: SourceLocation): Int
+
+    @exported
+    @external()
+    fun get_col_from_sloc(sloc: SourceLocation): Int
+
+    # --- Enumerations
+
+    @exported
+    fun get_color(): Color = Color.blue
+
+    @exported
+    fun color_id(c: Color): Color = c
+
+    @exported
+    fun color_id_with_default(c: Color = Color.red): Color = c
+
+    # --- Arrays
+
+    @exported
+    fun get_int_array(): Array[Int] = [1, 2, 3]
+
+    @exported
+    fun int_array_length(a: Array[Int]): Int = a.length()
+
+    @exported
+    fun int_array_elem(a: Array[Int], index: Int): Int = a[index]
+
+    @exported
+    fun get_pair_array(): Array[Pair] = [
+        Pair(left = 1, right = 2),
+        Pair(left = 3, right = 4)
+    ]
+
+    @exported
+    fun pair_array_length(a: Array[Pair]): Int = a.length()
+
+    @exported
+    fun pair_array_elem(a: Array[Pair], index: Int): Pair = a[index]
+
+    @exported
+    @external()
+    fun get_sloc_array(): Array[SourceLocation]
+
+    @exported
+    fun sloc_array_length(a: Array[SourceLocation]): Int = a.length()
+
+    @exported
+    fun sloc_array_elem(
+        a: Array[SourceLocation],
+        index: Int
+    ): SourceLocation = a[index]
+
+    # --- Iterators
+
+    @exported
+    fun get_int_iter(): Iterator[Int] = [1, 2, 3].to_iterator()
+
+    @exported
+    fun int_iter_id(it: Iterator[Int]): Iterator[Int] = it
+
+    @exported
+    fun get_entity_iter(): Iterator[Entity[FooNode]] =
+        [self, self, self].to_iterator()
+
+    @exported
+    fun get_pair_iter(): Iterator[Pair] = [
+        Pair(left = 1, right = 2),
+        Pair(left = 3, right = 4)
+    ].to_iterator()
+
+    # --- Structures
+
+    @exported
+    fun get_bare_node_struct(): BareNodeStruct = BareNodeStruct(
+        a_boolean=true, bare_node=self.node, a_char='a'
+    )
+
+    @exported
+    fun get_char_from_struct(s: BareNodeStruct): Char = s.a_char
+
+    @exported
+    fun get_foo_node_struct(b: Bool): FooNodeStruct = FooNodeStruct(
+        node=if b then self else null[Entity[FooNode]]
+    )
+
+    @exported
+    fun get_node_from_struct(node_struct: FooNodeStruct): Entity[FooNode] =
+        node_struct.node
+
+    @exported
+    fun get_array_struct(): ArrayStruct = ArrayStruct(
+        arr = [
+            Pair(left = 1, right = 2),
+            Pair(left = 3, right = 4),
+            Pair(left = 5, right = 6)
+        ]
+    )
+
+    @exported
+    fun get_arr_from_struct(s: ArrayStruct): Array[Pair] = s.arr
+
+    # --- Events
+
+    @exported
+    fun array_prop_error(): Array[Entity[FooNode]] =
+        raise[Array[Entity[FooNode]]] PropertyError(
+            "this is an error from Lkt"
+        )
+
+    @exported
+    @external()
+    fun trigger_unit_requested(name: Symbol, found: Bool, error: Bool): Bool
+}
+
+class Example: FooNode {
+}
+
+class Sequence: ASTList[FooNode] {
+    @exported
+    fun all_items(): Array[Entity[FooNode]] = self.map((i) => i)
+
+    @exported
+    fun example_items(): Array[Entity[Example]] = self.filtermap(
+        (i) => i.as![Example], (i) => i is Example
+    )
+}
+
+class Ident: FooNode implements TokenNode {
+    @exported
+    fun sym(sym: Symbol): Symbol = sym
+}
+
+class Null: FooNode {
+}
+
+class StringLiteral: FooNode {
+}
+
+class Var: FooNode {
+    @parse_field arg: Sequence
+}
+
+@metadata
+struct Metadata {
+    @used_in_equality eq_used: Bool
+    eq_ignored: Bool
+}
+
+struct Pair {
+    left: Int
+    right: Int
+}
+
+struct BareNodeStruct {
+    a_boolean: Bool
+    bare_node: FooNode
+    a_char: Char
+}
+
+struct FooNodeStruct {
+    node: Entity[FooNode]
+}
+
+struct ArrayStruct {
+    arr: Array[Pair]
+}

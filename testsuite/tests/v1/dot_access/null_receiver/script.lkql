@@ -1,0 +1,2 @@
+val receiver = null
+print(receiver.a_field)

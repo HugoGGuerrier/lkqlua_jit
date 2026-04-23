@@ -1,0 +1,8 @@
+val x = 40
+val y = 11
+
+print(1 + 2)
+print(x + 2)
+print(2 + -50)
+print(x + -4)
+print(x + y)

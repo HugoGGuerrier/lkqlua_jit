@@ -1,0 +1,4 @@
+lkt_spec:
+  entry_point: nodes.lkt
+library:
+  language_name: Foo

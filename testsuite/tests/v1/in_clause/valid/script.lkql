@@ -1,0 +1,4 @@
+val lst = [1, "coucou", ["other", "list"]]
+print(1 in lst)
+print("coucou" in lst)
+print(["other", "list"] in lst)

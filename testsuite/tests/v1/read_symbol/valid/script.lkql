@@ -1,0 +1,23 @@
+# Test top level declaration
+val x = 42
+print(x)
+
+# Test lexical scopes
+{
+    val x = "Hello";
+    print(x)
+}
+
+# Test parameter access
+fun test_1(x) = print(x)
+test_1("World")
+
+# Test closure access
+val closed = "Coucou"
+fun test_2() = print(closed)
+test_2()
+
+# Test late closure access
+fun test_3() = print(late_closed)
+val late_closed = "Le monde"
+test_3()

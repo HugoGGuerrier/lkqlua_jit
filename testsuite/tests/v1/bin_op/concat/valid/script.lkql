@@ -1,0 +1,8 @@
+val s1 = "Hello"
+val s2 = "World"
+
+val l1 = ["This", "Is"]
+val l2 = ["A", "Sentence"]
+
+print(s1 & " " & s2)
+print(l1 & l2)

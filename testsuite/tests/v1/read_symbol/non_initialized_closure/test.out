@@ -1,0 +1,12 @@
+Error: Closed value not initialized
+   ╭─[ <working-dir>/script.lkql:1:20 ]
+   │
+ 1 │ fun test() = print(late_closed)
+   │                    ─────┬─────  
+   │                         ╰─────── The closed value "late_closed" is not initialized at this stage
+───╯
+Advice: Called in "script.lkql"
+   ╭─[ <working-dir>/script.lkql:2:1 ]
+   │
+ 2 │ test()
+───╯

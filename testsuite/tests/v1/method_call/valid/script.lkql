@@ -1,0 +1,4 @@
+val obj = { field: "hello", method: (self, prefix=self.field) => prefix & " world" }
+print(obj.method())
+print(obj.method("goodbye"))
+print(obj.method(prefix="mad"))

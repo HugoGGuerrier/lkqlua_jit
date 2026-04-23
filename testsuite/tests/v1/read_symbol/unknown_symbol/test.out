@@ -1,0 +1,14 @@
+Error: Unknown symbol
+   ╭─[ <working-dir>/script.lkql:1:7 ]
+   │
+ 1 │ print(not_a_value)
+   │       ─────┬─────  
+   │            ╰─────── The symbol "not_a_value" cannot be resolved in the current scope
+───╯
+Error: Unknown symbol
+   ╭─[ <working-dir>/script.lkql:3:14 ]
+   │
+ 3 │ fun test() = unknown_param
+   │              ──────┬──────  
+   │                    ╰──────── The symbol "unknown_param" cannot be resolved in the current scope
+───╯

@@ -1,0 +1,7 @@
+Error: Division by zero
+   ╭─[ <working-dir>/script.lkql:4:7 ]
+   │
+ 4 │ print(x / y)
+   │       ──┬──  
+   │         ╰──── Cannot perform a division by zero
+───╯

@@ -1,0 +1,4 @@
+driver: interpreter
+lkql_path:
+  - dir_1
+  - dir_2

@@ -1,0 +1,5 @@
+fun test_1() = 1
+fun test_2(a, b=0) = a + b
+
+print(test_1)
+print(test_2)

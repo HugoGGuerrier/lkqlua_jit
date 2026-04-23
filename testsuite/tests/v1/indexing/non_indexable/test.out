@@ -1,0 +1,7 @@
+Error: Missing required trait
+   ╭─[ <working-dir>/script.lkql:2:7 ]
+   │
+ 2 │ print(lst[1])
+   │       ─┬─  
+   │        ╰─── Trait "Indexable" is required, the type "Str" isn't implementing it
+───╯

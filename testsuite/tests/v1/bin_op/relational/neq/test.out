@@ -1,0 +1,44 @@
+=== Unit inequality
+false
+true
+
+=== Null inequality
+false
+true
+
+=== Boolean inequality
+false
+true
+true
+
+=== Int inequality
+false
+true
+true
+
+=== String inequality
+false
+true
+true
+
+=== Tuple inequality
+false
+true
+true
+
+=== List inequality
+false
+true
+true
+
+=== Object inequality
+false
+true
+true
+
+=== Function inequality
+false
+true
+true
+true
+

@@ -1,0 +1,7 @@
+Error: Ambiguous module importation
+   ╭─[ <working-dir>/script.lkql:1:1 ]
+   │
+ 1 │ import foo
+   │ ─────┬────  
+   │      ╰────── This module can be imported from multiple files (<working-dir>/dir_1/foo.lkql & <working-dir>/dir_2/foo.lkql)
+───╯

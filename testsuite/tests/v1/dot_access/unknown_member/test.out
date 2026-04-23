@@ -1,0 +1,7 @@
+Error: Unknown member
+   ╭─[ <working-dir>/script.lkql:2:11 ]
+   │
+ 2 │ print(obj.b)
+   │           ┬  
+   │           ╰── No member named "b" on the value
+───╯

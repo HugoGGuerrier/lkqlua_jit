@@ -1,0 +1,5 @@
+print(
+    |" This is a block
+    |" string with\nescaped chars
+    |"      and useless spaces
+)

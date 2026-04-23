@@ -1,0 +1,9 @@
+Error: Positional argument after a named one
+   ╭─[ <working-dir>/script.lkql:2:16 ]
+   │
+ 2 │ print(add(a=1, 2))
+   │           ─┬─  ┬  
+   │            │   ╰── This positional argument is after a named one
+   │            │      
+   │            ╰────── Hint: Previous named argument is here
+───╯

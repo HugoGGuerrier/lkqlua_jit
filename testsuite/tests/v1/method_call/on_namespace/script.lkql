@@ -1,0 +1,2 @@
+import lib
+print(lib.add(40, 2))

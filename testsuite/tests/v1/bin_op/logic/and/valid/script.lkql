@@ -1,0 +1,6 @@
+val f = false
+val t = true
+
+print(t and t)
+print(t and f)
+print(f and f)

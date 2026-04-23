@@ -1,0 +1,7 @@
+Error: Null receiver
+   ╭─[ <working-dir>/script.lkql:2:7 ]
+   │
+ 2 │ print(receiver.a_field)
+   │       ────────┬───────  
+   │               ╰───────── Trying to access the member of a null value
+───╯

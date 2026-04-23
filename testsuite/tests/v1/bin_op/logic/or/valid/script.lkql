@@ -1,0 +1,6 @@
+val f = false
+val t = true
+
+print(t or t)
+print(t or f)
+print(f or f)

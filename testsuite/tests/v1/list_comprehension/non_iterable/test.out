@@ -1,0 +1,7 @@
+Error: Missing required trait
+   ╭─[ <working-dir>/script.lkql:1:22 ]
+   │
+ 1 │ val l1 = [a for a in (1, 2, 3)]
+   │                      ────┬────  
+   │                          ╰────── Trait "Iterable" is required, the type "Tuple" isn't implementing it
+───╯

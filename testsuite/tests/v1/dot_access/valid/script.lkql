@@ -1,0 +1,7 @@
+val obj = { a: 1, b: "coucou", c: [1, 2, 3] }
+print(obj.a)
+print(obj.b)
+print(obj.c)
+
+val n = null
+print(n?.a_field)

@@ -12,3 +12,12 @@
 
 # VS code workspace config
 .vscode
+
+# Python virtualenv
+/venv
+
+# Testsuite output
+/testsuite/out
+
+# Libfoolang building artifacts
+/testsuite/libfoolang/build

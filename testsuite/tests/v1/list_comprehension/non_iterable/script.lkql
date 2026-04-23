@@ -1,0 +1,1 @@
+val l1 = [a for a in (1, 2, 3)]

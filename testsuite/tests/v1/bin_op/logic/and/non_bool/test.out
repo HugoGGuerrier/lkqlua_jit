@@ -1,0 +1,7 @@
+Error: Invalid expression type
+   ╭─[ <working-dir>/script.lkql:3:16 ]
+   │
+ 3 │ print(bool and "")
+   │                ─┬  
+   │                 ╰── Expecting a "Bool", got a "Str"
+───╯

@@ -1,0 +1,7 @@
+Error: Missing required trait
+   ╭─[ <working-dir>/script.lkql:1:12 ]
+   │
+ 1 │ print(1 in (1, 2, 3))
+   │            ────┬────  
+   │                ╰────── Trait "Iterable" is required, the type "Tuple" isn't implementing it
+───╯

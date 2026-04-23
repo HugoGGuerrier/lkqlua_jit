@@ -1,0 +1,2 @@
+val add = "not a function"
+print(add(1, 2))

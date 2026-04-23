@@ -1,0 +1,64 @@
+val unit = ()
+val nll = null
+val bool = true
+val int = 42
+val str = "Hello"
+val tuple = (str, int)
+val lst = [str, int]
+val obj = {a: str, b: int}
+
+fun fn() = 0
+fun other_fn() = 0
+
+print("=== Unit inequality")
+print(unit != ())
+print(unit != bool)
+print("")
+
+print("=== Null inequality")
+print(nll != null)
+print(nll != ())
+print("")
+
+print("=== Boolean inequality")
+print(bool != true)
+print(bool != false)
+print(bool != int)
+print("")
+
+print("=== Int inequality")
+print(int != 42)
+print(int != 43)
+print(int != bool)
+print("")
+
+print("=== String inequality")
+print(str != "Hello")
+print(str != "World")
+print(str != int)
+print("")
+
+print("=== Tuple inequality")
+print(tuple != (str, int))
+print(tuple != (str, bool))
+print(tuple != lst)
+print("")
+
+print("=== List inequality")
+print(lst != [str, int])
+print(lst != [str, bool])
+print(lst != obj)
+print("")
+
+print("=== Object inequality")
+print(obj != {a: str, b: int})
+print(obj != {a: str, b: bool})
+print(obj != {})
+print("")
+
+print("=== Function inequality")
+print(fn != fn)
+print(fn != other_fn)
+print(fn != () => 0)
+print(fn != int)
+print("")

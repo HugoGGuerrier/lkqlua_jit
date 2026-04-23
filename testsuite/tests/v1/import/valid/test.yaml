@@ -1,0 +1,3 @@
+driver: interpreter
+lkql_path:
+  - inner_dir

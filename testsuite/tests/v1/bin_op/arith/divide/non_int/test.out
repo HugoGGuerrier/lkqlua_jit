@@ -1,0 +1,7 @@
+Error: Error from the Lua engine
+   ╭─[ <working-dir>/script.lkql:4:7 ]
+   │
+ 4 │ print(x / y)
+   │       ──┬──  
+   │         ╰──── Attempt to perform arithmetic on local 'y' (a boolean value)
+───╯

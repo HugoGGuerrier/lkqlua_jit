@@ -1,0 +1,8 @@
+# Test declaration call and display
+val f = (x) => x
+print(f((y) => y + 1))
+
+# Test function as return value
+fun make_add(x, y) = () => x + y
+val add = make_add(2, 40)
+print(add())

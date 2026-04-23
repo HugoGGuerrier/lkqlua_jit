@@ -1,0 +1,5 @@
+val int = 42
+
+print(int > 2)
+print(int > 42)
+print(int > 45)

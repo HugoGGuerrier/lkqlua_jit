@@ -1,0 +1,6 @@
+val t = true
+val f = false
+
+if t then print("hello") else print("ERROR")
+if f then print("ERROR") else print("world")
+print(if f then print("ERROR"))

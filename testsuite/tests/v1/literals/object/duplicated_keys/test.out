@@ -1,0 +1,9 @@
+Error: Duplicated key
+   ╭─[ <working-dir>/script.lkql:1:14 ]
+   │
+ 1 │ print({a: 1, a: 2})
+   │        ┬     ┬  
+   │        │     ╰── The key "a" is present multiple times in the object
+   │        │        
+   │        ╰──────── Hint: Previous key declared here
+───╯

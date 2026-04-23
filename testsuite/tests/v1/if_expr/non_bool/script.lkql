@@ -1,0 +1,2 @@
+val str = "Hello"
+if str then print("ERROR") else print("ERROR")

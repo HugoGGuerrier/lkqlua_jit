@@ -1,0 +1,9 @@
+val x = 40
+val y = 9
+
+print(1 / 2)
+print(x / 2)
+print(2 / (-50))
+print(x / (-4))
+print(x / 7)
+print(x / y)

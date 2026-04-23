@@ -1,0 +1,2 @@
+val s = "Hello"
+print(-s)

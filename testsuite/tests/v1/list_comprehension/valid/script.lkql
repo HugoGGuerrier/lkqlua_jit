@@ -1,0 +1,17 @@
+# Test a simple list comprehension
+val l1 = [a for a in [1, 2, 3]]
+print(l1[1])
+print(l1[2])
+print(l1[3])
+print(l1?[4])
+
+# Ensure list comprehension is lazy
+val l2 = [{print("Computing " & a.img); a * 2} for a in [4, 5, 6]]
+print(l2[1])
+print(l2[3])
+
+# Ensure laziness is transitive
+val l3 = [{print("Generating " & a); a} for a in ["this", "is", "a", "list"]]
+val l4 = [{print("Computing " & a); a & " world"} for a in l3]
+print(l4[1])
+print(l4[3])

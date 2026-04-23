@@ -1,0 +1,10 @@
+Error: Symbol declared multiple times
+   ╭─[ <working-dir>/script.lkql:2:1 ]
+   │
+ 1 │ fun test() = 1
+   │ ───────┬──────  
+   │        ╰──────── Hint: Previously declared here
+ 2 │ fun test() = 1
+   │ ───────┬──────  
+   │        ╰──────── The symbol "test" already exists in the current scope
+───╯

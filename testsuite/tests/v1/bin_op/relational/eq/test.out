@@ -1,0 +1,44 @@
+=== Unit equality
+true
+false
+
+=== Null equality
+true
+false
+
+=== Boolean equality
+true
+false
+false
+
+=== Int equality
+true
+false
+false
+
+=== String equality
+true
+false
+false
+
+=== Tuple equality
+true
+false
+false
+
+=== List equality
+true
+false
+false
+
+=== Object equality
+true
+false
+false
+
+=== Function equality
+true
+false
+false
+false
+

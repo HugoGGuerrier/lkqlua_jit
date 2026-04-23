@@ -1,0 +1,4 @@
+val bool = true
+
+print(not bool)
+print(not (not bool))

@@ -1,0 +1,7 @@
+Error: Ignored expression
+   ╭─[ <working-dir>/script.lkql:3:5 ]
+   │
+ 3 │     1 + x;
+   │     ──┬──  
+   │       ╰──── Cannot ignore a non-unit expression in a block expression body
+───╯

@@ -1,0 +1,7 @@
+import foo
+import bar
+import baz
+
+print(foo)
+print(bar)
+print(baz)
