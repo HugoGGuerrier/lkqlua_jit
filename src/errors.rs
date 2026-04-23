@@ -17,9 +17,15 @@ pub const UNKNOWN_SYMBOL: ErrorTemplate = ErrorTemplate {
     message_template: "The symbol \"{}\" cannot be resolved in the current scope",
 };
 
+pub const UNINITIALIZED_SYMBOL: ErrorTemplate = ErrorTemplate {
+    id: UNKNOWN_SYMBOL.id + 1,
+    title: "Closed value not initialized",
+    message_template: "The closed value \"{}\" is not initialized at this stage",
+};
+
 /// Error when trying to add an already existing symbol.
 pub const DUPLICATED_SYMBOL: ErrorTemplate = ErrorTemplate {
-    id: UNKNOWN_SYMBOL.id + 1,
+    id: UNINITIALIZED_SYMBOL.id + 1,
     title: "Symbol declared multiple times",
     message_template: "The symbol \"{}\" already exists in the current scope",
 };
@@ -123,7 +129,7 @@ pub const UNKNOWN_NODE_TYPE: ErrorTemplate = ErrorTemplate {
 
 /// Error when an element of a block expression body doesn't return the unit
 /// value.
-pub const NONE_UNIT_BLOCK_ELEM: ErrorTemplate = ErrorTemplate {
+pub const NOT_UNIT_BLOCK_ELEM: ErrorTemplate = ErrorTemplate {
     id: UNKNOWN_NODE_TYPE.id + 1,
     title: "Ignored expression",
     message_template: "Cannot ignore a non-unit expression in a block expression body",
@@ -133,7 +139,7 @@ pub const NONE_UNIT_BLOCK_ELEM: ErrorTemplate = ErrorTemplate {
 
 /// Error when a module file cannot be located.
 pub const MODULE_NOT_FOUND: ErrorTemplate = ErrorTemplate {
-    id: NONE_UNIT_BLOCK_ELEM.id + 1,
+    id: NOT_UNIT_BLOCK_ELEM.id + 1,
     title: "Module file not found",
     message_template: "Impossible to locate the file corresponding to the module \"{}\"",
 };
@@ -198,6 +204,7 @@ pub const ANALYSIS_LIBRARY_ERROR: ErrorTemplate = ErrorTemplate {
 /// identifier.
 pub const ERROR_TEMPLATE_REPOSITORY: &[&ErrorTemplate] = &[
     &UNKNOWN_SYMBOL,
+    &UNINITIALIZED_SYMBOL,
     &DUPLICATED_SYMBOL,
     &DUPLICATED_KEY,
     &NO_VALUE_FOR_PARAM,
@@ -212,7 +219,7 @@ pub const ERROR_TEMPLATE_REPOSITORY: &[&ErrorTemplate] = &[
     &WRONG_PARAM_TYPE,
     &MISSING_TRAIT,
     &UNKNOWN_NODE_TYPE,
-    &NONE_UNIT_BLOCK_ELEM,
+    &NOT_UNIT_BLOCK_ELEM,
     &MODULE_NOT_FOUND,
     &AMBIGUOUS_IMPORT,
     &DEPENDENCY_CYCLE,

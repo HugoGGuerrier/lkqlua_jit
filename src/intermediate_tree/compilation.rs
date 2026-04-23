@@ -9,8 +9,8 @@ use crate::{
         get_builtin_bindings,
         traits::{BuiltinTrait, iterable::ITERATOR_FIELD},
         types::{
-            self, BuiltinType, TYPE_NAME_FIELD, TYPE_TAGS_FIELD, TypeImplementation, namespace,
-            stream::lazy_comprehension,
+            BuiltinType, TYPE_NAME_FIELD, TYPE_TAGS_FIELD, TypeImplementation, list, namespace,
+            obj, stream::lazy_comprehension, tuple, unit,
         },
     },
     bytecode::{
@@ -24,9 +24,9 @@ use crate::{
     },
     errors::{
         DIV_BY_ZERO, DUPLICATED_KEY, DUPLICATED_SYMBOL, ErrorInstance, ErrorInstanceArg,
-        ErrorTemplate, INDEX_OUT_OF_BOUNDS, MISSING_TRAIT, NO_VALUE_FOR_PARAM,
-        NONE_UNIT_BLOCK_ELEM, NULL_DOT_RECEIVER, POS_AND_NAMED_VALUE_FOR_PARAM,
-        PREVIOUS_SYMBOL_HINT, UNKNOWN_MEMBER, UNKNOWN_SYMBOL, WRONG_TYPE,
+        ErrorTemplate, INDEX_OUT_OF_BOUNDS, MISSING_TRAIT, NO_VALUE_FOR_PARAM, NOT_UNIT_BLOCK_ELEM,
+        NULL_DOT_RECEIVER, POS_AND_NAMED_VALUE_FOR_PARAM, PREVIOUS_SYMBOL_HINT,
+        UNINITIALIZED_SYMBOL, UNKNOWN_MEMBER, UNKNOWN_SYMBOL, WRONG_TYPE,
     },
     intermediate_tree::{
         ArithOperator, ArithOperatorVariant, CompOperator, CompOperatorVariant, ExecutionUnit,
@@ -290,11 +290,6 @@ impl ExecutionUnit {
             }
         };
 
-        // Release locals of the execution unit
-        let death_label = ctx.instructions.new_label();
-        ctx.release_locals(death_label);
-        ctx.instructions.label(death_label);
-
         // Emit additional instructions to initialize unsafely closed bindings,
         // they are inserted before all other instructions.
         for binding in ctx.frame.borrow().bindings.values() {
@@ -312,6 +307,11 @@ impl ExecutionUnit {
                 );
             }
         }
+
+        // Release local bindings
+        let death_label = ctx.instructions.new_label();
+        ctx.release_locals(death_label);
+        ctx.instructions.label(death_label);
 
         // Restore the previous execution unit and get data collected during
         // compilation.
@@ -641,7 +641,7 @@ impl Node {
                     ctx,
                     Some(&self.origin_location),
                     result_slot,
-                    &types::stream::lazy_comprehension::SPECIALIZATION,
+                    &lazy_comprehension::SPECIALIZATION,
                 );
             }
 
@@ -908,7 +908,7 @@ impl Node {
                             emit_runtime_error(
                                 ctx,
                                 Some(&identifier.origin_location),
-                                &UNKNOWN_SYMBOL,
+                                &UNINITIALIZED_SYMBOL,
                                 &vec![ErrorInstanceArg::Static(identifier.text.clone())],
                             );
                             ctx.instructions.label(next_label);
@@ -1053,8 +1053,8 @@ impl Node {
 
                 // Then set the meta-table of this new table
                 let type_impl = match &self.variant {
-                    NodeVariant::TupleLiteral(_) => &types::tuple::IMPLEMENTATION,
-                    NodeVariant::ListLiteral(_) => &types::list::IMPLEMENTATION,
+                    NodeVariant::TupleLiteral(_) => &tuple::IMPLEMENTATION,
+                    NodeVariant::ListLiteral(_) => &list::IMPLEMENTATION,
                     _ => unreachable!(),
                 };
                 emit_set_metatable(ctx, Some(&self.origin_location), result_slot, type_impl);
@@ -1085,7 +1085,7 @@ impl Node {
                     ctx,
                     Some(&self.origin_location),
                     result_slot,
-                    &types::obj::IMPLEMENTATION,
+                    &obj::IMPLEMENTATION,
                 );
             }
 
@@ -1948,25 +1948,39 @@ impl Node {
             // Compile the element
             let elem_access = body_elem.compile_as_access(ctx, Some(working_slot));
 
-            // Emit code to ensure the expression result is unit
-            let next_label = ctx.instructions.new_label();
-            ctx.instructions.ad(
-                &body_elem.origin_location,
-                ISEQV,
-                elem_access.slot(),
-                unit_tmp as u16,
-            );
-            ctx.goto(next_label);
-            emit_runtime_error(
-                ctx,
-                Some(&body_elem.origin_location),
-                &NONE_UNIT_BLOCK_ELEM,
-                &vec![],
-            );
+            // Try to statically determine whether the body element is unit
+            match body_elem.expr_type() {
+                Some(t) if t == &unit::TYPE => elem_access.release(ctx),
+                Some(_) => {
+                    ctx.diagnostics.push(Report::from_error_template(
+                        &body_elem.origin_location,
+                        &NOT_UNIT_BLOCK_ELEM,
+                        &Vec::<&str>::new(),
+                    ));
+                    elem_access.release(ctx)
+                }
+                None => {
+                    // Emit code to ensure the expression result is unit
+                    let next_label = ctx.instructions.new_label();
+                    ctx.instructions.ad(
+                        &body_elem.origin_location,
+                        ISEQV,
+                        elem_access.slot(),
+                        unit_tmp as u16,
+                    );
+                    ctx.goto(next_label);
+                    emit_runtime_error(
+                        ctx,
+                        Some(&body_elem.origin_location),
+                        &NOT_UNIT_BLOCK_ELEM,
+                        &vec![],
+                    );
 
-            // Release resources
-            elem_access.release(ctx);
-            ctx.instructions.label(next_label);
+                    // Release resources
+                    elem_access.release(ctx);
+                    ctx.instructions.label(next_label);
+                }
+            }
         }
 
         // Release the slot when "unit" is stored
