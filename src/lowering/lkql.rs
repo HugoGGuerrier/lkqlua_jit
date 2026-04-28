@@ -348,40 +348,49 @@ impl Node {
                             _ => unreachable!(),
                         };
 
-                        // Lower receiver and field name
-                        let prefix = Box::new(Self::lower_lkql_node(ctx, &receiver?)?);
-                        let suffix = Identifier::from_lkql_node(&member?, ctx)?;
-
                         // Create a new named temporary value to compute the
                         // prefix part of the dot access only once.
                         let prefix_id = ctx.new_tmp_id();
-                        let prefix_ref = related_node(NodeVariant::Read(prefix_id));
+                        let prefix_ref = Node {
+                            origin_location: origin_location.clone(),
+                            variant: NodeVariant::Read(prefix_id),
+                        };
 
-                        // Create a new node to test the type of the dot access
-                        // prefix.
-                        let type_condition = related_node(NodeVariant::IfExpr {
-                            condition: related_node(NodeVariant::InstanceOf {
-                                expression: prefix_ref.clone(),
-                                expected_type_tag: types::namespace::TYPE.tag,
-                            }),
-                            consequence: related_node(NodeVariant::FunCall {
-                                callee: related_node(NodeVariant::DottedExpr {
-                                    prefix: prefix_ref.clone(),
-                                    suffix: suffix.clone(),
-                                    is_safe,
-                                }),
-                                positional_args: positional_args.clone(),
-                                named_args: named_args.clone(),
-                            }),
-                            alternative: related_node(NodeVariant::MethodCall {
-                                prefix: prefix_ref,
-                                method_name: suffix,
-                                is_safe,
-                                positional_args,
-                                named_args,
-                            }),
+                        // Create a callee access node that use the prefix
+                        // temporary value created before.
+                        let callee = related_node(NodeVariant::DottedExpr {
+                            prefix: Box::new(prefix_ref.clone()),
+                            suffix: Identifier::from_lkql_node(&member?, ctx)?,
+                            is_safe,
                         });
-                        NodeVariant::Let { id: prefix_id, value: prefix, r#in: type_condition }
+
+                        // Then create a vector argument containing the callee
+                        // that is used in the case of a method call.
+                        let mut method_positional_args = positional_args.clone();
+                        method_positional_args.insert(0, prefix_ref.clone());
+
+                        // Finally create a node to check the type of the
+                        // prefix and decide at runtime how to act.
+                        NodeVariant::Let {
+                            id: prefix_id,
+                            value: Box::new(Self::lower_lkql_node(ctx, &receiver?)?),
+                            r#in: related_node(NodeVariant::IfExpr {
+                                condition: related_node(NodeVariant::InstanceOf {
+                                    expression: Box::new(prefix_ref),
+                                    expected_type_tag: types::namespace::TYPE.tag,
+                                }),
+                                consequence: related_node(NodeVariant::FunCall {
+                                    callee: callee.clone(),
+                                    positional_args: positional_args,
+                                    named_args: named_args.clone(),
+                                }),
+                                alternative: related_node(NodeVariant::FunCall {
+                                    callee: callee,
+                                    positional_args: method_positional_args,
+                                    named_args,
+                                }),
+                            }),
+                        }
                     }
                     _ => NodeVariant::FunCall {
                         callee: Box::new(Self::lower_lkql_node(ctx, &name)?),

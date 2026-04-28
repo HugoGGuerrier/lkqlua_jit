@@ -396,35 +396,15 @@ impl Node {
         // have to compile it manually
         match &self.variant {
             // --- Call expressions
-            NodeVariant::FunCall { .. } | NodeVariant::MethodCall { .. } => {
+            NodeVariant::FunCall { callee, positional_args, named_args } => {
                 // Prepare the call by getting working slots
-                let call_slots = match &self.variant {
-                    NodeVariant::FunCall { callee, positional_args, named_args } => {
-                        Self::prepare_function_call(
-                            ctx,
-                            &self.origin_location,
-                            callee,
-                            positional_args,
-                            named_args,
-                        )
-                    }
-                    NodeVariant::MethodCall {
-                        prefix,
-                        method_name,
-                        is_safe,
-                        positional_args,
-                        named_args,
-                    } => Self::prepare_method_call(
-                        ctx,
-                        &self.origin_location,
-                        prefix,
-                        method_name,
-                        *is_safe,
-                        positional_args,
-                        named_args,
-                    ),
-                    _ => unreachable!(),
-                };
+                let call_slots = Self::prepare_function_call(
+                    ctx,
+                    &self.origin_location,
+                    callee,
+                    positional_args,
+                    named_args,
+                );
 
                 // Finally emit a call instruction and place the result in the result slot
                 ctx.instructions.abc(
@@ -1211,35 +1191,15 @@ impl Node {
         }
 
         match &self.variant {
-            NodeVariant::FunCall { .. } | NodeVariant::MethodCall { .. } => {
+            NodeVariant::FunCall { callee, positional_args, named_args } => {
                 // Prepare the call by getting slots used for it
-                let call_slots = match &self.variant {
-                    NodeVariant::FunCall { callee, positional_args, named_args } => {
-                        Self::prepare_function_call(
-                            ctx,
-                            &self.origin_location,
-                            callee,
-                            positional_args,
-                            named_args,
-                        )
-                    }
-                    NodeVariant::MethodCall {
-                        prefix,
-                        method_name,
-                        is_safe,
-                        positional_args,
-                        named_args,
-                    } => Self::prepare_method_call(
-                        ctx,
-                        &self.origin_location,
-                        prefix,
-                        method_name,
-                        *is_safe,
-                        positional_args,
-                        named_args,
-                    ),
-                    _ => unreachable!(),
-                };
+                let call_slots = Self::prepare_function_call(
+                    ctx,
+                    &self.origin_location,
+                    callee,
+                    positional_args,
+                    named_args,
+                );
 
                 // Emit the call instruction
                 ctx.instructions.abc(
@@ -1597,35 +1557,15 @@ impl Node {
     fn compile_as_function_body(&self, ctx: &mut CompilationContext) {
         match &self.variant {
             // In the case of a function / method call, we can emit a tail call
-            NodeVariant::FunCall { .. } | NodeVariant::MethodCall { .. } => {
+            NodeVariant::FunCall { callee, positional_args, named_args } => {
                 // Prepare the call by getting working slots
-                let call_slots = match &self.variant {
-                    NodeVariant::FunCall { callee, positional_args, named_args } => {
-                        Self::prepare_function_call(
-                            ctx,
-                            &self.origin_location,
-                            callee,
-                            positional_args,
-                            named_args,
-                        )
-                    }
-                    NodeVariant::MethodCall {
-                        prefix,
-                        method_name,
-                        is_safe,
-                        positional_args,
-                        named_args,
-                    } => Self::prepare_method_call(
-                        ctx,
-                        &self.origin_location,
-                        prefix,
-                        method_name,
-                        *is_safe,
-                        positional_args,
-                        named_args,
-                    ),
-                    _ => unreachable!(),
-                };
+                let call_slots = Self::prepare_function_call(
+                    ctx,
+                    &self.origin_location,
+                    callee,
+                    positional_args,
+                    named_args,
+                );
 
                 // Enclose required bindings
                 emit_closing_instruction(ctx);
@@ -1845,83 +1785,11 @@ impl Node {
             .frame
             .borrow_mut()
             .reserve_contiguous_slots(positional_args.len() + 3);
+        let named_args_slot = call_slots.first + 2;
 
         // Evaluate the callee and place it in the first of the call slots.
         callee.compile_as_value(ctx, call_slots.first);
 
-        // Prepare arguments
-        Self::compile_args(
-            ctx,
-            origin_location,
-            positional_args,
-            call_slots.first + 3,
-            named_args,
-            call_slots.first + 2,
-        );
-
-        // Finally return slots used for the call
-        call_slots
-    }
-
-    /// Util function to prepare a method call and then return the slot range
-    /// in which the method and arguments (including 'this') are placed.
-    fn prepare_method_call(
-        ctx: &mut CompilationContext,
-        origin_location: &SourceSection,
-        prefix: &Node,
-        method_name: &Identifier,
-        is_safe: bool,
-        positional_args: &Vec<Node>,
-        named_args: &Vec<(Identifier, Node)>,
-    ) -> SlotRange {
-        // Reserve all slots for the method call
-        let call_slots = ctx
-            .frame
-            .borrow_mut()
-            .reserve_contiguous_slots(positional_args.len() + 4);
-        let callee_slot = call_slots.first;
-        let this_slot = call_slots.first + 3;
-
-        // Place the "this" argument in the call slots
-        prefix.compile_as_value(ctx, this_slot);
-
-        // Compile the field accessing and place it as the callee
-        Self::compile_dot_access(
-            ctx,
-            callee_slot,
-            &SourceSection::range(&prefix.origin_location, &method_name.origin_location),
-            this_slot,
-            method_name,
-            is_safe,
-        );
-
-        // Compile arguments for the case where the dotted object is not a
-        // namespace.
-        Self::compile_args(
-            ctx,
-            origin_location,
-            positional_args,
-            call_slots.first + 4,
-            named_args,
-            call_slots.first + 2,
-        );
-
-        // Finally return slots used for the call
-        call_slots
-    }
-
-    /// Util function used to compile provided arguments in a way to place
-    /// their values in the specified slot range. The first slot is going to
-    /// hold the named arguments table, and all others are going to store
-    /// positional ones.
-    fn compile_args(
-        ctx: &mut CompilationContext,
-        origin_location: &SourceSection,
-        positional_args: &Vec<Node>,
-        first_positional_arg_slot: u8,
-        named_args: &Vec<(Identifier, Node)>,
-        named_args_slot: u8,
-    ) {
         // Compile named arguments to a table (or nil if there are no named
         // arguments).
         if named_args.is_empty() {
@@ -1933,8 +1801,11 @@ impl Node {
 
         // Place positional arguments in the required slots
         for (i, positional_arg) in positional_args.iter().enumerate() {
-            positional_arg.compile_as_value(ctx, first_positional_arg_slot + i as u8);
+            positional_arg.compile_as_value(ctx, named_args_slot + 1 + i as u8);
         }
+
+        // Finally return slots used for the call
+        call_slots
     }
 
     /// Util function to compile the body of a block expression.
