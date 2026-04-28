@@ -8,7 +8,10 @@ use crate::{
     builtins::{
         traits::{
             indexable,
-            iterable::{self, DEFAULT_ITERABLE_REDUCE, ITERATOR_FIELD},
+            iterable::{
+                self, DEFAULT_ITERABLE_ALL, DEFAULT_ITERABLE_ANY, DEFAULT_ITERABLE_REDUCE,
+                ITERATOR_FIELD,
+            },
             sized,
         },
         types::{
@@ -34,6 +37,8 @@ pub const TYPE: BuiltinType = BuiltinType {
                 ("img", TypeField::Property(FunctionValue::CFunction(img_property))),
                 ("length", TypeField::Property(STREAM_LENGTH)),
                 (ITERATOR_FIELD, TypeField::Property(STREAM_ITERATOR)),
+                ("any", TypeField::Value(DEFAULT_ITERABLE_ANY)),
+                ("all", TypeField::Value(DEFAULT_ITERABLE_ALL)),
                 ("reduce", TypeField::Value(DEFAULT_ITERABLE_REDUCE)),
             ],
             overloads: &[(OverloadTarget::ToString, FunctionValue::CFunction(stream_tostring))],

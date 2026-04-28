@@ -20,12 +20,47 @@ pub const TRAIT: BuiltinTrait = BuiltinTrait {
     required_overloads: &[],
     required_fields: &[
         RequiredField::Property(ITERATOR_FIELD),
+        RequiredField::Value("any"),
+        RequiredField::Value("all"),
         RequiredField::Value("reduce"),
     ],
 };
 
-/// This is the default implementation for the "reduce" method on iterable
-/// values.
+/// Default implementation of the "any" method on iterable values.
+pub const DEFAULT_ITERABLE_ANY: RuntimeValue =
+    RuntimeValue::Function(FunctionValue::LuaFunction(formatcp!(
+        "function(_, self, predicate)
+            local it = self['{iterator}']
+            local next = it()
+            while next ~= nil do
+                if predicate(nil, next) then
+                    return true
+                end
+                next = it()
+            end
+            return false
+        end",
+        iterator = ITERATOR_FIELD,
+    )));
+
+/// Default implementation of the "all" method on iterable values.
+pub const DEFAULT_ITERABLE_ALL: RuntimeValue =
+    RuntimeValue::Function(FunctionValue::LuaFunction(formatcp!(
+        "function(_, self, predicate)
+            local it = self['{iterator}']
+            local next = it()
+            while next ~= nil do
+                if not predicate(nil, next) then
+                    return false
+                end
+                next = it()
+            end
+            return true
+        end",
+        iterator = ITERATOR_FIELD,
+    )));
+
+/// Default implementation of the "reduce" method on iterable values.
 pub const DEFAULT_ITERABLE_REDUCE: RuntimeValue =
     RuntimeValue::Function(FunctionValue::LuaFunction(formatcp!(
         "function(_, self, fn, init)

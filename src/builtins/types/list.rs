@@ -39,6 +39,8 @@ pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
             ITERATOR_FIELD,
             TypeField::Property(FunctionValue::LuaFunction(LIST_ITERATOR)),
         ),
+        ("any", TypeField::Value(LIST_ANY)),
+        ("all", TypeField::Value(LIST_ALL)),
         ("reduce", TypeField::Value(LIST_REDUCE)),
     ],
     overloads: &[
@@ -65,7 +67,31 @@ const LIST_ITERATOR: &str = "function (self)
     end
 end";
 
-/// Implementation of the "reduce" function on values of the "List" type.
+/// Implementation of the "any" method on values of the "List" type.
+const LIST_ANY: RuntimeValue = RuntimeValue::Function(FunctionValue::LuaFunction(
+    "function (_, self, predicate)
+        for _, next in ipairs(self) do
+            if predicate(nil, next) == true then
+                return true
+            end
+        end
+        return false
+    end",
+));
+
+/// Implementation of the "all" method on values of the "List" type.
+const LIST_ALL: RuntimeValue = RuntimeValue::Function(FunctionValue::LuaFunction(
+    "function (_, self, predicate)
+        for _, next in ipairs(self) do
+            if predicate(nil, next) == false then
+                return false
+            end
+        end
+        return true
+    end",
+));
+
+/// Implementation of the "reduce" method on values of the "List" type.
 const LIST_REDUCE: RuntimeValue = RuntimeValue::Function(FunctionValue::LuaFunction(
     "function (_, self, fn, init)
         local res = init
