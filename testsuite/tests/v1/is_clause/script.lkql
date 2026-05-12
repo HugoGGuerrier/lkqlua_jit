@@ -1,0 +1,4 @@
+val x = 42
+
+print(x is 42)
+print(x is 43)

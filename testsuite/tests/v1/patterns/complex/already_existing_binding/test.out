@@ -1,0 +1,9 @@
+Error: Symbol declared multiple times
+   ╭─[ <working-dir>/script.lkql:4:27 ]
+   │
+ 4 │ print(var is v@Var(f_arg: v@FooNode))
+   │              ┬            ┬  
+   │              │            ╰── The symbol "v" already exists in the current scope
+   │              │               
+   │              ╰─────────────── Hint: Previously declared here
+───╯

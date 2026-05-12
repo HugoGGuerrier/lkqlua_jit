@@ -1,0 +1,33 @@
+=== Testing binding introduction
+true
+true
+
+=== Testing value pattern
+true
+false
+
+=== Testing field detail
+true
+true
+true
+false
+false
+
+=== Testing property detail
+true
+false
+true
+true
+false
+false
+
+=== Testing selector detail
+true
+false
+true
+false
+
+=== Testing binding introduction and predicate
+true
+false
+

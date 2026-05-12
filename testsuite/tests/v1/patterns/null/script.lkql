@@ -1,0 +1,9 @@
+val n = null
+val bool = true
+val int = 42
+val str = "Hello World"
+
+print(n is null)
+print(bool is null)
+print(int is null)
+print(str is null)

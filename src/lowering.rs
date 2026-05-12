@@ -27,6 +27,10 @@ struct LoweringContext<'a, T> {
     /// execution units.
     lazy_comprehension_counter: usize,
 
+    /// Counter of encountered selector sub-pattern, used for naming their
+    /// execution units.
+    selector_pattern_counter: usize,
+
     /// Counter of created temporary values.
     tmp_counter: usize,
 
@@ -45,6 +49,7 @@ impl<'a, T> LoweringContext<'a, T> {
             child_index_map: HashMap::new(),
             lambda_counter: 0,
             lazy_comprehension_counter: 0,
+            selector_pattern_counter: 0,
             tmp_counter: 0,
             diagnostics: Vec::new(),
         }
@@ -62,6 +67,14 @@ impl<'a, T> LoweringContext<'a, T> {
     fn next_lazy_comprehension_name(&mut self) -> String {
         let res = format!("#lazy_comprehension_{}", self.lazy_comprehension_counter);
         self.lazy_comprehension_counter += 1;
+        res
+    }
+
+    /// Get the next available name for a selector sub-pattern, incrementing
+    /// the counter.
+    fn next_selector_pattern_name(&mut self) -> String {
+        let res = format!("#selector_pattern_{}", self.selector_pattern_counter);
+        self.selector_pattern_counter += 1;
         res
     }
 

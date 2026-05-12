@@ -11,8 +11,8 @@ use crate::{
         types::{self, BuiltinType},
     },
     errors::{
-        AMBIGUOUS_IMPORT, MODULE_NOT_FOUND, POS_AFTER_NAMED_ARGUMENT, PREVIOUS_NAMED_ARG_HINT,
-        UNKNOWN_NODE_TYPE,
+        AMBIGUOUS_IMPORT, INVALID_SELECTOR_CALL, MODULE_NOT_FOUND, POS_AFTER_NAMED_ARGUMENT,
+        PREVIOUS_NAMED_ARG_HINT, UNKNOWN_NODE_TYPE,
     },
     intermediate_tree::{
         ArithOperator, ArithOperatorVariant, CompOperator, CompOperatorVariant, ExecutionUnit,
@@ -69,6 +69,7 @@ impl ExecutionUnit {
             LkqlNode::FunDecl(fun_decl) => fun_decl.f_name()?.text()?,
             LkqlNode::AnonymousFunction(_) => ctx.next_lambda_name(),
             LkqlNode::ListComprehension(_) => ctx.next_lazy_comprehension_name(),
+            LkqlNode::NodePatternSelector(_) => ctx.next_selector_pattern_name(),
             _ => unreachable!(),
         };
 
@@ -182,6 +183,31 @@ impl ExecutionUnit {
                 // Then return the new function execution unit variant
                 ExecutionUnitVariant::RawCallable { params: collection_bindings?, body }
             }
+            LkqlNode::NodePatternSelector(selector_pattern) => {
+                let node_param_name = Identifier {
+                    origin_location: origin_location.clone(),
+                    text: String::from("node"),
+                };
+                let node_param_id = ctx.new_tmp_id();
+                ExecutionUnitVariant::Function {
+                    params: vec![(node_param_name.clone(), None)],
+                    body: Node {
+                        origin_location: origin_location.clone(),
+                        variant: NodeVariant::Let {
+                            id: node_param_id,
+                            value: Box::new(Node {
+                                origin_location: origin_location.clone(),
+                                variant: NodeVariant::ReadSymbol(node_param_name),
+                            }),
+                            r#in: Box::new(Node::lower_lkql_pattern(
+                                ctx,
+                                &selector_pattern.f_pattern()?,
+                                node_param_id,
+                            )?),
+                        },
+                    },
+                }
+            }
             _ => unreachable!(),
         };
 
@@ -289,45 +315,12 @@ impl Node {
                 // Create the argument vectors
                 let mut positional_args: Vec<Node> = Vec::new();
                 let mut named_args: Vec<(Identifier, Node)> = Vec::new();
-                for maybe_arg in fun_call.f_arguments()?.children_iter()? {
-                    if let Some(ref arg) = maybe_arg? {
-                        match arg {
-                            LkqlNode::ExprArg(expr_arg) => {
-                                // Ensure that no named arguments have been
-                                // lowered yet.
-                                if named_args.is_empty() {
-                                    positional_args.push(Self::lower_lkql_node(
-                                        ctx,
-                                        &expr_arg.f_value_expr()?,
-                                    )?);
-                                } else {
-                                    let (last_id, last_node) = named_args.last().unwrap();
-                                    ctx.diagnostics
-                                        .push(Report::from_error_template_with_hints::<&str>(
-                                            &SourceSection::from_lkql_node(
-                                                ctx.lowered_source,
-                                                arg,
-                                            )?,
-                                            &POS_AFTER_NAMED_ARGUMENT,
-                                            &vec![],
-                                            vec![Hint {
-                                                message: String::from(PREVIOUS_NAMED_ARG_HINT),
-                                                location: SourceSection::range(
-                                                    &last_id.origin_location,
-                                                    &last_node.origin_location,
-                                                ),
-                                            }],
-                                        ));
-                                }
-                            }
-                            LkqlNode::NamedArg(named_arg) => named_args.push((
-                                Identifier::from_lkql_node(&named_arg.f_arg_name()?, ctx)?,
-                                Self::lower_lkql_node(ctx, &named_arg.f_value_expr()?)?,
-                            )),
-                            _ => unreachable!(),
-                        }
-                    }
-                }
+                Self::lower_lkql_arguments(
+                    ctx,
+                    &fun_call.f_arguments()?,
+                    &mut positional_args,
+                    &mut named_args,
+                )?;
 
                 // There is a special case when the callee of the function is a
                 // dot access, in that case we emit a method call.
@@ -655,6 +648,56 @@ impl Node {
         })
     }
 
+    /// Lower all children of the provided `args_node` as arguments and place
+    /// them in provided buffers.
+    /// This function ensures no positional arguments are defined after a named
+    /// one.
+    fn lower_lkql_arguments(
+        ctx: &mut LoweringContext<LkqlNode>,
+        args_node: &LkqlNode,
+        positional_args: &mut Vec<Node>,
+        named_args: &mut Vec<(Identifier, Node)>,
+    ) -> Result<(), Report> {
+        // Lower each argument in the node containing them
+        for maybe_arg in args_node.children_iter()? {
+            if let Some(ref arg) = maybe_arg? {
+                match arg {
+                    LkqlNode::ExprArg(expr_arg) => {
+                        // Ensure that no named arguments have been
+                        // lowered yet.
+                        if named_args.is_empty() {
+                            positional_args
+                                .push(Self::lower_lkql_node(ctx, &expr_arg.f_value_expr()?)?);
+                        } else {
+                            let (last_id, last_node) = named_args.last().unwrap();
+                            ctx.diagnostics
+                                .push(Report::from_error_template_with_hints::<&str>(
+                                    &SourceSection::from_lkql_node(ctx.lowered_source, arg)?,
+                                    &POS_AFTER_NAMED_ARGUMENT,
+                                    &vec![],
+                                    vec![Hint {
+                                        message: String::from(PREVIOUS_NAMED_ARG_HINT),
+                                        location: SourceSection::range(
+                                            &last_id.origin_location,
+                                            &last_node.origin_location,
+                                        ),
+                                    }],
+                                ));
+                        }
+                    }
+                    LkqlNode::NamedArg(named_arg) => named_args.push((
+                        Identifier::from_lkql_node(&named_arg.f_arg_name()?, ctx)?,
+                        Self::lower_lkql_node(ctx, &named_arg.f_value_expr()?)?,
+                    )),
+                    _ => unreachable!(),
+                }
+            }
+        }
+
+        // Return the success
+        Ok(())
+    }
+
     /// Lower the provided pattern node into a intermediate tree node that
     /// expresses the matching logic.
     /// The provided `matched_value_id` should be the "let id" pointing to
@@ -788,6 +831,17 @@ impl Node {
                     matching_elems.push(Self::lower_lkql_pattern(ctx, &pattern, matched_value_id)?)
                 }
 
+                // Lower pattern details
+                for maybe_detail in &complex_pattern.f_details()? {
+                    if let Some(detail) = maybe_detail? {
+                        matching_elems.push(Self::lower_lkql_pattern_detail(
+                            ctx,
+                            &detail,
+                            matched_value_id,
+                        )?);
+                    }
+                }
+
                 // Lower the predicate
                 if let Some(predicate) = complex_pattern.f_predicate()? {
                     matching_elems.push(Self::lower_lkql_node(ctx, &predicate)?);
@@ -825,7 +879,177 @@ impl Node {
 
         // Return the result node
         Ok(Node { origin_location, variant })
+    }
 
+    /// Lower the provided pattern detail node into a intermediate tree node
+    /// that evaluates to a boolean.
+    /// The provided `detailed_values_id` should be the "let id" pointing to
+    /// the value to get the detail from.
+    fn lower_lkql_pattern_detail(
+        ctx: &mut LoweringContext<LkqlNode>,
+        node: &LkqlNode,
+        detailed_values_id: usize,
+    ) -> Result<Self, Report> {
+        // Get the location of the pattern detail node
+        let origin_location = SourceSection::from_lkql_node(ctx.lowered_source, node)?;
+
+        // Util function used to create a node related to the one currently
+        // lowered. The result node is wrapped in a Box and has the same origin
+        // location os the current one.
+        let related_node = |variant: NodeVariant| {
+            Box::new(Node { origin_location: origin_location.clone(), variant })
+        };
+
+        // Create a node to read the matched value
+        let detailed_value_ref = Node {
+            origin_location: origin_location.clone(),
+            variant: NodeVariant::Read(detailed_values_id),
+        };
+
+        // Get the intermediate node variant from the LKQL pattern detail
+        let variant = match node {
+            LkqlNode::NodePatternField(pattern_field) => {
+                let field_id = ctx.new_tmp_id();
+                NodeVariant::Let {
+                    id: field_id,
+                    value: related_node(NodeVariant::DottedExpr {
+                        prefix: Box::new(detailed_value_ref),
+                        suffix: Identifier::from_lkql_node(&pattern_field.f_identifier()?, ctx)?,
+                        is_safe: false,
+                    }),
+                    r#in: Box::new(Self::lower_lkql_pattern(
+                        ctx,
+                        &pattern_field.f_expected_value()?,
+                        field_id,
+                    )?),
+                }
+            }
+            LkqlNode::NodePatternProperty(pattern_property) => {
+                // Get the LKQL call node in the detail and prepare a temporary
+                // value for its result.
+                let call = match pattern_property.f_call()? {
+                    LkqlNode::FunCall(fun_call) => fun_call,
+                    _ => unreachable!(),
+                };
+                let prop_result_id = ctx.new_tmp_id();
+
+                // Create argument vectors
+                let mut positional_args = Vec::new();
+                let mut named_args = Vec::new();
+                Self::lower_lkql_arguments(
+                    ctx,
+                    &call.f_arguments()?,
+                    &mut positional_args,
+                    &mut named_args,
+                )?;
+                positional_args.insert(0, detailed_value_ref.clone());
+
+                // Then create the node variant to call the property and match
+                // it against expected result.
+                NodeVariant::Let {
+                    id: prop_result_id,
+                    value: related_node(NodeVariant::FunCall {
+                        callee: related_node(NodeVariant::DottedExpr {
+                            prefix: Box::new(detailed_value_ref),
+                            suffix: Identifier::from_lkql_node(&call.f_name()?, ctx)?,
+                            is_safe: false,
+                        }),
+                        positional_args,
+                        named_args,
+                    }),
+                    r#in: Box::new(Self::lower_lkql_pattern(
+                        ctx,
+                        &pattern_property.f_expected_value()?,
+                        prop_result_id,
+                    )?),
+                }
+            }
+            LkqlNode::NodePatternSelector(pattern_selector) => {
+                // Get the LKQL node of the selector call
+                let selector_call = match pattern_selector.f_call()? {
+                    LkqlNode::SelectorCall(selector_call) => selector_call,
+                    _ => unreachable!(),
+                };
+
+                // Create selector call argument vectors
+                let mut positional_args = vec![detailed_value_ref.clone()];
+                let mut named_args = Vec::new();
+
+                // The create the selector callee node
+                let callee_lkql_node = selector_call.f_selector_call()?;
+                let callee_variant = match &callee_lkql_node {
+                    LkqlNode::Identifier(id) => {
+                        NodeVariant::ReadSymbol(Identifier::from_lkql_node(&id.as_node(), ctx)?)
+                    }
+                    LkqlNode::FunCall(fun_call) => {
+                        Self::lower_lkql_arguments(
+                            ctx,
+                            &fun_call.f_arguments()?,
+                            &mut positional_args,
+                            &mut named_args,
+                        )?;
+                        Self::lower_lkql_node(ctx, &fun_call.f_name()?)?.variant
+                    }
+                    _ => {
+                        ctx.diagnostics.push(Report::from_error_template(
+                            &origin_location,
+                            &INVALID_SELECTOR_CALL,
+                            &Vec::<&str>::new(),
+                        ));
+                        NodeVariant::NilLiteral
+                    }
+                };
+                let callee = Box::new(Node {
+                    origin_location: SourceSection::from_lkql_node(
+                        ctx.lowered_source,
+                        &callee_lkql_node,
+                    )?,
+                    variant: callee_variant,
+                });
+
+                // Create the sub-pattern lambda access
+                let subpattern_lambda = Node {
+                    origin_location: origin_location.clone(),
+                    variant: NodeVariant::LambdaFun(*ctx.child_index_map.get(node).unwrap()),
+                };
+
+                // Finally, create the quantification call node
+                let selector_list_id = ctx.new_tmp_id();
+                let selector_list_ref = Node {
+                    origin_location: origin_location.clone(),
+                    variant: NodeVariant::Read(selector_list_id),
+                };
+                NodeVariant::Let {
+                    id: selector_list_id,
+                    value: Box::new(
+                        Node {
+                            origin_location: SourceSection::from_lkql_node(
+                                ctx.lowered_source,
+                                &selector_call.f_selector_call()?,
+                            )?,
+                            variant: NodeVariant::FunCall { callee, positional_args, named_args },
+                        }
+                        .with_trait_requirement(&traits::iterable::TRAIT)?,
+                    ),
+                    r#in: related_node(NodeVariant::FunCall {
+                        callee: related_node(NodeVariant::DottedExpr {
+                            prefix: Box::new(selector_list_ref.clone()),
+                            suffix: Identifier::from_lkql_node(
+                                &selector_call.f_quantifier()?,
+                                ctx,
+                            )?,
+                            is_safe: false,
+                        }),
+                        positional_args: vec![selector_list_ref, subpattern_lambda],
+                        named_args: vec![],
+                    }),
+                }
+            }
+            _ => unreachable!(),
+        };
+
+        // Finally, create the result node
+        Ok(Node { origin_location, variant })
     }
 
     /// Wrap the current node using the provided wrapper creation function,
@@ -960,6 +1184,7 @@ fn has_lexical_scope(node: &LkqlNode) -> bool {
 ///   * [`LkqlNode::AnonymousFunction`]
 ///   * [`LkqlNode::ListComprehension`]
 ///   * [`LkqlNode::BlockExpr`]
+///   * [`LkqlNode::NodePatternSelector`]
 fn all_local_decls(node: &LkqlNode, output: &mut Vec<LkqlNode>) -> Result<(), Report> {
     for maybe_child in node {
         if let Some(child) = maybe_child? {
@@ -984,7 +1209,8 @@ fn all_local_decls(node: &LkqlNode, output: &mut Vec<LkqlNode>) -> Result<(), Re
                 | LkqlNode::AnonymousFunction(_)
                 | LkqlNode::ListComprehension(_)
                 | LkqlNode::BlockExpr(_)
-                | LkqlNode::IsClause(_) => (),
+                | LkqlNode::IsClause(_)
+                | LkqlNode::NodePatternSelector(_) => (),
 
                 // Default case, explore all children
                 _ => all_local_decls(&child, output)?,
@@ -1043,7 +1269,8 @@ fn all_local_execution_units(node: &LkqlNode, output: &mut Vec<LkqlNode>) -> Res
                 | LkqlNode::FunDecl(_)
                 | LkqlNode::SelectorDecl(_)
                 | LkqlNode::AnonymousFunction(_)
-                | LkqlNode::ListComprehension(_) => output.push(child),
+                | LkqlNode::ListComprehension(_)
+                | LkqlNode::NodePatternSelector(_) => output.push(child),
                 _ => all_local_execution_units(&child, output)?,
             }
         }

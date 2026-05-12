@@ -1,0 +1,8 @@
+val n = null
+val bool = true
+val int = 42
+
+print(n is (42 | null))
+print(bool is (true | false))
+print(int is (42 | null))
+print(int is (false | null))

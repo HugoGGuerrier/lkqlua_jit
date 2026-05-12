@@ -1,0 +1,7 @@
+Error: Unknown node type
+   ╭─[ <working-dir>/script.lkql:1:13 ]
+   │
+ 1 │ print(42 is NotANode)
+   │             ────┬───  
+   │                 ╰───── Cannot find the "NotANode" node type
+───╯

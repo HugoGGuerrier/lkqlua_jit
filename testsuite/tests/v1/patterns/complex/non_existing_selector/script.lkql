@@ -1,0 +1,2 @@
+val root = units()[1].root
+print(root is FooNode(any local_children is FooNode))

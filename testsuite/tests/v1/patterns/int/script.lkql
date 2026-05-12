@@ -1,0 +1,11 @@
+val i_1 = 0
+val i_2 = 1
+val i_3 = 42
+
+print(i_1 is 0)
+print(i_1 is 1)
+print(i_2 is 0)
+print(i_2 is 1)
+print(i_3 is 0)
+print(i_3 is 1)
+print(i_3 is 42)

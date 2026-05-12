@@ -1,0 +1,7 @@
+Error: Missing required trait
+   ╭─[ <working-dir>/script.lkql:3:27 ]
+   │
+ 3 │ print(root is FooNode(any local_children is FooNode))
+   │                           ───────┬──────  
+   │                                  ╰──────── Trait "Iterable" is required, the type "Int" isn't implementing it
+───╯

@@ -1,0 +1,7 @@
+Error: Error from the Lua engine
+   ╭─[ <working-dir>/script.lkql:3:27 ]
+   │
+ 3 │ print(root is FooNode(any local_children is FooNode))
+   │                           ───────┬──────  
+   │                                  ╰──────── Attempt to call local 'local_children' (a number value)
+───╯

@@ -1,0 +1,9 @@
+val t = true
+val f = false
+val str = "Hello"
+
+print(t is true)
+print(t is false)
+print(f is true)
+print(f is false)
+print(str is true)

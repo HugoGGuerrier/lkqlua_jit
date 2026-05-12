@@ -1,0 +1,7 @@
+Error: Unknown member
+   ╭─[ <working-dir>/script.lkql:2:23 ]
+   │
+ 2 │ print(root is FooNode(f_not_a_field: FooNode))
+   │                       ──────┬──────  
+   │                             ╰──────── No member named "f_not_a_field" on the value
+───╯

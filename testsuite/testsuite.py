@@ -28,10 +28,24 @@ class InterpreterDriver(DiffTestDriver):
             [self.working_dir(p) for p in self.test_env.get("lkql_path", [])]
         )
 
+        # Get the files to analyze
+        analyzed_files = self.test_env.get("analyzed_files", [])
+        if not analyzed_files:
+            default_source = Path(self.working_dir(), "test.foo")
+            if default_source.is_file():
+                analyzed_files.append(str(default_source))
+
         # The run the LKQL script
         lkql_script = self.test_env.get("script", "script.lkql")
         self.shell(
-            ["lkqlua_jit", "--lang-name", "foo", "--script", lkql_script],
+            [
+                "lkqlua_jit",
+                "--lang-name",
+                "foo",
+                "--script",
+                lkql_script,
+                *analyzed_files,
+            ],
             env=env,
             catch_error=False,
         )

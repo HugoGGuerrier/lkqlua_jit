@@ -181,12 +181,27 @@ pub const REGEX_TOO_BIG: ErrorTemplate = ErrorTemplate {
     message_template: "Cannot compile the \"{}\" regular expression, consider splitting it",
 };
 
+// --- Pattern related errors
+
+pub const SUBPATTERN_AFTER_SPLAT: ErrorTemplate = ErrorTemplate {
+    id: REGEX_TOO_BIG.id + 1,
+    title: "Sub-pattern after a splat one",
+    message_template: "This sub-pattern is after a splat one",
+};
+
+/// Error when a selector call in a pattern detail is not correctly formed.
+pub const INVALID_SELECTOR_CALL: ErrorTemplate = ErrorTemplate {
+    id: SUBPATTERN_AFTER_SPLAT.id + 1,
+    title: "Invalid selector call",
+    message_template: "It must be either a name or a call",
+};
+
 // --- Misc errors
 
 /// Error coming from the Lua engine and that cannot be mapped to a more
 /// precise error.
 pub const LUA_ENGINE_ERROR: ErrorTemplate = ErrorTemplate {
-    id: REGEX_TOO_BIG.id + 1,
+    id: INVALID_SELECTOR_CALL.id + 1,
     title: "Error from the Lua engine",
     message_template: "{}",
 };
@@ -226,6 +241,8 @@ pub const ERROR_TEMPLATE_REPOSITORY: &[&ErrorTemplate] = &[
     &ERROR_DURING_IMPORTATION,
     &REGEX_SYNTAX_ERROR,
     &REGEX_TOO_BIG,
+    &SUBPATTERN_AFTER_SPLAT,
+    &INVALID_SELECTOR_CALL,
     &LUA_ENGINE_ERROR,
     &ANALYSIS_LIBRARY_ERROR,
 ];

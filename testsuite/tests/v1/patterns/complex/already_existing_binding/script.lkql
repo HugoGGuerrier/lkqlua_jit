@@ -1,0 +1,4 @@
+val root = units()[1].root
+val var = root[2]
+
+print(var is v@Var(f_arg: v@FooNode))

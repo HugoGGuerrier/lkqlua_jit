@@ -1,0 +1,5 @@
+val x = 42
+
+print(x is 42)
+print(x is not 42)
+print(x is not (not 42))

@@ -1,0 +1,7 @@
+Error: Error from the Lua engine
+   ╭─[ <working-dir>/script.lkql:3:18 ]
+   │
+ 3 │ print(var is Var(f_arg(): FooNode))
+   │                  ────────┬───────  
+   │                          ╰───────── Attempt to call field 'f_arg' (a table value)
+───╯

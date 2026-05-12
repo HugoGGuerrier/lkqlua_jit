@@ -65,7 +65,7 @@ grammar foo_grammar {
     @main_rule main_rule <- Sequence+(node)
     node <- or(example | null_node | var | ident | string)
     example <- Example("example")
-    null_node <- Null("null")
+    null_node <- NullLiteral("null")
     var <- Var("var" "(" main_rule ")")
     ident <- Ident(@Identifier)
     string <- StringLiteral(@String)
@@ -292,7 +292,7 @@ class Ident: FooNode implements TokenNode {
     fun sym(sym: Symbol): Symbol = sym
 }
 
-class Null: FooNode {
+class NullLiteral: FooNode {
 }
 
 class StringLiteral: FooNode {

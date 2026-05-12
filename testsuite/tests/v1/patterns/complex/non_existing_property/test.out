@@ -1,0 +1,7 @@
+Error: Unknown member
+   ╭─[ <working-dir>/script.lkql:2:23 ]
+   │
+ 2 │ print(root is FooNode(p_not_a_prop(): 42))
+   │                       ──────┬─────  
+   │                             ╰─────── No member named "p_not_a_prop" on the value
+───╯

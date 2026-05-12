@@ -1,0 +1,3 @@
+val root = units()[1].root
+val x = 1
+print(root is FooNode when 10 + x)

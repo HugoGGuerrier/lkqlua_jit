@@ -1,0 +1,7 @@
+val bool = true
+val int = 42
+val str = "Hello World"
+
+print(bool is *)
+print(int is *)
+print(str is *)

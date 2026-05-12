@@ -1,0 +1,49 @@
+val root = units()[1].root
+val var = root[2]
+
+fun local_children(node) = node.children
+
+# Test only with a binding introduction
+print("=== Testing binding introduction")
+print(root is a)
+print(root is _)
+print("")
+
+# Test a binding introduction and a value pattern
+print("=== Testing value pattern")
+print(root is a@Sequence)
+print(root is a@Example)
+print("")
+
+# Test field detail
+print("=== Testing field detail")
+print(var is Var(f_arg: Sequence))
+print(var is Var(f_arg: FooNode))
+print(var is Var(f_arg: FooNode, f_arg: Sequence))
+print(var is Var(f_arg: Example))
+print(var is Var(f_arg: FooNode, f_arg: Example))
+print("")
+
+# Test property detail
+print("=== Testing property detail")
+print(root is FooNode(p_get_bool(): true))
+print(root is FooNode(p_get_bool(): false))
+print(root is FooNode(p_get_int(10): 10))
+print(root is FooNode(p_get_int(): 42))
+print(root is FooNode(p_get_int(10): 42))
+print(root is FooNode(p_get_int(10): 42))
+print("")
+
+# Test selector detail
+print("=== Testing selector detail")
+print(root is FooNode(any local_children is Example))
+print(root is FooNode(any local_children is Ident))
+print(root is FooNode(all local_children is FooNode))
+print(root is FooNode(all local_children is Example))
+print("")
+
+# Test with a binding introduction and a predicate
+print("=== Testing binding introduction and predicate")
+print(var is v@Var when v.f_arg.children_count == 1)
+print(var is v@Var when v.f_arg.children_count == 2)
+print("")

@@ -1,0 +1,14 @@
+val root = units()[1].root
+val example = root[1]
+val var = root[2]
+val null_lit = root[3]
+
+print(root is Sequence)
+print(root is Var)
+print(example is Example)
+print(example is Var)
+print(var is Example)
+print(var is Var)
+print(null_lit is NullLiteral)
+print(null_lit is null)
+print(root is 42)
