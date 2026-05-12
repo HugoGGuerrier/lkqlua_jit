@@ -657,16 +657,16 @@ impl Node {
 
     /// Lower the provided pattern node into a intermediate tree node that
     /// expresses the matching logic.
-    /// The provided `matched_value_ref` should be the "let id" pointing to
+    /// The provided `matched_value_id` should be the "let id" pointing to
     /// the value to match.
     fn lower_lkql_pattern(
         ctx: &mut LoweringContext<LkqlNode>,
         node: &LkqlNode,
-        matched_value_ref: usize,
+        matched_value_id: usize,
     ) -> Result<Self, Report> {
         // Special handling of the parenthesized pattern
         if let LkqlNode::ParenPattern(parent_pattern) = node {
-            return Self::lower_lkql_pattern(ctx, &parent_pattern.f_pattern()?, matched_value_ref);
+            return Self::lower_lkql_pattern(ctx, &parent_pattern.f_pattern()?, matched_value_id);
         }
 
         // Get the location of the pattern node
@@ -680,7 +680,7 @@ impl Node {
         };
 
         // Create a node to read the matched value
-        let read_value = related_node(NodeVariant::Read(matched_value_ref));
+        let read_value = related_node(NodeVariant::Read(matched_value_id));
 
         // Lower the pattern not to an intermediate tree node variant
         let variant = match node {
@@ -740,7 +740,7 @@ impl Node {
                 operand: Box::new(Self::lower_lkql_pattern(
                     ctx,
                     &not_pattern.f_pattern()?,
-                    matched_value_ref,
+                    matched_value_id,
                 )?),
             },
 
@@ -749,7 +749,7 @@ impl Node {
                 left: Box::new(Self::lower_lkql_pattern(
                     ctx,
                     &or_pattern.f_left()?,
-                    matched_value_ref,
+                    matched_value_id,
                 )?),
                 operator: LogicOperator {
                     origin_location: origin_location.clone(),
@@ -758,7 +758,7 @@ impl Node {
                 right: Box::new(Self::lower_lkql_pattern(
                     ctx,
                     &or_pattern.f_right()?,
-                    matched_value_ref,
+                    matched_value_id,
                 )?),
             },
 
@@ -785,7 +785,7 @@ impl Node {
 
                 // Lower the value pattern
                 if let Some(pattern) = complex_pattern.f_pattern()? {
-                    matching_elems.push(Self::lower_lkql_pattern(ctx, &pattern, matched_value_ref)?)
+                    matching_elems.push(Self::lower_lkql_pattern(ctx, &pattern, matched_value_id)?)
                 }
 
                 // Lower the predicate
