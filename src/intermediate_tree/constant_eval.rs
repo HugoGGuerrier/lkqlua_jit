@@ -423,7 +423,9 @@ where
     }
 }
 
+#[allow(unused_imports)]
 mod tests {
+    use super::*;
     use crate::{
         builtins::{
             traits::{indexable, iterable},
@@ -432,8 +434,6 @@ mod tests {
         intermediate_tree::{ArithOperator, CompOperator, Identifier, LogicOperator, MiscOperator},
         sources::{Location, SourceSection},
     };
-
-    use super::*;
 
     fn _dummy_loc() -> SourceSection {
         SourceSection {

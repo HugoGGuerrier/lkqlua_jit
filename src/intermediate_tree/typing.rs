@@ -55,6 +55,7 @@ impl Node {
     }
 }
 
+#[allow(unused_imports)]
 mod test {
     use crate::{
         builtins::types::{bool, function, int, list, obj, str, stream, tuple, unit},
