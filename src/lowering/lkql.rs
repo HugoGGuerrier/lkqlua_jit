@@ -57,6 +57,9 @@ impl ExecutionUnit {
         node: &LkqlNode,
         ctx: &mut LoweringContext<LkqlNode>,
     ) -> Result<Self, Report> {
+        // Create the origin location of the execution unit
+        let origin_location = SourceSection::from_lkql_node(ctx.lowered_source, node)?;
+
         // First, we get the name of the currently lowered execution unit.
         let name = match &node {
             LkqlNode::TopLevelList(top_level) => {
@@ -158,10 +161,9 @@ impl ExecutionUnit {
 
                 // Create the intermediate node representing the body of the
                 // function.
-                let current_loc = SourceSection::from_lkql_node(ctx.lowered_source, node)?;
                 let body = match list_comp.f_guard()? {
                     Some(guard) => Node {
-                        origin_location: current_loc.clone(),
+                        origin_location: origin_location.clone(),
                         variant: NodeVariant::IfExpr {
                             condition: Box::new(Node::lower_lkql_node(ctx, &guard)?),
                             consequence: Box::new(Node::lower_lkql_node(
@@ -169,7 +171,7 @@ impl ExecutionUnit {
                                 &list_comp.f_expr()?,
                             )?),
                             alternative: Box::new(Node {
-                                origin_location: current_loc,
+                                origin_location: origin_location.clone(),
                                 variant: NodeVariant::NilLiteral,
                             }),
                         },
@@ -184,12 +186,7 @@ impl ExecutionUnit {
         };
 
         // Finally return the new execution unit
-        Ok(ExecutionUnit {
-            origin_location: SourceSection::from_lkql_node(ctx.lowered_source, node)?,
-            name,
-            children_units,
-            variant,
-        })
+        Ok(ExecutionUnit { origin_location, name, children_units, variant })
     }
 }
 
@@ -673,13 +670,14 @@ impl Node {
         }
 
         // Get the location of the pattern node
-        let loc = SourceSection::from_lkql_node(ctx.lowered_source, node)?;
+        let origin_location = SourceSection::from_lkql_node(ctx.lowered_source, node)?;
 
         // Util function used to create a node related to the one currently
         // lowered. The result node is wrapped in a Box and has the same origin
         // location os the current one.
-        let related_node =
-            |variant: NodeVariant| Box::new(Node { origin_location: loc.clone(), variant });
+        let related_node = |variant: NodeVariant| {
+            Box::new(Node { origin_location: origin_location.clone(), variant })
+        };
 
         // Create a node to read the matched value
         let read_value = related_node(NodeVariant::Read(matched_value_ref));
@@ -704,7 +702,7 @@ impl Node {
                 NodeVariant::CompBinOp {
                     left: read_value,
                     operator: CompOperator {
-                        origin_location: loc.clone(),
+                        origin_location: origin_location.clone(),
                         variant: CompOperatorVariant::Equals,
                     },
                     right: related_node(target_literal),
@@ -725,7 +723,7 @@ impl Node {
                     }
                 } else {
                     ctx.diagnostics.push(Report::from_error_template(
-                        &loc,
+                        &origin_location,
                         &UNKNOWN_NODE_TYPE,
                         &vec![&node_type_name],
                     ));
@@ -736,7 +734,7 @@ impl Node {
             // --- Not pattern
             LkqlNode::NotPattern(not_pattern) => NodeVariant::LogicUnOp {
                 operator: LogicOperator {
-                    origin_location: loc.clone(),
+                    origin_location: origin_location.clone(),
                     variant: LogicOperatorVariant::Not,
                 },
                 operand: Box::new(Self::lower_lkql_pattern(
@@ -754,7 +752,7 @@ impl Node {
                     matched_value_ref,
                 )?),
                 operator: LogicOperator {
-                    origin_location: loc.clone(),
+                    origin_location: origin_location.clone(),
                     variant: LogicOperatorVariant::Or,
                 },
                 right: Box::new(Self::lower_lkql_pattern(
@@ -806,7 +804,7 @@ impl Node {
                             related_node(NodeVariant::LogicBinOp {
                                 left: Box::new(next),
                                 operator: LogicOperator {
-                                    origin_location: loc.clone(),
+                                    origin_location: origin_location.clone(),
                                     variant: LogicOperatorVariant::And,
                                 },
                                 right: res,
@@ -825,20 +823,9 @@ impl Node {
             _ => unreachable!(),
         };
 
-        // Create the result node
-        let lowered_node = Node { origin_location: loc, variant };
+        // Return the result node
+        Ok(Node { origin_location, variant })
 
-        // Return the result node, potentially wrapped in a lexical scope
-        Ok(if has_lexical_scope(node) {
-            lowered_node.with_wrapper(|n| {
-                Ok(NodeVariant::InLexicalScope {
-                    local_symbols: all_local_symbols(node, ctx)?,
-                    expr: Box::new(n),
-                })
-            })?
-        } else {
-            lowered_node
-        })
     }
 
     /// Wrap the current node using the provided wrapper creation function,
