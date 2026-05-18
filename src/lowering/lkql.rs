@@ -1184,6 +1184,7 @@ fn has_lexical_scope(node: &LkqlNode) -> bool {
 ///   * [`LkqlNode::AnonymousFunction`]
 ///   * [`LkqlNode::ListComprehension`]
 ///   * [`LkqlNode::BlockExpr`]
+///   * [`LkqlNode::IsClause`]
 ///   * [`LkqlNode::NodePatternSelector`]
 fn all_local_decls(node: &LkqlNode, output: &mut Vec<LkqlNode>) -> Result<(), Report> {
     for maybe_child in node {
