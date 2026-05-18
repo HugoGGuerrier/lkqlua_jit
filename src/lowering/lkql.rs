@@ -844,7 +844,10 @@ impl Node {
 
                 // Lower the predicate
                 if let Some(predicate) = complex_pattern.f_predicate()? {
-                    matching_elems.push(Self::lower_lkql_node(ctx, &predicate)?);
+                    matching_elems.push(
+                        Self::lower_lkql_node(ctx, &predicate)?
+                            .with_type_requirement(&types::bool::TYPE)?,
+                    );
                 }
 
                 // Compose all checks in a sequence of binary operations
