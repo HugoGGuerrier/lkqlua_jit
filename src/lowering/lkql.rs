@@ -1199,10 +1199,10 @@ fn all_local_decls(node: &LkqlNode, output: &mut Vec<LkqlNode>) -> Result<(), Re
                 LkqlNode::SelectorDecl(_) => output.push(child),
                 LkqlNode::Import(_) => output.push(child),
                 LkqlNode::ComplexPattern(pattern) => {
-                    all_local_decls(&child, output)?;
                     if let Some(binding) = pattern.f_binding()? {
                         output.push(binding);
                     }
+                    all_local_decls(&child, output)?;
                 }
 
                 // Recursion bounds
