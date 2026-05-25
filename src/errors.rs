@@ -250,10 +250,10 @@ pub const ERROR_TEMPLATE_REPOSITORY: &[&ErrorTemplate] = &[
 // --- Hint message
 
 /// Hint for [`DUPLICATED_SYMBOL`].
-pub const PREVIOUS_SYMBOL_HINT: &'static str = "Previously declared here";
+pub const PREVIOUS_SYMBOL_HINT: &str = "Previously declared here";
 
 /// Hint for [`POS_AND_NAMED_VALUE_FOR_PARAM`].
-pub const PREVIOUS_NAMED_ARG_HINT: &'static str = "Previous named argument is here";
+pub const PREVIOUS_NAMED_ARG_HINT: &str = "Previous named argument is here";
 
 // ----- Support types -----
 
