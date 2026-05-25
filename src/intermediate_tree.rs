@@ -307,6 +307,12 @@ pub enum NodeVariant {
 }
 
 impl Node {
+    /// Create a new node, with the same location as this one, with the
+    /// provided variant.
+    pub fn related_node(&self, variant: NodeVariant) -> Self {
+        Self { origin_location: self.origin_location.clone(), variant }
+    }
+
     // --- Pretty printing
 
     /// Get a pretty tree representation of this node.
@@ -635,6 +641,14 @@ impl Hash for Identifier {
 impl PartialEq for Identifier {
     fn eq(&self, other: &Self) -> bool {
         self.text == other.text
+    }
+}
+
+impl Identifier {
+    /// Create a new node, with the same location as this identifier, with the
+    /// provided variant.
+    pub fn related_node(&self, variant: NodeVariant) -> Node {
+        Node { origin_location: self.origin_location.clone(), variant }
     }
 }
 

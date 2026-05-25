@@ -1,0 +1,9 @@
+Error: Sub-pattern after a splat one
+   ╭─[ <working-dir>/script.lkql:1:19 ]
+   │
+ 1 │ [] is [1, 2, ..., 3]
+   │              ─┬─  ┬  
+   │               │   ╰── This sub-pattern is after a splat one
+   │               │      
+   │               ╰────── Hint: Previous splat pattern is here
+───╯

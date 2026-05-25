@@ -1,0 +1,9 @@
+Error: Multiple splat patterns
+   ╭─[ <working-dir>/script.lkql:1:19 ]
+   │
+ 1 │ [] is [1, 2, ..., ...]
+   │              ─┬─  ─┬─  
+   │               │    ╰─── Multiple splat patterns aren't allowed
+   │               │        
+   │               ╰──────── Hint: Previous splat pattern is here
+───╯

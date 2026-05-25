@@ -183,15 +183,22 @@ pub const REGEX_TOO_BIG: ErrorTemplate = ErrorTemplate {
 
 // --- Pattern related errors
 
+/// Error when a subpattern comes after a splat one.
 pub const SUBPATTERN_AFTER_SPLAT: ErrorTemplate = ErrorTemplate {
     id: REGEX_TOO_BIG.id + 1,
     title: "Sub-pattern after a splat one",
     message_template: "This sub-pattern is after a splat one",
 };
 
+pub const MULTIPLE_SPLAT_PATTERNS: ErrorTemplate = ErrorTemplate {
+    id: SUBPATTERN_AFTER_SPLAT.id + 1,
+    title: "Multiple splat patterns",
+    message_template: "Multiple splat patterns aren't allowed",
+};
+
 /// Error when a selector call in a pattern detail is not correctly formed.
 pub const INVALID_SELECTOR_CALL: ErrorTemplate = ErrorTemplate {
-    id: SUBPATTERN_AFTER_SPLAT.id + 1,
+    id: MULTIPLE_SPLAT_PATTERNS.id + 1,
     title: "Invalid selector call",
     message_template: "It must be either a name or a call",
 };
@@ -242,6 +249,7 @@ pub const ERROR_TEMPLATE_REPOSITORY: &[&ErrorTemplate] = &[
     &REGEX_SYNTAX_ERROR,
     &REGEX_TOO_BIG,
     &SUBPATTERN_AFTER_SPLAT,
+    &MULTIPLE_SPLAT_PATTERNS,
     &INVALID_SELECTOR_CALL,
     &LUA_ENGINE_ERROR,
     &ANALYSIS_LIBRARY_ERROR,
@@ -254,6 +262,9 @@ pub const PREVIOUS_SYMBOL_HINT: &str = "Previously declared here";
 
 /// Hint for [`POS_AND_NAMED_VALUE_FOR_PARAM`].
 pub const PREVIOUS_NAMED_ARG_HINT: &str = "Previous named argument is here";
+
+/// Hint for [`SUBPATTERN_AFTER_SPLAT`] and [`MULTIPLE_SPLAT_PATTERNS`].
+pub const PREVIOUS_SPLAT_PATTERN_HINT: &str = "Previous splat pattern is here";
 
 // ----- Support types -----
 

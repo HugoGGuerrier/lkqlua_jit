@@ -11,8 +11,9 @@ use crate::{
         types::{self, BuiltinType},
     },
     errors::{
-        AMBIGUOUS_IMPORT, INVALID_SELECTOR_CALL, MODULE_NOT_FOUND, POS_AFTER_NAMED_ARGUMENT,
-        PREVIOUS_NAMED_ARG_HINT, UNKNOWN_NODE_TYPE,
+        AMBIGUOUS_IMPORT, INVALID_SELECTOR_CALL, MODULE_NOT_FOUND, MULTIPLE_SPLAT_PATTERNS,
+        POS_AFTER_NAMED_ARGUMENT, PREVIOUS_NAMED_ARG_HINT, PREVIOUS_SPLAT_PATTERN_HINT,
+        SUBPATTERN_AFTER_SPLAT, UNKNOWN_NODE_TYPE,
     },
     intermediate_tree::{
         ArithOperator, ArithOperatorVariant, CompOperator, CompOperatorVariant, ExecutionUnit,
@@ -23,7 +24,7 @@ use crate::{
     report::{Hint, Report},
     sources::{Location, SourceId, SourceSection},
 };
-use liblkqllang::{BaseFunction, Exception, LkqlNode};
+use liblkqllang::{BaseFunction, Exception, LkqlNode, SplatPattern};
 use std::{
     env,
     path::{Path, PathBuf},
@@ -718,12 +719,32 @@ impl Node {
         // Util function used to create a node related to the one currently
         // lowered. The result node is wrapped in a Box and has the same origin
         // location os the current one.
-        let related_node = |variant: NodeVariant| {
-            Box::new(Node { origin_location: origin_location.clone(), variant })
+        let related_node =
+            |variant: NodeVariant| Node { origin_location: origin_location.clone(), variant };
+
+        // Util function to combine a predicate vector in a "and" boolean
+        // expression.
+        let combine_predicates = |mut predicates: Vec<Node>| match predicates.len() {
+            0 => related_node(NodeVariant::BoolLiteral(true)),
+            1 => predicates.remove(0),
+            _ => {
+                let mut iter = predicates.into_iter().rev();
+                let init = iter.next().unwrap();
+                iter.fold(init, |res, next| {
+                    related_node(NodeVariant::LogicBinOp {
+                        left: Box::new(next),
+                        operator: LogicOperator {
+                            origin_location: origin_location.clone(),
+                            variant: LogicOperatorVariant::And,
+                        },
+                        right: Box::new(res),
+                    })
+                })
+            }
         };
 
         // Create a node to read the matched value
-        let read_value = related_node(NodeVariant::Read(matched_value_id));
+        let read_value = Box::new(related_node(NodeVariant::Read(matched_value_id)));
 
         // Lower the pattern not to an intermediate tree node variant
         let variant = match node {
@@ -748,7 +769,7 @@ impl Node {
                         origin_location: origin_location.clone(),
                         variant: CompOperatorVariant::Equals,
                     },
-                    right: related_node(target_literal),
+                    right: Box::new(related_node(target_literal)),
                 }
             }
             LkqlNode::NodeKindPattern(node_kind_pattern) => {
@@ -772,6 +793,185 @@ impl Node {
                     ));
                     NodeVariant::BoolLiteral(false)
                 }
+            }
+
+            // --- List pattern
+            LkqlNode::ListPattern(list_pattern) => {
+                // Create working variables
+                let mut maybe_splat_pattern: Option<SplatPattern> = None;
+                let sub_patterns_source = list_pattern.f_patterns()?;
+
+                // Start by lowering all sub-patterns
+                let mut sub_patterns = Vec::new();
+                for (i, maybe_sub_pattern_source) in sub_patterns_source
+                    .into_iter()
+                    .enumerate()
+                    .filter_map(|(i, c)| c.transpose().map(|c| (i + 1, c)))
+                {
+                    match maybe_sub_pattern_source? {
+                        LkqlNode::SplatPattern(splat_pattern) => {
+                            // Emit an error if a splat pattern has already
+                            // been stored.
+                            if let Some(old_splat_pattern) = maybe_splat_pattern {
+                                ctx.diagnostics.push(
+                                    Report::from_error_template_with_hints::<&str>(
+                                        &SourceSection::from_lkql_node(
+                                            ctx.lowered_source,
+                                            &splat_pattern.as_node(),
+                                        )?,
+                                        &MULTIPLE_SPLAT_PATTERNS,
+                                        &vec![],
+                                        vec![Hint {
+                                            message: String::from(PREVIOUS_SPLAT_PATTERN_HINT),
+                                            location: SourceSection::from_lkql_node(
+                                                ctx.lowered_source,
+                                                &old_splat_pattern.as_node(),
+                                            )?,
+                                        }],
+                                    ),
+                                );
+                            }
+
+                            // Store the splat pattern node to handle it later
+                            maybe_splat_pattern = Some(splat_pattern);
+                        }
+                        sub_pattern_source => {
+                            // Register an error if there is a pattern after a
+                            // splat one.
+                            if let Some(ref splat_pattern) = maybe_splat_pattern {
+                                ctx.diagnostics.push(
+                                    Report::from_error_template_with_hints::<&str>(
+                                        &SourceSection::from_lkql_node(
+                                            ctx.lowered_source,
+                                            &sub_pattern_source,
+                                        )?,
+                                        &SUBPATTERN_AFTER_SPLAT,
+                                        &vec![],
+                                        vec![Hint {
+                                            message: String::from(PREVIOUS_SPLAT_PATTERN_HINT),
+                                            location: SourceSection::from_lkql_node(
+                                                ctx.lowered_source,
+                                                &splat_pattern.as_node(),
+                                            )?,
+                                        }],
+                                    ),
+                                );
+                            } else {
+                                let elem_id = ctx.new_tmp_id();
+                                let sub_pattern =
+                                    Self::lower_lkql_pattern(ctx, &sub_pattern_source, elem_id)?;
+                                let index_access =
+                                    sub_pattern.related_node(NodeVariant::IndexExpr {
+                                        indexed_val: read_value.clone(),
+                                        index: Box::new(
+                                            sub_pattern.related_node(NodeVariant::IntLiteral(
+                                                i.to_string(),
+                                            )),
+                                        ),
+                                        is_safe: false,
+                                    });
+                                sub_patterns.push(sub_pattern.with_wrapper(|n| {
+                                    Ok(NodeVariant::Let {
+                                        id: elem_id,
+                                        value: Box::new(index_access),
+                                        r#in: Box::new(n),
+                                    })
+                                })?);
+                            }
+                        }
+                    }
+                }
+
+                // Store the count of subpatterns matching elements of the list
+                let sub_pattern_count = sub_patterns.len();
+
+                // Add type checking to subpatterns
+                sub_patterns.insert(
+                    0,
+                    related_node(NodeVariant::InstanceOf {
+                        expression: read_value.clone(),
+                        expected_type_tag: types::list::TYPE.tag,
+                    }),
+                );
+
+                // Add the list size checking to subpatterns
+                sub_patterns.insert(
+                    1,
+                    related_node(NodeVariant::CompBinOp {
+                        left: Box::new(related_node(NodeVariant::DottedExpr {
+                            prefix: read_value.clone(),
+                            suffix: Identifier {
+                                origin_location: origin_location.clone(),
+                                text: String::from("length"),
+                            },
+                            is_safe: false,
+                        })),
+                        operator: CompOperator {
+                            origin_location: origin_location.clone(),
+                            variant: if maybe_splat_pattern.is_some() {
+                                CompOperatorVariant::GreaterOrEquals
+                            } else {
+                                CompOperatorVariant::Equals
+                            },
+                        },
+                        right: Box::new(related_node(NodeVariant::IntLiteral(
+                            sub_pattern_count.to_string(),
+                        ))),
+                    }),
+                );
+
+                // If there is a splat pattern with a binding, add its
+                // corresponding initialization at the end of subpatterns
+                if let Some(splat_pattern) = maybe_splat_pattern {
+                    if let Some(binding) = splat_pattern.f_binding()? {
+                        let loc = SourceSection::from_lkql_node(ctx.lowered_source, &binding)?;
+                        let id = Identifier::from_lkql_node(&binding, ctx)?;
+                        let sublist_access = id.related_node(NodeVariant::DottedExpr {
+                            prefix: read_value.clone(),
+                            suffix: Identifier {
+                                origin_location: loc.clone(),
+                                text: String::from("sublist"),
+                            },
+                            is_safe: false,
+                        });
+                        let length_access = id.related_node(NodeVariant::DottedExpr {
+                            prefix: read_value.clone(),
+                            suffix: Identifier {
+                                origin_location: loc.clone(),
+                                text: String::from("length"),
+                            },
+                            is_safe: false,
+                        });
+                        let sublist_call = Box::new(id.related_node(NodeVariant::FunCall {
+                            callee: Box::new(sublist_access),
+                            positional_args: vec![
+                                *read_value,
+                                id.related_node(NodeVariant::IntLiteral(
+                                    (sub_pattern_count + 1).to_string(),
+                                )),
+                                length_access,
+                            ],
+                            named_args: vec![],
+                        }));
+                        let bool_lit = id.related_node(NodeVariant::BoolLiteral(true));
+                        sub_patterns.push(Node {
+                            origin_location: loc.clone(),
+                            variant: NodeVariant::BlockExpr {
+                                body: vec![Node {
+                                    origin_location: loc.clone(),
+                                    variant: NodeVariant::InitLocal {
+                                        symbol: id,
+                                        val: sublist_call,
+                                    },
+                                }],
+                                val: Box::new(bool_lit),
+                            },
+                        });
+                    }
+                }
+
+                // Finally, combine all subpatterns in a "and" expression
+                combine_predicates(sub_patterns).variant
             }
 
             // --- Not pattern
@@ -851,30 +1051,16 @@ impl Node {
                 }
 
                 // Compose all checks in a sequence of binary operations
-                let matching_logic_node = match matching_elems.len() {
-                    0 => related_node(NodeVariant::BoolLiteral(true)),
-                    1 => Box::new(matching_elems.remove(0)),
-                    _ => {
-                        let mut iter = matching_elems.into_iter().rev();
-                        let init = Box::new(iter.next().unwrap());
-                        iter.fold(init, |res, next| {
-                            related_node(NodeVariant::LogicBinOp {
-                                left: Box::new(next),
-                                operator: LogicOperator {
-                                    origin_location: origin_location.clone(),
-                                    variant: LogicOperatorVariant::And,
-                                },
-                                right: res,
-                            })
-                        })
-                    }
-                };
+                let matching_logic_node = combine_predicates(matching_elems);
 
                 // Finally, return the lowered complex pattern
                 if binding_in_vec.is_empty() {
                     matching_logic_node.variant
                 } else {
-                    NodeVariant::BlockExpr { body: binding_in_vec, val: matching_logic_node }
+                    NodeVariant::BlockExpr {
+                        body: binding_in_vec,
+                        val: Box::new(matching_logic_node),
+                    }
                 }
             }
             _ => unreachable!(),
@@ -1059,7 +1245,7 @@ impl Node {
     /// propagating all information in the current node to the wrapper.
     fn with_wrapper<F>(self, create_wrapper: F) -> Result<Self, Report>
     where
-        F: Fn(Self) -> Result<NodeVariant, Report>,
+        F: FnOnce(Self) -> Result<NodeVariant, Report>,
     {
         Ok(Node {
             origin_location: self.origin_location.clone(),
@@ -1202,6 +1388,12 @@ fn all_local_decls(node: &LkqlNode, output: &mut Vec<LkqlNode>) -> Result<(), Re
                 LkqlNode::SelectorDecl(_) => output.push(child),
                 LkqlNode::Import(_) => output.push(child),
                 LkqlNode::ComplexPattern(pattern) => {
+                    if let Some(binding) = pattern.f_binding()? {
+                        output.push(binding);
+                    }
+                    all_local_decls(&child, output)?;
+                }
+                LkqlNode::SplatPattern(pattern) => {
                     if let Some(binding) = pattern.f_binding()? {
                         output.push(binding);
                     }
