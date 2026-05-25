@@ -42,6 +42,7 @@ pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
         ("any", TypeField::Value(LIST_ANY)),
         ("all", TypeField::Value(LIST_ALL)),
         ("reduce", TypeField::Value(LIST_REDUCE)),
+        ("sublist", TypeField::Value(LIST_SUBLIST)),
     ],
     overloads: &[
         (OverloadTarget::ToString, FunctionValue::CFunction(list_tostring)),
@@ -97,6 +98,17 @@ const LIST_REDUCE: RuntimeValue = RuntimeValue::Function(FunctionValue::LuaFunct
         local res = init
         for _, next in ipairs(self) do
             res = fn(nil, res, next)
+        end
+        return res
+    end",
+));
+
+/// Implementation of the "sublist" method in value of the "List" type.
+const LIST_SUBLIST: RuntimeValue = RuntimeValue::Function(FunctionValue::LuaFunction(
+    "function (_, self, low, high)
+        local res = setmetatable({}, getmetatable(self))
+        for i=low,high,1 do
+            table.insert(res, self[i])
         end
         return res
     end",
