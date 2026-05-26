@@ -19,9 +19,7 @@ use std::{ffi::c_int, path::PathBuf, str::FromStr};
 pub const TYPE: BuiltinType = BuiltinType {
     tag: int::TYPE.tag + 1,
     traits: &[&traits::sized::TRAIT],
-    implementation_variant: TypeImplementationVariant::Monomorphic {
-        implementation: IMPLEMENTATION,
-    },
+    implementation_variant: TypeImplementationVariant::new_mono(IMPLEMENTATION),
 };
 
 pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {

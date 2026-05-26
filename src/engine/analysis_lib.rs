@@ -233,10 +233,10 @@ impl AnalysisLibrary {
         // Create the node type repository
         let mut node_type_repo = NodeTypeRepo::new();
         for (name, tag, bases) in &node_type_info {
-            node_type_repo.registered_types.push(NodeType {
-                name: name.clone(),
-                tag: *tag,
-                base_types: bases
+            node_type_repo.registered_types.push(NodeType::new(
+                name.clone(),
+                *tag,
+                bases
                     .iter()
                     .map(|b| {
                         node_type_info
@@ -245,7 +245,7 @@ impl AnalysisLibrary {
                             .unwrap()
                     })
                     .collect(),
-            });
+            ));
         }
 
         // Cleanup the stack and return the result
@@ -398,6 +398,13 @@ pub struct NodeType {
     pub base_types: Vec<i32>,
 }
 
+impl NodeType {
+    /// Create a new node type object.
+    pub fn new(name: String, tag: i32, base_types: Vec<i32>) -> Self {
+        Self { name, tag, base_types }
+    }
+}
+
 /// Callback used to format an error from the analysis library
 #[unsafe(no_mangle)]
 unsafe extern "C" fn analysis_lib_error_formatter(l: LuaState) -> c_int {
@@ -406,14 +413,14 @@ unsafe extern "C" fn analysis_lib_error_formatter(l: LuaState) -> c_int {
     get_field(l, 1, "message");
 
     // Create the error instance object
-    let error_instance = ErrorInstance {
-        template_id: ANALYSIS_LIBRARY_ERROR.id,
-        message_args: vec![ErrorInstanceArg::Static(format!(
+    let error_instance = ErrorInstance::new(
+        ANALYSIS_LIBRARY_ERROR.id,
+        vec![ErrorInstanceArg::Static(format!(
             "{} [{}]",
             get_string(l, -1).unwrap(),
             get_string(l, -2).unwrap()
         ))],
-    };
+    );
 
     // Finally push the encoded error instance as a JSON string
     push_string(l, &error_instance.to_json_string());

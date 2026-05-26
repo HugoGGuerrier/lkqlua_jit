@@ -69,10 +69,10 @@ impl ExecutionUnit {
 
         // Then return the success result
         if compile_context.diagnostics.is_empty() {
-            Ok(ExtendedBytecodeUnit {
-                source: self.origin_location.source,
-                prototypes: compile_context.prototypes,
-            })
+            Ok(ExtendedBytecodeUnit::new(
+                self.origin_location.source,
+                compile_context.prototypes,
+            ))
         } else {
             Err(Report::Composed(compile_context.diagnostics))
         }
@@ -135,11 +135,11 @@ impl ExecutionUnit {
                 let result_tmp = ctx.frame.borrow_mut().get_slot();
 
                 // Create a source section at the end of the module
-                let end_source_section = SourceSection {
-                    source: self.origin_location.source.clone(),
-                    start: self.origin_location.end,
-                    end: self.origin_location.end,
-                };
+                let end_source_section = SourceSection::new(
+                    self.origin_location.source.clone(),
+                    self.origin_location.end,
+                    self.origin_location.end,
+                );
 
                 // Emit instructions to create the module table
                 emit_new_table(ctx, &end_source_section, result_tmp, 0, symbols.len() as u32);
@@ -1049,10 +1049,10 @@ impl Node {
                             &key.origin_location,
                             &DUPLICATED_KEY,
                             &vec![key.text.clone()],
-                            vec![Hint {
-                                message: String::from("Previous key declared here"),
-                                location: previous_key.origin_location.clone(),
-                            }],
+                            vec![Hint::new(
+                                String::from("Previous key declared here"),
+                                previous_key.origin_location.clone(),
+                            )],
                         ));
                     } else {
                         seen_keys.insert(key);
@@ -2180,8 +2180,7 @@ fn emit_runtime_error(
     message_args: &Vec<ErrorInstanceArg>,
 ) {
     // Create the runtime error instance object
-    let runtime_error_instance =
-        ErrorInstance { template_id: error_template.id, message_args: message_args.clone() };
+    let runtime_error_instance = ErrorInstance::new(error_template.id, message_args.clone());
 
     // Add constants in the current repository
     let message_cst = ctx
@@ -2620,10 +2619,10 @@ impl<'a> CompilationContext<'a> {
                         &symbol.origin_location,
                         &DUPLICATED_SYMBOL,
                         &vec![&symbol.text],
-                        vec![Hint {
-                            message: String::from(PREVIOUS_SYMBOL_HINT),
-                            location: previous_binding.declaration_location.clone(),
-                        }],
+                        vec![Hint::new(
+                            String::from(PREVIOUS_SYMBOL_HINT),
+                            previous_binding.declaration_location.clone(),
+                        )],
                     ));
             } else {
                 self.frame

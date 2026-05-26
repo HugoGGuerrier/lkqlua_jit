@@ -86,6 +86,16 @@ impl Display for ExecutionUnit {
 }
 
 impl ExecutionUnit {
+    /// Create a new execution unit object.
+    pub fn new(
+        origin_location: SourceSection,
+        name: String,
+        children_units: Vec<ExecutionUnit>,
+        variant: ExecutionUnitVariant,
+    ) -> Self {
+        Self { origin_location, name, children_units, variant }
+    }
+
     // --- Pretty printing
 
     fn pretty_print(&self, indent_level: usize) -> String {
@@ -307,10 +317,15 @@ pub enum NodeVariant {
 }
 
 impl Node {
+    /// Create a new intermediate node object.
+    pub fn new(origin_location: SourceSection, variant: NodeVariant) -> Self {
+        Self { origin_location, variant }
+    }
+
     /// Create a new node, with the same location as this one, with the
     /// provided variant.
     pub fn related_node(&self, variant: NodeVariant) -> Self {
-        Self { origin_location: self.origin_location.clone(), variant }
+        Self::new(self.origin_location.clone(), variant)
     }
 
     // --- Pretty printing
@@ -557,6 +572,13 @@ impl Display for ArithOperator {
     }
 }
 
+impl ArithOperator {
+    /// Create a new arithmetic operator object.
+    pub fn new(origin_location: SourceSection, variant: ArithOperatorVariant) -> Self {
+        Self { origin_location, variant }
+    }
+}
+
 /// This type represents a logic operator in the intermediate tree.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LogicOperator {
@@ -574,6 +596,13 @@ pub enum LogicOperatorVariant {
 impl Display for LogicOperator {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.variant.fmt(f)
+    }
+}
+
+impl LogicOperator {
+    /// Create a new logic operator object.
+    pub fn new(origin_location: SourceSection, variant: LogicOperatorVariant) -> Self {
+        Self { origin_location, variant }
     }
 }
 
@@ -600,6 +629,13 @@ impl Display for CompOperator {
     }
 }
 
+impl CompOperator {
+    /// Create a new comparison operator object.
+    pub fn new(origin_location: SourceSection, variant: CompOperatorVariant) -> Self {
+        Self { origin_location, variant }
+    }
+}
+
 /// This type represents all miscellaneous operator in the intermediate tree.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MiscOperator {
@@ -615,6 +651,13 @@ pub enum MiscOperatorVariant {
 impl Display for MiscOperator {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.variant.fmt(f)
+    }
+}
+
+impl MiscOperator {
+    /// Create a new miscellaneous operator object.
+    pub fn new(origin_location: SourceSection, variant: MiscOperatorVariant) -> Self {
+        Self { origin_location, variant }
     }
 }
 
@@ -645,10 +688,15 @@ impl PartialEq for Identifier {
 }
 
 impl Identifier {
+    /// Create a new identifier object.
+    pub fn new(origin_location: SourceSection, text: String) -> Self {
+        Self { origin_location, text }
+    }
+
     /// Create a new node, with the same location as this identifier, with the
     /// provided variant.
     pub fn related_node(&self, variant: NodeVariant) -> Node {
-        Node { origin_location: self.origin_location.clone(), variant }
+        Node::new(self.origin_location.clone(), variant)
     }
 }
 

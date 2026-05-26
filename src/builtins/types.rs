@@ -67,27 +67,6 @@ impl PartialEq for BuiltinType {
     }
 }
 
-/// This type represents the way a built-in type is implemented.
-/// An LKQL type may be either mono or polymorphic. This means that a type can
-/// have multiple implementations, while staying the same type to the user.
-#[derive(Debug)]
-pub enum TypeImplementationVariant {
-    Monomorphic {
-        implementation: TypeImplementation,
-    },
-
-    Polymorphic {
-        /// Base implementation containing the common behaviors of the type.
-        /// This may be overridden by type specializations.
-        /// The name defined in this implementation is used to display the type
-        /// to the users.
-        base_implementation: TypeImplementation,
-
-        /// An array of all type specializations (implementations).
-        specializations: &'static [TypeImplementation],
-    },
-}
-
 impl BuiltinType {
     /// Get the type name to display to the language users.
     pub fn display_name(&self) -> &'static str {
@@ -187,6 +166,42 @@ impl BuiltinType {
 
         // Create the properties table
         push_table(l, 0, 0);
+    }
+}
+
+/// This type represents the way a built-in type is implemented.
+/// An LKQL type may be either mono or polymorphic. This means that a type can
+/// have multiple implementations, while staying the same type to the user.
+#[derive(Debug)]
+pub enum TypeImplementationVariant {
+    Monomorphic {
+        implementation: TypeImplementation,
+    },
+
+    Polymorphic {
+        /// Base implementation containing the common behaviors of the type.
+        /// This may be overridden by type specializations.
+        /// The name defined in this implementation is used to display the type
+        /// to the users.
+        base_implementation: TypeImplementation,
+
+        /// An array of all type specializations (implementations).
+        specializations: &'static [TypeImplementation],
+    },
+}
+
+impl TypeImplementationVariant {
+    /// Create a new monomorphic type implementation object.
+    pub const fn new_mono(implementation: TypeImplementation) -> Self {
+        Self::Monomorphic { implementation }
+    }
+
+    /// Create a new polymorphic type implementation object.
+    pub const fn new_poly(
+        base_implementation: TypeImplementation,
+        specializations: &'static [TypeImplementation],
+    ) -> Self {
+        Self::Polymorphic { base_implementation, specializations }
     }
 }
 

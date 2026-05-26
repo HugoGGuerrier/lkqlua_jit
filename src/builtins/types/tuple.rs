@@ -18,9 +18,7 @@ use std::ffi::c_int;
 pub const TYPE: BuiltinType = BuiltinType {
     tag: pattern::TYPE.tag + 1,
     traits: &[&traits::indexable::TRAIT],
-    implementation_variant: TypeImplementationVariant::Monomorphic {
-        implementation: IMPLEMENTATION,
-    },
+    implementation_variant: TypeImplementationVariant::new_mono(IMPLEMENTATION),
 };
 
 pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {

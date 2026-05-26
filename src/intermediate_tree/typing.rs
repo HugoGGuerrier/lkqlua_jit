@@ -67,17 +67,13 @@ mod test {
     };
 
     fn _dummy_loc() -> SourceSection {
-        SourceSection {
-            source: 0,
-            start: Location { line: 0, col: 0 },
-            end: Location { line: 0, col: 0 },
-        }
+        SourceSection::new(0, Location::new(0, 0), Location::new(0, 0))
     }
 
     // --- Node creation helpers
 
     fn _node(variant: NodeVariant) -> Node {
-        Node { origin_location: _dummy_loc(), variant }
+        Node::new(_dummy_loc(), variant)
     }
 
     fn _bool_node() -> Box<Node> {
@@ -93,7 +89,7 @@ mod test {
     }
 
     fn _id() -> Identifier {
-        Identifier { origin_location: _dummy_loc(), text: String::from("x") }
+        Identifier::new(_dummy_loc(), String::from("x"))
     }
 
     fn _dummy() -> Box<Node> {
@@ -125,46 +121,31 @@ mod test {
         // Binary operations
         intermediate_tree = _node(NodeVariant::LogicBinOp {
             left: _dummy(),
-            operator: LogicOperator {
-                origin_location: _dummy_loc(),
-                variant: LogicOperatorVariant::And,
-            },
+            operator: LogicOperator::new(_dummy_loc(), LogicOperatorVariant::And),
             right: _dummy(),
         });
         assert_eq!(intermediate_tree.expr_type(), Some(&bool::TYPE));
         intermediate_tree = _node(NodeVariant::ArithBinOp {
             left: _dummy(),
-            operator: ArithOperator {
-                origin_location: _dummy_loc(),
-                variant: ArithOperatorVariant::Plus,
-            },
+            operator: ArithOperator::new(_dummy_loc(), ArithOperatorVariant::Plus),
             right: _dummy(),
         });
         assert_eq!(intermediate_tree.expr_type(), Some(&int::TYPE));
         intermediate_tree = _node(NodeVariant::CompBinOp {
             left: _dummy(),
-            operator: CompOperator {
-                origin_location: _dummy_loc(),
-                variant: CompOperatorVariant::Equals,
-            },
+            operator: CompOperator::new(_dummy_loc(), CompOperatorVariant::Equals),
             right: _dummy(),
         });
         assert_eq!(intermediate_tree.expr_type(), Some(&bool::TYPE));
 
         // Unary operations
         intermediate_tree = _node(NodeVariant::LogicUnOp {
-            operator: LogicOperator {
-                origin_location: _dummy_loc(),
-                variant: LogicOperatorVariant::Not,
-            },
+            operator: LogicOperator::new(_dummy_loc(), LogicOperatorVariant::Not),
             operand: _dummy(),
         });
         assert_eq!(intermediate_tree.expr_type(), Some(&bool::TYPE));
         intermediate_tree = _node(NodeVariant::ArithUnOp {
-            operator: ArithOperator {
-                origin_location: _dummy_loc(),
-                variant: ArithOperatorVariant::Plus,
-            },
+            operator: ArithOperator::new(_dummy_loc(), ArithOperatorVariant::Plus),
             operand: _dummy(),
         });
         assert_eq!(intermediate_tree.expr_type(), Some(&int::TYPE));

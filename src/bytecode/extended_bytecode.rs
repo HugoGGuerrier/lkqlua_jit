@@ -32,6 +32,11 @@ pub struct ExtendedBytecodeUnit {
 }
 
 impl ExtendedBytecodeUnit {
+    /// Create a new extended bytecode unit object.
+    pub fn new(source: SourceId, prototypes: Vec<ExtendedPrototype>) -> Self {
+        Self { source, prototypes }
+    }
+
     /// Create a new [`crate::bytecode::BytecodeUnit`] instance with data
     /// contained in this extended bytecode buffer.
     pub fn to_bytecode_unit(&self) -> BytecodeUnit {
@@ -72,6 +77,8 @@ pub struct ExtendedPrototype {
 }
 
 impl ExtendedPrototype {
+    /// Create a new [`crate::bytecode::Prototype`] value from information
+    /// contained in this extended prototype.
     pub fn to_prototype(&self) -> Prototype {
         // Perform some assertions to crash if there is too much elements
         assert!(self.arg_count <= u8::MAX as usize, "To much arguments in prototype");
@@ -471,11 +478,7 @@ mod tests {
         // Create a source repository and add a dummy source
         let mut source_repo = SourceRepository::new();
         let dummy_source = source_repo.add_source_buffer("<my_source>", "# This is my content");
-        let dummy_loc = SourceSection {
-            source: dummy_source,
-            start: Location { line: 1, col: 1 },
-            end: Location { line: 3, col: 1 },
-        };
+        let dummy_loc = SourceSection::new(dummy_source, Location::new(1, 1), Location::new(3, 1));
 
         // Create dummy instructions
         let mut extended_instructions = ExtendedInstructionBuffer::new();
@@ -485,11 +488,7 @@ mod tests {
         extended_instructions.ad_no_loc(2, 0, 0);
         extended_instructions.goto(0, 0);
         extended_instructions.ad(
-            &SourceSection {
-                source: dummy_source,
-                start: Location { line: 2, col: 2 },
-                end: Location { line: 3, col: 4 },
-            },
+            &SourceSection::new(dummy_source, Location::new(2, 2), Location::new(3, 4)),
             3,
             0,
             0,
@@ -516,26 +515,18 @@ mod tests {
         // Test instruction location fetching
         assert_eq!(
             extended_instructions.get_exact_location(4),
-            Some(&SourceSection {
-                source: dummy_source,
-                start: Location { line: 2, col: 2 },
-                end: Location { line: 3, col: 4 },
-            }),
+            Some(&SourceSection::new(dummy_source, Location::new(2, 2), Location::new(3, 4))),
         );
         assert_eq!(extended_instructions.get_exact_location(0), None);
         assert_eq!(extended_instructions.get_location_or_default(0, &dummy_loc), &dummy_loc);
         assert_eq!(extended_instructions.get_exact_location(5), None);
         assert_eq!(
             extended_instructions.get_location_or_default(5, &dummy_loc),
-            &SourceSection {
-                source: dummy_source,
-                start: Location { line: 2, col: 2 },
-                end: Location { line: 3, col: 4 },
-            },
+            &SourceSection::new(dummy_source, Location::new(2, 2), Location::new(3, 4)),
         );
 
         // Test bytecode buffers
-        let bytecode_buffer_1 = ExtendedBytecodeUnit { source: dummy_source, prototypes: vec![] };
+        let bytecode_buffer_1 = ExtendedBytecodeUnit::new(dummy_source, vec![]);
         assert_eq!(
             bytecode_buffer_1.to_bytecode_unit(),
             BytecodeUnit {

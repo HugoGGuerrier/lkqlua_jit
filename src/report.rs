@@ -130,7 +130,7 @@ impl Report {
         location: &SourceSection,
         error_template: &ErrorTemplate,
         message_args: &Vec<T>,
-        stack_trace: Vec<StackTraceElement>,
+        stack_trace: Vec<CallLocation>,
     ) -> Self
     where
         T: AsRef<str>,
@@ -164,11 +164,11 @@ impl Report {
     pub fn from_lkql_diagnostic(source: SourceId, diagnostic: &Diagnostic) -> Result<Self, Report> {
         Ok(Self::single_diag(
             ReportKind::Error,
-            SourceSection {
+            SourceSection::new(
                 source,
-                start: Location::from_lkql_location(diagnostic.sloc_range.start),
-                end: Location::from_lkql_location(diagnostic.sloc_range.end),
-            },
+                Location::from_lkql_location(diagnostic.sloc_range.start),
+                Location::from_lkql_location(diagnostic.sloc_range.end),
+            ),
             String::from("Parsing error"),
             diagnostic.message.clone(),
             vec![],
@@ -188,7 +188,7 @@ impl Report {
         title: String,
         message: String,
         hints: Vec<Hint>,
-        stack_trace: Vec<StackTraceElement>,
+        stack_trace: Vec<CallLocation>,
     ) -> Self {
         Self::Single {
             kind: kind,
@@ -338,7 +338,7 @@ pub enum ReportVariant {
         title: String,
         message: String,
         hints: Vec<Hint>,
-        stack_trace: Vec<StackTraceElement>,
+        stack_trace: Vec<CallLocation>,
     },
 }
 
@@ -351,9 +351,24 @@ pub struct Hint {
     pub location: SourceSection,
 }
 
-/// This structure represents an element in an error stack trace.
+impl Hint {
+    /// Create a new hint object.
+    pub fn new(message: String, location: SourceSection) -> Self {
+        Self { message, location }
+    }
+}
+
+/// This structure represents the location and the context of a call in a stack
+/// trace.
 #[derive(Debug, Clone)]
-pub struct StackTraceElement {
+pub struct CallLocation {
     pub call_context: String,
     pub location: SourceSection,
+}
+
+impl CallLocation {
+    /// Create a new call location object.
+    pub fn new(call_context: String, location: SourceSection) -> Self {
+        Self { call_context, location }
+    }
 }

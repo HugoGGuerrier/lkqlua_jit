@@ -30,8 +30,8 @@ pub mod lazy_comprehension;
 pub const TYPE: BuiltinType = BuiltinType {
     tag: list::TYPE.tag + 1,
     traits: &[&indexable::TRAIT, &iterable::TRAIT, &sized::TRAIT],
-    implementation_variant: TypeImplementationVariant::Polymorphic {
-        base_implementation: TypeImplementation {
+    implementation_variant: TypeImplementationVariant::new_poly(
+        TypeImplementation {
             name: "Stream",
             fields: &[
                 ("img", TypeField::Property(FunctionValue::CFunction(img_property))),
@@ -45,8 +45,8 @@ pub const TYPE: BuiltinType = BuiltinType {
             index_method: Some(STREAM_INDEX),
             registering_function: None,
         },
-        specializations: &[lazy_comprehension::SPECIALIZATION],
-    },
+        &[lazy_comprehension::SPECIALIZATION],
+    ),
 };
 
 /// Overload of "__tostring" for the "Stream" type.

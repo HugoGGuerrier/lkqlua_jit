@@ -239,6 +239,11 @@ impl Display for SourceSection {
 }
 
 impl SourceSection {
+    /// Create a new source section object.
+    pub fn new(source: SourceId, start: Location, end: Location) -> Self {
+        Self { source, start, end }
+    }
+
     /// Create a new source section start from the `from` start location and
     /// finishing at the `to` end.
     /// This method returns an error if:
@@ -255,7 +260,7 @@ impl SourceSection {
         assert!(from.start <= to.end, "Cannot create a span from {from} to {to}");
 
         // Finally create the new source section
-        Self { source: from.source.clone(), start: from.start.clone(), end: to.end.clone() }
+        Self::new(from.source, from.start.clone(), to.end.clone())
     }
 
     /// Create an [`ariadne::Span`] value from this source section.
@@ -313,8 +318,13 @@ impl Ord for Location {
 }
 
 impl Location {
+    /// Create a new location object.
+    pub fn new(line: u32, col: u16) -> Self {
+        Self { line, col }
+    }
+
     /// Create a new location from a [`liblkqllang::SourceLocation`] object.
     pub fn from_lkql_location(location: SourceLocation) -> Self {
-        Self { line: location.line, col: location.column }
+        Self::new(location.line, location.column)
     }
 }

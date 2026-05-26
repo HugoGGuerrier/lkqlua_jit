@@ -136,10 +136,10 @@ fn get_param_safe(
     // Then perform value checks
     if has_pos_value {
         if has_named_value {
-            Err(ErrorInstance {
-                template_id: POS_AND_NAMED_VALUE_FOR_PARAM.id,
-                message_args: vec![ErrorInstanceArg::Static(String::from(name))],
-            })
+            Err(ErrorInstance::new(
+                POS_AND_NAMED_VALUE_FOR_PARAM.id,
+                vec![ErrorInstanceArg::Static(String::from(name))],
+            ))
         } else {
             Ok(index + 1)
         }
@@ -147,10 +147,10 @@ fn get_param_safe(
         if has_named_value {
             Ok(get_top(l))
         } else {
-            Err(ErrorInstance {
-                template_id: NO_VALUE_FOR_PARAM.id,
-                message_args: vec![ErrorInstanceArg::Static(String::from(name))],
-            })
+            Err(ErrorInstance::new(
+                NO_VALUE_FOR_PARAM.id,
+                vec![ErrorInstanceArg::Static(String::from(name))],
+            ))
         }
     }
 }
@@ -170,14 +170,14 @@ extern "C" fn check_param_type(
         let param_type_name = get_type_name(l, value_index);
         raise_error(
             l,
-            &ErrorInstance {
-                template_id: WRONG_PARAM_TYPE.id,
-                message_args: vec![
+            &ErrorInstance::new(
+                WRONG_PARAM_TYPE.id,
+                vec![
                     ErrorInstanceArg::Static(String::from(expected_type.display_name())),
                     ErrorInstanceArg::Static(String::from(param_name)),
                     ErrorInstanceArg::Static(String::from(param_type_name)),
                 ],
-            }
+            )
             .to_json_string(),
         )
     }
@@ -196,13 +196,13 @@ pub extern "C" fn verify_param(
     if !predicate {
         raise_error(
             l,
-            &ErrorInstance {
-                template_id: INVALID_PARAM_VALUE.id,
-                message_args: vec![
+            &ErrorInstance::new(
+                INVALID_PARAM_VALUE.id,
+                vec![
                     ErrorInstanceArg::Static(String::from(param_name)),
                     ErrorInstanceArg::Static(String::from(error_message)),
                 ],
-            }
+            )
             .to_json_string(),
         );
     }

@@ -436,37 +436,33 @@ mod tests {
     };
 
     fn _dummy_loc() -> SourceSection {
-        SourceSection {
-            source: 0,
-            start: Location { line: 0, col: 0 },
-            end: Location { line: 0, col: 0 },
-        }
+        SourceSection::new(0, Location::new(0, 0), Location::new(0, 0))
     }
 
     // --- Node creation helpers
 
     fn _node(variant: NodeVariant) -> Node {
-        Node { origin_location: _dummy_loc(), variant }
+        Node::new(_dummy_loc(), variant)
     }
 
     fn _arith_op(variant: ArithOperatorVariant) -> ArithOperator {
-        ArithOperator { origin_location: _dummy_loc(), variant }
+        ArithOperator::new(_dummy_loc(), variant)
     }
 
     fn _logic_op(variant: LogicOperatorVariant) -> LogicOperator {
-        LogicOperator { origin_location: _dummy_loc(), variant }
+        LogicOperator::new(_dummy_loc(), variant)
     }
 
     fn _comp_op(variant: CompOperatorVariant) -> CompOperator {
-        CompOperator { origin_location: _dummy_loc(), variant }
+        CompOperator::new(_dummy_loc(), variant)
     }
 
     fn _misc_op(variant: MiscOperatorVariant) -> MiscOperator {
-        MiscOperator { origin_location: _dummy_loc(), variant }
+        MiscOperator::new(_dummy_loc(), variant)
     }
 
     fn _id(text: &str) -> Identifier {
-        Identifier { origin_location: _dummy_loc(), text: String::from(text) }
+        Identifier::new(_dummy_loc(), String::from(text))
     }
 
     fn _bool_node(value: bool) -> Node {

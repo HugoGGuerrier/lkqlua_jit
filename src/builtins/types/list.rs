@@ -25,9 +25,7 @@ const TYPE_TAG: i32 = tuple::TYPE.tag + 1;
 pub const TYPE: BuiltinType = BuiltinType {
     tag: TYPE_TAG,
     traits: &[&indexable::TRAIT, &iterable::TRAIT, &sized::TRAIT],
-    implementation_variant: TypeImplementationVariant::Monomorphic {
-        implementation: IMPLEMENTATION,
-    },
+    implementation_variant: TypeImplementationVariant::new_mono(IMPLEMENTATION),
 };
 
 pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {

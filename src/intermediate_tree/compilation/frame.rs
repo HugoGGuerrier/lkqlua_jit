@@ -58,7 +58,7 @@ impl Frame {
 
     /// Create new empty semantic frame with an optional parent frame.
     pub fn new(parent_frame: Option<Rc<RefCell<Frame>>>) -> Self {
-        Frame {
+        Self {
             parent_frame,
             bindings: HashMap::new(),
             let_values: HashMap::new(),
@@ -73,7 +73,7 @@ impl Frame {
     /// Create a new empty lexical frame with the given parent frame (a lexical
     /// frame can not exists without any parent).
     pub fn new_lexical(parent_frame: Rc<RefCell<Frame>>) -> Self {
-        Frame {
+        Self {
             parent_frame: Some(parent_frame),
             bindings: HashMap::new(),
             let_values: HashMap::new(),
@@ -154,21 +154,21 @@ impl Frame {
             // First look in the parent's locals
             if let Some(parent_local) = parent_frame.get_local(name) {
                 parent_frame.close_binding(name);
-                Some(UpValueData {
-                    declaration_location: parent_local.declaration_location,
-                    index: new_up_value_index,
-                    is_safe: parent_local.is_init,
-                    target: UpValueTarget::ParentSlot(parent_local.slot),
-                })
+                Some(UpValueData::new(
+                    parent_local.declaration_location,
+                    new_up_value_index,
+                    parent_local.is_init,
+                    UpValueTarget::ParentSlot(parent_local.slot),
+                ))
             }
             // Then, recursively looks in the parent's up-values
             else if let Some(parent_up_value) = parent_frame.get_up_value(name) {
-                Some(UpValueData {
-                    declaration_location: parent_up_value.declaration_location.clone(),
-                    index: new_up_value_index,
-                    is_safe: parent_up_value.is_safe,
-                    target: UpValueTarget::ParentUpValue(parent_up_value.index),
-                })
+                Some(UpValueData::new(
+                    parent_up_value.declaration_location.clone(),
+                    new_up_value_index,
+                    parent_up_value.is_safe,
+                    UpValueTarget::ParentUpValue(parent_up_value.index),
+                ))
             } else {
                 None
             }
@@ -234,7 +234,7 @@ impl Frame {
 
     /// Release the provided slot, making it free to use.
     pub fn release_slot(&mut self, slot: u8) {
-        self.release_slots(SlotRange { first: slot, last: slot });
+        self.release_slots(SlotRange::new(slot, slot));
     }
 
     /// Release all slots in the provided range, making them free to use.
@@ -284,7 +284,7 @@ impl Frame {
                             }
                             *maximum_size = cmp::max(i as u8, *maximum_size);
                         }
-                        return SlotRange { first: start_bound as u8, last: i as u8 - 1 };
+                        return SlotRange::new(start_bound as u8, i as u8 - 1);
                     }
 
                     // If the `i`th slot is occupied, we move the cursor on it
@@ -371,6 +371,18 @@ pub struct UpValueData {
     pub target: UpValueTarget,
 }
 
+impl UpValueData {
+    /// Create a new up value data object.
+    pub fn new(
+        declaration_location: SourceSection,
+        index: u8,
+        is_safe: bool,
+        target: UpValueTarget,
+    ) -> Self {
+        Self { declaration_location, index, is_safe, target }
+    }
+}
+
 /// This type represents kinds of target that an up-value may have.
 #[derive(Debug, Clone, Copy)]
 pub enum UpValueTarget {
@@ -389,6 +401,11 @@ pub struct SlotRange {
 }
 
 impl SlotRange {
+    /// Create a new slot range object.
+    pub fn new(first: u8, last: u8) -> Self {
+        Self { first, last }
+    }
+
     /// Get a standard range from this slot range to iterate over all slots in
     /// the range.
     fn to_range(&self) -> Range<u8> {
@@ -414,6 +431,6 @@ impl SlotRange {
         assert!(first <= last, "Invalid sub-range creation");
 
         // Finally return the new range
-        Self { first, last }
+        Self::new(first, last)
     }
 }

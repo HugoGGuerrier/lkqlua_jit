@@ -57,14 +57,14 @@ pub unsafe extern "C" fn lkql_pattern(l: LuaState) -> c_int {
         }
         Err(error) => {
             let error_instance = match error {
-                regex::Error::Syntax(_) => ErrorInstance {
-                    template_id: REGEX_SYNTAX_ERROR.id,
-                    message_args: vec![ErrorInstanceArg::Static(String::from(regex))],
-                },
-                regex::Error::CompiledTooBig(_) => ErrorInstance {
-                    template_id: REGEX_TOO_BIG.id,
-                    message_args: vec![ErrorInstanceArg::Static(String::from(regex))],
-                },
+                regex::Error::Syntax(_) => ErrorInstance::new(
+                    REGEX_SYNTAX_ERROR.id,
+                    vec![ErrorInstanceArg::Static(String::from(regex))],
+                ),
+                regex::Error::CompiledTooBig(_) => ErrorInstance::new(
+                    REGEX_TOO_BIG.id,
+                    vec![ErrorInstanceArg::Static(String::from(regex))],
+                ),
                 _ => unreachable!(),
             };
             raise_error(l, &error_instance.to_json_string());
@@ -147,13 +147,13 @@ pub unsafe extern "C" fn lkql_import(l: LuaState) -> c_int {
                 .join(" -> ");
             raise_error(
                 l,
-                &ErrorInstance {
-                    template_id: DEPENDENCY_CYCLE.id,
-                    message_args: vec![ErrorInstanceArg::Static(format!(
+                &ErrorInstance::new(
+                    DEPENDENCY_CYCLE.id,
+                    vec![ErrorInstanceArg::Static(format!(
                         "{exec_stack_image} -> {}",
                         module_file.file_stem().unwrap().to_string_lossy()
                     ))],
-                }
+                )
                 .to_json_string(),
             );
         }
@@ -164,8 +164,7 @@ pub unsafe extern "C" fn lkql_import(l: LuaState) -> c_int {
         report.print(&ctx.source_repo, &mut ctx.config.std_err, false);
         raise_error(
             l,
-            &ErrorInstance { template_id: ERROR_DURING_IMPORTATION.id, message_args: vec![] }
-                .to_json_string(),
+            &ErrorInstance::new(ERROR_DURING_IMPORTATION.id, vec![]).to_json_string(),
         );
         0
     } else {

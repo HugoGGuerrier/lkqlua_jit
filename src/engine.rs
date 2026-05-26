@@ -11,13 +11,12 @@ use crate::{
     errors::{ERROR_TEMPLATE_REPOSITORY, ErrorInstance, ErrorInstanceArg, LUA_ENGINE_ERROR},
     lua::{
         LuaCFunction, LuaState, call, close_lua_state, copy_value, debug_frame, debug_get_local,
-        debug_get_source, debug_info, debug_proto_and_pc, dump_stack, get_field, get_global,
-        get_metatable, get_string, get_top, load_buffer, load_lua_code, move_top_value,
-        new_lua_state, open_lua_libs, pop, push_bool, push_c_closure, push_c_function,
-        push_integer, push_string, push_user_data, remove_value, safe_call, set_field, set_global,
-        to_string,
+        debug_get_source, debug_info, debug_proto_and_pc, get_field, get_global, get_metatable,
+        get_string, get_top, load_buffer, load_lua_code, move_top_value, new_lua_state,
+        open_lua_libs, pop, push_bool, push_c_closure, push_c_function, push_integer, push_string,
+        push_user_data, remove_value, safe_call, set_field, set_global, to_string,
     },
-    report::Report,
+    report::{CallLocation, Report},
 };
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -163,9 +162,8 @@ impl Engine {
                 ERROR_TEMPLATE_REPOSITORY[runtime_error.template_id],
                 &runtime_error.message_args,
                 stack_trace
-                    .map(|(call_context, call_location)| crate::report::StackTraceElement {
-                        call_context: call_context.clone(),
-                        location: call_location.clone(),
+                    .map(|(call_context, call_location)| {
+                        CallLocation::new(call_context.clone(), call_location.clone())
                     })
                     .collect(),
             ))
@@ -196,13 +194,13 @@ unsafe extern "C" fn handle_error(l: LuaState) -> c_int {
                 if let Some((proto_id, pc)) = debug_proto_and_pc(l, &mut frame) {
                     let source_id_str = debug_get_source(&frame).unwrap();
                     if let Ok(source_id) = source_id_str.parse::<usize>() {
-                        stack_trace.push(StackTraceElement {
+                        stack_trace.push(StackTraceElement::new(
                             source_id,
-                            prototype_identifier: proto_id,
+                            proto_id,
                             // We subtract 1 to the PC because Lua index
                             // instructions from 1.
-                            program_counter: pc - 1,
-                        });
+                            pc - 1,
+                        ));
                     }
                     if current_frame.is_none() {
                         let _ = current_frame.insert(frame);
@@ -226,36 +224,35 @@ unsafe extern "C" fn handle_error(l: LuaState) -> c_int {
     };
 
     // Then process the message part to get the runtime error instance
-    let runtime_error = if let Some(runtime_error_instance) =
-        ErrorInstance::from_json(error_message)
-    {
-        // If the message can be parsed as an error instance, we have to fetch
-        // message arguments.
-        let message_args = runtime_error_instance
-            .message_args
-            .into_iter()
-            .map(|a| match a {
-                ErrorInstanceArg::Static(s) => s,
-                ErrorInstanceArg::LocalValue(index) => {
-                    if let Some(_) =
-                        debug_get_local(l, current_frame.as_ref().unwrap(), 1 + index as i32)
-                    {
-                        let res = String::from(to_string(l, -1, "<lkql_value>"));
-                        pop(l, 1);
-                        res
-                    } else {
-                        String::from(ERROR_VALUE)
+    let runtime_error =
+        if let Some(runtime_error_instance) = ErrorInstance::from_json(error_message) {
+            // If the message can be parsed as an error instance, we have to fetch
+            // message arguments.
+            let message_args = runtime_error_instance
+                .message_args
+                .into_iter()
+                .map(|a| match a {
+                    ErrorInstanceArg::Static(s) => s,
+                    ErrorInstanceArg::LocalValue(index) => {
+                        if let Some(_) =
+                            debug_get_local(l, current_frame.as_ref().unwrap(), 1 + index as i32)
+                        {
+                            let res = String::from(to_string(l, -1, "<lkql_value>"));
+                            pop(l, 1);
+                            res
+                        } else {
+                            String::from(ERROR_VALUE)
+                        }
                     }
-                }
-            })
-            .collect::<Vec<_>>();
+                })
+                .collect::<Vec<_>>();
 
-        // Then we create the runtime error
-        RuntimeError { template_id: runtime_error_instance.template_id, message_args, stack_trace }
-    } else {
-        let (template_id, message_args) = parse_lua_error(error_message);
-        RuntimeError { template_id, message_args, stack_trace }
-    };
+            // Then we create the runtime error
+            RuntimeError::new(runtime_error_instance.template_id, message_args, stack_trace)
+        } else {
+            let (template_id, message_args) = parse_lua_error(error_message);
+            RuntimeError::new(template_id, message_args, stack_trace)
+        };
 
     // Finally, place the encoded runtime error on the stack as the function
     // result.
@@ -274,13 +271,22 @@ struct RuntimeError {
 }
 
 impl RuntimeError {
+    /// Create a new runtime error object.
+    fn new(
+        template_id: usize,
+        message_args: Vec<String>,
+        stack_trace: Vec<StackTraceElement>,
+    ) -> Self {
+        Self { template_id, message_args, stack_trace }
+    }
+
     /// Get a runtime error instance from a serialized JSON string.
-    pub fn from_json(json: &str) -> Option<Self> {
+    fn from_json(json: &str) -> Option<Self> {
         serde_json::from_str::<Self>(json).ok()
     }
 
     /// Get this runtime error serialized as JSON.
-    pub fn to_json_string(&self) -> String {
+    fn to_json_string(&self) -> String {
         serde_json::to_string(self).unwrap()
     }
 }
@@ -291,6 +297,13 @@ struct StackTraceElement {
     pub source_id: usize,
     pub prototype_identifier: usize,
     pub program_counter: usize,
+}
+
+impl StackTraceElement {
+    /// Create a new stack trace element object.
+    fn new(source_id: usize, prototype_identifier: usize, program_counter: usize) -> Self {
+        Self { source_id, prototype_identifier, program_counter }
+    }
 }
 
 /// Parse the error message coming from the Lua engine and map it to an LKQL

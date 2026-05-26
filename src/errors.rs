@@ -317,6 +317,11 @@ pub struct ErrorInstance {
 }
 
 impl ErrorInstance {
+    /// Create a new error instance object.
+    pub fn new(template_id: usize, message_args: Vec<ErrorInstanceArg>) -> Self {
+        Self { template_id, message_args }
+    }
+
     /// Get an error instance from a serialized JSON string.
     pub fn from_json(json: &str) -> Option<Self> {
         serde_json::from_str::<Self>(json).ok()
