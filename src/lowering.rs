@@ -3,7 +3,7 @@
 //! This module is the base of all the source lowering process. Its purpose is
 //! to hold all common logic used by source lowering passes.
 
-use crate::{ExecutionContext, report::Report, sources::SourceId};
+use crate::{ExecutionContext, diagnostics::Diagnostic, sources::SourceId};
 use std::collections::HashMap;
 
 pub mod lkql;
@@ -35,7 +35,7 @@ struct LoweringContext<'a, T> {
     tmp_counter: usize,
 
     /// The list of diagnostics emitted during the lowering.
-    diagnostics: Vec<Report>,
+    diagnostics: Vec<Diagnostic>,
 }
 
 impl<'a, T> LoweringContext<'a, T> {

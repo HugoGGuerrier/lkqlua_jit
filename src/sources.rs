@@ -5,7 +5,7 @@
 //! This module provide a [`SourceRepository`] type to load, retrieve and parse
 //! sources.
 
-use crate::report::Report;
+use crate::diagnostics::Diagnostic;
 use ariadne::Cache;
 use liblkqllang::{AnalysisContext, AnalysisUnit, SourceLocation};
 use std::{
@@ -67,7 +67,7 @@ impl SourceRepository {
     ///   * The provided path doesn't designate an existing file
     ///   * The file designated by the provided file is not UTF-8 encoded
     ///     (see https://github.com/HugoGGuerrier/lkqlua_jit/issues/1)
-    pub fn add_source_file(&mut self, file_path: &Path) -> Result<(SourceId, bool), Report> {
+    pub fn add_source_file(&mut self, file_path: &Path) -> Result<(SourceId, bool), Diagnostic> {
         // Get the absolute path to the file
         let canonical_path = file_path.canonicalize()?;
 
@@ -146,7 +146,7 @@ impl SourceRepository {
     ///   * There is no source corresponding to the provided identifier
     ///   * The source designated by the provided identifier is not a valid
     ///     LKQL source
-    pub fn parse_as_lkql(&mut self, source_id: SourceId) -> Result<AnalysisUnit, Report> {
+    pub fn parse_as_lkql(&mut self, source_id: SourceId) -> Result<AnalysisUnit, Diagnostic> {
         // Parse the source as LKQL
         let source = self
             .get_source_by_id(source_id)
@@ -159,13 +159,13 @@ impl SourceRepository {
         )?;
 
         // Check parsing diagnostics
-        let parsing_diags = unit.diagnostics()?;
-        if !parsing_diags.is_empty() {
-            let mut parsing_reports: Vec<Report> = Vec::with_capacity(parsing_diags.len());
-            for diag in &parsing_diags {
-                parsing_reports.push(Report::from_lkql_diagnostic(source_id, diag)?);
+        let lkql_parsing_diags = unit.diagnostics()?;
+        if !lkql_parsing_diags.is_empty() {
+            let mut parsing_diags = Vec::with_capacity(lkql_parsing_diags.len());
+            for diag in &lkql_parsing_diags {
+                parsing_diags.push(Diagnostic::from_lkql_diagnostic(source_id, diag)?);
             }
-            Err(Report::Composed(parsing_reports))
+            Err(Diagnostic::Composed(parsing_diags))
         } else {
             Ok(unit)
         }

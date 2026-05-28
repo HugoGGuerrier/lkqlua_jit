@@ -5,9 +5,9 @@
 
 use crate::{
     bytecode::extended_bytecode::ExtendedBytecodeUnit,
+    diagnostics::Diagnostic,
     engine::Engine,
     intermediate_tree::ExecutionUnit,
-    report::Report,
     sources::{SourceId, SourceRepository},
 };
 use clap::ValueEnum;
@@ -22,12 +22,12 @@ use std::{
 
 pub mod builtins;
 pub mod bytecode;
+pub mod diagnostics;
 pub mod engine;
 pub mod errors;
 pub mod intermediate_tree;
 pub mod lowering;
 pub mod lua;
-pub mod report;
 pub mod sources;
 
 /// This type holds all required data to run LKQL sources using LuaJIT as a
@@ -66,21 +66,21 @@ impl ExecutionContext {
     }
 
     /// Just run the provided LKQL file, don't return anything and report all
-    /// diagnostics and messages in the [`EngineConfig::std_err`] of the
-    /// related configuration.
+    /// diagnostics and messages in the [`Config::std_err`] of the related
+    /// configuration.
     pub fn just_run_lkql_file(&mut self, file: &Path) {
         // Execute the file and get the result
         let exec_res = self.execute_lkql_file(file);
 
         // If there are errors, display them on STDERR
-        if let Err(report) = exec_res {
-            report.print(&self.source_repo, &mut self.config.std_err, false);
+        if let Err(diag) = exec_res {
+            diag.print(&self.source_repo, &mut self.config.std_err, false);
         }
     }
 
-    /// Execute the provided LKQL file, returning possible [`Report`] if the
-    /// execution is not successful.
-    pub fn execute_lkql_file(&mut self, file: &Path) -> Result<(), Report> {
+    /// Execute the provided LKQL file, returning possible [`Diagnostic`] if
+    /// the execution is not successful.
+    pub fn execute_lkql_file(&mut self, file: &Path) -> Result<(), Diagnostic> {
         // Add the source file to the source repo updating it if required
         let (source, updated) = self.source_repo.add_source_file(file)?;
         if updated {
@@ -108,7 +108,7 @@ impl ExecutionContext {
 
     /// Inner function that compile the provided source as an LKQL input and
     /// place the result of this compilation in the cache.
-    fn compile_lkql_source(&mut self, source: SourceId) -> Result<(), Report> {
+    fn compile_lkql_source(&mut self, source: SourceId) -> Result<(), Diagnostic> {
         // First of all check in the compilation cache whether the source has
         // already been compiled. In that case, don't perform compilation.
         if self.compilation_cache.contains_key(&source) {

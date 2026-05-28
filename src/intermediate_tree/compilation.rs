@@ -22,6 +22,7 @@ use crate::{
         },
         op_codes::*,
     },
+    diagnostics::{Diagnostic, Hint},
     errors::{
         DIV_BY_ZERO, DUPLICATED_KEY, DUPLICATED_SYMBOL, ErrorInstance, ErrorInstanceArg,
         ErrorTemplate, INDEX_OUT_OF_BOUNDS, MISSING_TRAIT, NO_VALUE_FOR_PARAM, NOT_UNIT_BLOCK_ELEM,
@@ -37,7 +38,6 @@ use crate::{
         },
         constant_eval::{ConstantValue, ConstantValueVariant},
     },
-    report::{Hint, Report},
     sources::SourceSection,
 };
 use num_bigint::BigInt;
@@ -60,7 +60,7 @@ impl ExecutionUnit {
     /// Compile this execution unit as a LuaJIT bytecode buffer. The result of
     /// this function can be used to execute the semantics described by the
     /// execution unit with the LuaJIT engine.
-    pub fn compile(&self) -> Result<ExtendedBytecodeUnit, Report> {
+    pub fn compile(&self) -> Result<ExtendedBytecodeUnit, Diagnostic> {
         // Open the initial compilation context and create the prototypes vector
         let mut compile_context = CompilationContext::new(self);
 
@@ -74,7 +74,7 @@ impl ExecutionUnit {
                 compile_context.prototypes,
             ))
         } else {
-            Err(Report::Composed(compile_context.diagnostics))
+            Err(Diagnostic::Composed(compile_context.diagnostics))
         }
     }
 
@@ -907,7 +907,7 @@ impl Node {
                         // If all previous step failed, the symbol doesn't
                         // exists, so we emit an error about it.
                         else {
-                            ctx.diagnostics.push(Report::from_error_template(
+                            ctx.diagnostics.push(Diagnostic::from_error_template(
                                 &self.origin_location,
                                 &UNKNOWN_SYMBOL,
                                 &vec![&identifier.text],
@@ -1040,20 +1040,21 @@ impl Node {
                 emit_set_metatable(ctx, Some(&self.origin_location), result_slot, type_impl);
             }
             NodeVariant::ObjectLiteral(items) => {
-                // Check if there is the same key multiple times and report
-                // errors if so.
+                // Check if there is the same key multiple times in the object
+                // and emit a diagnostic if so.
                 let mut seen_keys: HashSet<&Identifier> = HashSet::new();
                 for (key, _) in items {
                     if let Some(previous_key) = seen_keys.get(key) {
-                        ctx.diagnostics.push(Report::from_error_template_with_hints(
-                            &key.origin_location,
-                            &DUPLICATED_KEY,
-                            &vec![key.text.clone()],
-                            vec![Hint::new(
-                                String::from("Previous key declared here"),
-                                previous_key.origin_location.clone(),
-                            )],
-                        ));
+                        ctx.diagnostics
+                            .push(Diagnostic::from_error_template_with_hints(
+                                &key.origin_location,
+                                &DUPLICATED_KEY,
+                                &vec![key.text.clone()],
+                                vec![Hint::new(
+                                    String::from("Previous key declared here"),
+                                    previous_key.origin_location.clone(),
+                                )],
+                            ));
                     } else {
                         seen_keys.insert(key);
                     }
@@ -1097,11 +1098,12 @@ impl Node {
             // If the right operand is 0 and the operation is a division, we
             // statically know that the code is invalid.
             if !is_constant_left && constant_operand == NumericConstant::Integer(0) {
-                ctx.diagnostics.push(Report::from_error_template::<&str>(
-                    &operation.origin_location,
-                    &DIV_BY_ZERO,
-                    &vec![],
-                ));
+                ctx.diagnostics
+                    .push(Diagnostic::from_error_template::<&str>(
+                        &operation.origin_location,
+                        &DIV_BY_ZERO,
+                        &vec![],
+                    ));
                 return true;
             }
 
@@ -1823,7 +1825,7 @@ impl Node {
             match body_elem.expr_type() {
                 Some(t) if t == &unit::TYPE => elem_access.release(ctx),
                 Some(_) => {
-                    ctx.diagnostics.push(Report::from_error_template(
+                    ctx.diagnostics.push(Diagnostic::from_error_template(
                         &body_elem.origin_location,
                         &NOT_UNIT_BLOCK_ELEM,
                         &Vec::<&str>::new(),
@@ -1921,7 +1923,7 @@ impl Node {
         let res = expression.compile_as_access(ctx, already_reserved_slot);
         match expression.expr_type() {
             Some(t) if t == required_type => (),
-            Some(t) => ctx.diagnostics.push(Report::from_error_template(
+            Some(t) => ctx.diagnostics.push(Diagnostic::from_error_template(
                 &expression.origin_location,
                 &WRONG_TYPE,
                 &vec![required_type.display_name(), t.display_name()],
@@ -1982,7 +1984,7 @@ impl Node {
         let res = expression.compile_as_access(ctx, already_reserved_slot);
         match expression.expr_type() {
             Some(t) if t.traits.contains(&required_trait) => (),
-            Some(t) => ctx.diagnostics.push(Report::from_error_template(
+            Some(t) => ctx.diagnostics.push(Diagnostic::from_error_template(
                 &expression.origin_location,
                 &MISSING_TRAIT,
                 &vec![required_trait.name, t.display_name()],
@@ -2542,7 +2544,7 @@ struct CompilationContext<'a> {
     /// A collection of diagnostics collected during the compilation process,
     /// if it is not empty, it means that the result of the compilation may be
     /// invalid.
-    diagnostics: Vec<Report>,
+    diagnostics: Vec<Diagnostic>,
 }
 
 impl<'a> CompilationContext<'a> {
@@ -2615,7 +2617,7 @@ impl<'a> CompilationContext<'a> {
             let maybe_local_slot = self.frame.borrow().is_conflicting(&symbol.text);
             if let Some(previous_binding) = maybe_local_slot {
                 self.diagnostics
-                    .push(Report::from_error_template_with_hints(
+                    .push(Diagnostic::from_error_template_with_hints(
                         &symbol.origin_location,
                         &DUPLICATED_SYMBOL,
                         &vec![&symbol.text],

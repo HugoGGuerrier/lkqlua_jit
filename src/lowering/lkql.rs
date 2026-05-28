@@ -10,6 +10,7 @@ use crate::{
         traits::{self, BuiltinTrait},
         types::{self, BuiltinType},
     },
+    diagnostics::{Diagnostic, Hint},
     errors::{
         AMBIGUOUS_IMPORT, INVALID_SELECTOR_CALL, MODULE_NOT_FOUND, MULTIPLE_SPLAT_PATTERNS,
         POS_AFTER_NAMED_ARGUMENT, PREVIOUS_NAMED_ARG_HINT, PREVIOUS_SPLAT_PATTERN_HINT,
@@ -21,7 +22,6 @@ use crate::{
         MiscOperatorVariant, Node, NodeVariant,
     },
     lowering::{LoweringContext, unescape_string},
-    report::{Hint, Report},
     sources::{Location, SourceId, SourceSection},
 };
 use liblkqllang::{BaseFunction, Exception, LkqlNode, SplatPattern};
@@ -43,13 +43,13 @@ impl ExecutionUnit {
         execution_context: &ExecutionContext,
         source: SourceId,
         node: &LkqlNode,
-    ) -> Result<Self, Report> {
+    ) -> Result<Self, Diagnostic> {
         let mut lowering_context = LoweringContext::new(execution_context, source);
         let res = Self::internal_lower_lkql_node(node, &mut lowering_context)?;
         if lowering_context.diagnostics.is_empty() {
             Ok(res)
         } else {
-            Err(Report::Composed(lowering_context.diagnostics))
+            Err(Diagnostic::Composed(lowering_context.diagnostics))
         }
     }
 
@@ -57,7 +57,7 @@ impl ExecutionUnit {
     fn internal_lower_lkql_node(
         node: &LkqlNode,
         ctx: &mut LoweringContext<LkqlNode>,
-    ) -> Result<Self, Report> {
+    ) -> Result<Self, Diagnostic> {
         // Create the origin location of the execution unit
         let origin_location = SourceSection::from_lkql_node(ctx.lowered_source, node)?;
 
@@ -148,10 +148,10 @@ impl ExecutionUnit {
             LkqlNode::ListComprehension(list_comp) => {
                 // Get the collection bindings in the list comprehension, those
                 // are going to be the parameters of the created function
-                let collection_bindings: Result<Vec<Identifier>, Report> = list_comp
+                let collection_bindings: Result<Vec<Identifier>, Diagnostic> = list_comp
                     .f_generators()?
                     .into_iter()
-                    .map(|n| -> Result<Identifier, Report> {
+                    .map(|n| -> Result<Identifier, Diagnostic> {
                         match n? {
                             Some(LkqlNode::ListCompAssoc(assoc)) => {
                                 Ok(Identifier::from_lkql_node(&assoc.f_binding_name()?, ctx)?)
@@ -221,7 +221,7 @@ impl Node {
     fn lower_lkql_node(
         ctx: &mut LoweringContext<LkqlNode>,
         node: &LkqlNode,
-    ) -> Result<Self, Report> {
+    ) -> Result<Self, Diagnostic> {
         // Get the location of the node
         let origin_location = SourceSection::from_lkql_node(ctx.lowered_source, node)?;
 
@@ -279,7 +279,7 @@ impl Node {
                 let module_file = match &module_files[..] {
                     [f] => f,
                     [] => {
-                        ctx.diagnostics.push(Report::from_error_template(
+                        ctx.diagnostics.push(Diagnostic::from_error_template(
                             &origin_location,
                             &MODULE_NOT_FOUND,
                             &vec![module_name],
@@ -287,7 +287,7 @@ impl Node {
                         &PathBuf::new()
                     }
                     x => {
-                        ctx.diagnostics.push(Report::from_error_template(
+                        ctx.diagnostics.push(Diagnostic::from_error_template(
                             &origin_location,
                             &AMBIGUOUS_IMPORT,
                             &vec![
@@ -508,7 +508,7 @@ impl Node {
                         let expr = Self::lower_lkql_node(ctx, &n?.unwrap())?;
                         expr.with_trait_requirement(&traits::iterable::TRAIT)
                     })
-                    .collect::<Result<_, Report>>()?,
+                    .collect::<Result<_, Diagnostic>>()?,
                 body_index: *ctx.child_index_map.get(&node).unwrap(),
             },
 
@@ -650,7 +650,7 @@ impl Node {
         args_node: &LkqlNode,
         positional_args: &mut Vec<Node>,
         named_args: &mut Vec<(Identifier, Node)>,
-    ) -> Result<(), Report> {
+    ) -> Result<(), Diagnostic> {
         // Lower each argument in the node containing them
         for maybe_arg in args_node.children_iter()? {
             if let Some(ref arg) = maybe_arg? {
@@ -663,8 +663,8 @@ impl Node {
                                 .push(Self::lower_lkql_node(ctx, &expr_arg.f_value_expr()?)?);
                         } else {
                             let (last_id, last_node) = named_args.last().unwrap();
-                            ctx.diagnostics
-                                .push(Report::from_error_template_with_hints::<&str>(
+                            ctx.diagnostics.push(
+                                Diagnostic::from_error_template_with_hints::<&str>(
                                     &SourceSection::from_lkql_node(ctx.lowered_source, arg)?,
                                     &POS_AFTER_NAMED_ARGUMENT,
                                     &vec![],
@@ -675,7 +675,8 @@ impl Node {
                                             &last_node.origin_location,
                                         ),
                                     )],
-                                ));
+                                ),
+                            );
                         }
                     }
                     LkqlNode::NamedArg(named_arg) => named_args.push((
@@ -699,7 +700,7 @@ impl Node {
         ctx: &mut LoweringContext<LkqlNode>,
         node: &LkqlNode,
         matched_value_id: usize,
-    ) -> Result<Self, Report> {
+    ) -> Result<Self, Diagnostic> {
         // Special handling of the parenthesized pattern
         if let LkqlNode::ParenPattern(parent_pattern) = node {
             return Self::lower_lkql_pattern(ctx, &parent_pattern.f_pattern()?, matched_value_id);
@@ -777,7 +778,7 @@ impl Node {
                         expected_type_tag: node_type.tag,
                     }
                 } else {
-                    ctx.diagnostics.push(Report::from_error_template(
+                    ctx.diagnostics.push(Diagnostic::from_error_template(
                         &origin_location,
                         &UNKNOWN_NODE_TYPE,
                         &vec![&node_type_name],
@@ -804,8 +805,8 @@ impl Node {
                             // Emit an error if a splat pattern has already
                             // been stored.
                             if let Some(old_splat_pattern) = maybe_splat_pattern {
-                                ctx.diagnostics.push(
-                                    Report::from_error_template_with_hints::<&str>(
+                                ctx.diagnostics
+                                    .push(Diagnostic::from_error_template_with_hints::<&str>(
                                         &SourceSection::from_lkql_node(
                                             ctx.lowered_source,
                                             &splat_pattern.as_node(),
@@ -819,8 +820,7 @@ impl Node {
                                                 &old_splat_pattern.as_node(),
                                             )?,
                                         )],
-                                    ),
-                                );
+                                    ));
                             }
 
                             // Store the splat pattern node to handle it later
@@ -830,8 +830,8 @@ impl Node {
                             // Register an error if there is a pattern after a
                             // splat one.
                             if let Some(ref splat_pattern) = maybe_splat_pattern {
-                                ctx.diagnostics.push(
-                                    Report::from_error_template_with_hints::<&str>(
+                                ctx.diagnostics
+                                    .push(Diagnostic::from_error_template_with_hints::<&str>(
                                         &SourceSection::from_lkql_node(
                                             ctx.lowered_source,
                                             &sub_pattern_source,
@@ -845,8 +845,7 @@ impl Node {
                                                 &splat_pattern.as_node(),
                                             )?,
                                         )],
-                                    ),
-                                );
+                                    ));
                             } else {
                                 let elem_id = ctx.new_tmp_id();
                                 let sub_pattern =
@@ -987,7 +986,7 @@ impl Node {
                 let binding_in_vec = complex_pattern
                     .f_binding()?
                     .map(|b| {
-                        Ok::<Self, Report>(Self::new(
+                        Ok::<Self, Diagnostic>(Self::new(
                             SourceSection::from_lkql_node(ctx.lowered_source, &b)?,
                             NodeVariant::InitLocal {
                                 symbol: Identifier::from_lkql_node(&b, ctx)?,
@@ -1054,7 +1053,7 @@ impl Node {
         ctx: &mut LoweringContext<LkqlNode>,
         node: &LkqlNode,
         detailed_values_id: usize,
-    ) -> Result<Self, Report> {
+    ) -> Result<Self, Diagnostic> {
         // Get the location of the pattern detail node
         let origin_location = SourceSection::from_lkql_node(ctx.lowered_source, node)?;
 
@@ -1153,7 +1152,7 @@ impl Node {
                         Self::lower_lkql_node(ctx, &fun_call.f_name()?)?.variant
                     }
                     _ => {
-                        ctx.diagnostics.push(Report::from_error_template(
+                        ctx.diagnostics.push(Diagnostic::from_error_template(
                             &origin_location,
                             &INVALID_SELECTOR_CALL,
                             &Vec::<&str>::new(),
@@ -1211,22 +1210,28 @@ impl Node {
 
     /// Wrap the current node using the provided wrapper creation function,
     /// propagating all information in the current node to the wrapper.
-    fn with_wrapper<F>(self, create_wrapper: F) -> Result<Self, Report>
+    fn with_wrapper<F>(self, create_wrapper: F) -> Result<Self, Diagnostic>
     where
-        F: FnOnce(Self) -> Result<NodeVariant, Report>,
+        F: FnOnce(Self) -> Result<NodeVariant, Diagnostic>,
     {
         Ok(Node::new(self.origin_location.clone(), create_wrapper(self)?))
     }
 
     /// Wrap the node in a type requirement one.
-    fn with_type_requirement(self, required_type: &'static BuiltinType) -> Result<Self, Report> {
+    fn with_type_requirement(
+        self,
+        required_type: &'static BuiltinType,
+    ) -> Result<Self, Diagnostic> {
         self.with_wrapper(|n| {
             Ok(NodeVariant::RequireType { expression: Box::new(n), expected_type: required_type })
         })
     }
 
     /// Wrap the node in a trait requirement one.
-    fn with_trait_requirement(self, required_trait: &'static BuiltinTrait) -> Result<Self, Report> {
+    fn with_trait_requirement(
+        self,
+        required_trait: &'static BuiltinTrait,
+    ) -> Result<Self, Diagnostic> {
         self.with_wrapper(|n| {
             Ok(NodeVariant::RequireTrait {
                 expression: Box::new(n),
@@ -1237,7 +1242,10 @@ impl Node {
 }
 
 impl ArithOperator {
-    fn lower_lkql_node(node: &LkqlNode, ctx: &LoweringContext<LkqlNode>) -> Result<Self, Report> {
+    fn lower_lkql_node(
+        node: &LkqlNode,
+        ctx: &LoweringContext<LkqlNode>,
+    ) -> Result<Self, Diagnostic> {
         Ok(ArithOperator::new(
             SourceSection::from_lkql_node(ctx.lowered_source, node)?,
             match node {
@@ -1252,7 +1260,10 @@ impl ArithOperator {
 }
 
 impl LogicOperator {
-    fn lower_lkql_node(node: &LkqlNode, ctx: &LoweringContext<LkqlNode>) -> Result<Self, Report> {
+    fn lower_lkql_node(
+        node: &LkqlNode,
+        ctx: &LoweringContext<LkqlNode>,
+    ) -> Result<Self, Diagnostic> {
         Ok(LogicOperator::new(
             SourceSection::from_lkql_node(ctx.lowered_source, node)?,
             match node {
@@ -1266,7 +1277,10 @@ impl LogicOperator {
 }
 
 impl CompOperator {
-    fn lower_lkql_node(node: &LkqlNode, ctx: &LoweringContext<LkqlNode>) -> Result<Self, Report> {
+    fn lower_lkql_node(
+        node: &LkqlNode,
+        ctx: &LoweringContext<LkqlNode>,
+    ) -> Result<Self, Diagnostic> {
         Ok(CompOperator::new(
             SourceSection::from_lkql_node(ctx.lowered_source, node)?,
             match node {
@@ -1283,7 +1297,10 @@ impl CompOperator {
 }
 
 impl MiscOperator {
-    fn lower_lkql_node(node: &LkqlNode, ctx: &LoweringContext<LkqlNode>) -> Result<Self, Report> {
+    fn lower_lkql_node(
+        node: &LkqlNode,
+        ctx: &LoweringContext<LkqlNode>,
+    ) -> Result<Self, Diagnostic> {
         Ok(MiscOperator::new(
             SourceSection::from_lkql_node(ctx.lowered_source, node)?,
             match node {
@@ -1296,7 +1313,10 @@ impl MiscOperator {
 
 impl Identifier {
     /// Util function to easily create an identifier from an LKQL node.
-    fn from_lkql_node(node: &LkqlNode, ctx: &LoweringContext<LkqlNode>) -> Result<Self, Report> {
+    fn from_lkql_node(
+        node: &LkqlNode,
+        ctx: &LoweringContext<LkqlNode>,
+    ) -> Result<Self, Diagnostic> {
         Ok(Self::new(
             SourceSection::from_lkql_node(ctx.lowered_source, node)?,
             node.text()?,
@@ -1307,7 +1327,7 @@ impl Identifier {
 impl SourceSection {
     /// Create a new section corresponding to the provided node location range
     /// in the provided source.
-    fn from_lkql_node(source: SourceId, node: &LkqlNode) -> Result<Self, Report> {
+    fn from_lkql_node(source: SourceId, node: &LkqlNode) -> Result<Self, Diagnostic> {
         let sloc_range = node.sloc_range()?;
         Ok(Self::new(
             source,
@@ -1340,7 +1360,7 @@ fn has_lexical_scope(node: &LkqlNode) -> bool {
 ///   * [`LkqlNode::BlockExpr`]
 ///   * [`LkqlNode::IsClause`]
 ///   * [`LkqlNode::NodePatternSelector`]
-fn all_local_decls(node: &LkqlNode, output: &mut Vec<LkqlNode>) -> Result<(), Report> {
+fn all_local_decls(node: &LkqlNode, output: &mut Vec<LkqlNode>) -> Result<(), Diagnostic> {
     for maybe_child in node {
         if let Some(child) = maybe_child? {
             match &child {
@@ -1389,7 +1409,7 @@ fn all_local_decls(node: &LkqlNode, output: &mut Vec<LkqlNode>) -> Result<(), Re
 fn all_local_symbols(
     node: &LkqlNode,
     ctx: &LoweringContext<LkqlNode>,
-) -> Result<Vec<Identifier>, Report> {
+) -> Result<Vec<Identifier>, Diagnostic> {
     // Declare working vectors and get all local declarations
     let mut local_decls = Vec::new();
     let mut local_symbols = Vec::new();
@@ -1422,7 +1442,10 @@ fn all_local_symbols(
 /// function. We explore the whole tree to found all units, stopping the
 /// recursion on execution units bodies. IOW, we return all direct children
 /// units.
-fn all_local_execution_units(node: &LkqlNode, output: &mut Vec<LkqlNode>) -> Result<(), Report> {
+fn all_local_execution_units(
+    node: &LkqlNode,
+    output: &mut Vec<LkqlNode>,
+) -> Result<(), Diagnostic> {
     for maybe_child in node {
         if let Some(child) = maybe_child? {
             match child {

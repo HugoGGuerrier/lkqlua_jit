@@ -7,7 +7,7 @@ use clap::{
     },
 };
 use lkqlua_jit::{
-    Config, ExecutionContext, Timings, VerboseElement, Writable, report::ERROR_KIND_COLOR,
+    Config, ExecutionContext, Timings, VerboseElement, Writable, diagnostics::ERROR_KIND_COLOR,
 };
 use std::{
     io::{stderr, stdout},

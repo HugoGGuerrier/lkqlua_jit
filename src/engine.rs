@@ -7,6 +7,7 @@ use crate::{
     Config, ExecutionContext,
     builtins::{get_builtin_bindings, get_builtin_types, types::BuiltinTypeRepo},
     bytecode::extended_bytecode::ExtendedBytecodeUnit,
+    diagnostics::{CallLocation, Diagnostic},
     engine::analysis_lib::AnalysisLibrary,
     errors::{ERROR_TEMPLATE_REPOSITORY, ErrorInstance, ErrorInstanceArg, LUA_ENGINE_ERROR},
     lua::{
@@ -16,7 +17,6 @@ use crate::{
         open_lua_libs, pop, push_bool, push_c_closure, push_c_function, push_integer, push_string,
         push_user_data, remove_value, safe_call, set_field, set_global, to_string,
     },
-    report::{CallLocation, Report},
 };
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -74,12 +74,12 @@ impl Engine {
     }
 
     /// Run the given bytecode buffer in the engine, returning the potential
-    /// report in case of a runtime error.
+    /// diagnostic in case of a runtime error.
     pub fn run_bytecode(
         &self,
         ctx: &ExecutionContext,
         bytecode_unit: &ExtendedBytecodeUnit,
-    ) -> Result<(), Report> {
+    ) -> Result<(), Diagnostic> {
         let l = self.lua_state;
 
         // Encode the bytecode unit
@@ -156,8 +156,8 @@ impl Engine {
             // Get the frame of the error
             let error_frame = stack_trace.next().unwrap();
 
-            // Then create the report and return it
-            Err(Report::from_error_template_with_stack_trace(
+            // Then create the diagnostic and return it
+            Err(Diagnostic::from_error_template_with_stack_trace(
                 error_frame.1,
                 ERROR_TEMPLATE_REPOSITORY[runtime_error.template_id],
                 &runtime_error.message_args,
