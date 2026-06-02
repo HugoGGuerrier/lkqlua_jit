@@ -14,6 +14,7 @@ use crate::{
             TypeImplementation, img_property, list, obj,
         },
     },
+    diagnostics::{Diagnostic, DiagnosticCollector},
     engine::LuaValue,
     errors::{ANALYSIS_LIBRARY_ERROR, ErrorInstance, ErrorInstanceArg},
     lua::{
@@ -45,7 +46,7 @@ impl AnalysisLibrary {
         lua_state: LuaState,
         config: &Config,
         builtin_types: &BuiltinTypeRepo,
-    ) -> Result<Self, Vec<String>> {
+    ) -> Result<Self, DiagnosticCollector> {
         let l = lua_state;
 
         // Retrieve the analysis library source
@@ -53,12 +54,12 @@ impl AnalysisLibrary {
         let module_file = match find_in_lua_path(&module_name) {
             Some(f) => f,
             None => {
-                return Err(vec![format!(
+                return Err(DiagnosticCollector::from(Diagnostic::error_msg(format!(
                     "Cannot find the {} analysis library, please ensure \"{}\" is accessible \
                      through the LUA_PATH",
                     config.analyzed_lang_name,
                     format!("{module_name}.lua")
-                )]);
+                ))));
             }
         };
 
@@ -125,19 +126,9 @@ impl AnalysisLibrary {
         Ok(Self { lua_state, struct_types, node_types })
     }
 
-    /// Internal helper used to call a function value and return [`Err`] if an
-    /// error occur during its execution.
-    fn pcall(l: LuaState, arg_count: i32) -> Result<(), Vec<String>> {
-        if let Err(msg) = safe_call(l, arg_count, Some(1), None) {
-            Err(vec![String::from(msg)])
-        } else {
-            Ok(())
-        }
-    }
-
     /// Internal helper to create a new analysis context from the loaded
     /// analysis library and store it in the Lua state.
-    fn create_analysis_context(l: LuaState) -> Result<(), Vec<String>> {
+    fn create_analysis_context(l: LuaState) -> Result<(), DiagnosticCollector> {
         get_global(l, ANALYSIS_LIB_GLOBAL_NAME);
         get_field(l, -1, "AnalysisContext");
         get_field(l, -1, "create");
@@ -147,7 +138,7 @@ impl AnalysisLibrary {
         Ok(())
     }
 
-    fn parse_sources(l: LuaState, sources: &Vec<PathBuf>) -> Result<(), Vec<String>> {
+    fn parse_sources(l: LuaState, sources: &Vec<PathBuf>) -> Result<(), DiagnosticCollector> {
         // Create the analysis unit list table
         let array_size = min(sources.len(), i32::MAX as usize) as i32;
         push_table(l, array_size, 0);
@@ -367,6 +358,16 @@ impl AnalysisLibrary {
         push_c_function(l, analysis_lib_error_formatter);
         set_field(l, -2, "format_exception_message");
         pop(l, 2);
+    }
+
+    /// Internal helper used to call a function value and return [`Err`] if an
+    /// error occur during its execution.
+    fn pcall(l: LuaState, arg_count: i32) -> Result<(), DiagnosticCollector> {
+        if let Err(msg) = safe_call(l, arg_count, Some(1), None) {
+            Err(DiagnosticCollector::from(Diagnostic::error_msg(msg)))
+        } else {
+            Ok(())
+        }
     }
 }
 

@@ -1,4 +1,3 @@
-use ariadne::Fmt;
 use clap::{
     Parser,
     builder::{
@@ -6,9 +5,7 @@ use clap::{
         styling::{AnsiColor, Color, Style},
     },
 };
-use lkqlua_jit::{
-    Config, ExecutionContext, Timings, VerboseElement, Writable, diagnostics::ERROR_KIND_COLOR,
-};
+use lkqlua_jit::{Config, ExecutionContext, Timings, VerboseElement, Writable};
 use std::{
     io::{stderr, stdout},
     path::PathBuf,
@@ -107,9 +104,10 @@ fn main() {
     let t = ExecutionContext::new(config);
     let mut ctx = match t {
         Ok(ctx) => ctx,
-        Err(messages) => {
-            let header = "Error: ".fg(ERROR_KIND_COLOR);
-            messages.iter().for_each(|m| eprintln!("{header}{m}"));
+        Err(diagnostics) => {
+            diagnostics
+                .into_iter()
+                .for_each(|diag| diag.print_message(&mut stderr()));
             return;
         }
     };

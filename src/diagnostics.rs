@@ -3,14 +3,14 @@
 //! This module contains all required components to create, emit and display
 //! diagnostics.
 
-use crate::sources::{Location, SourceRepository};
 use crate::{
     errors::ErrorTemplate,
-    sources::{SourceId, SourceSection},
+    sources::{Location, SourceId, SourceRepository, SourceSection},
 };
 use ariadne::{Color, Label, Report, ReportKind, StdoutFmt};
+use core::slice;
 use liblkqllang;
-use std::io::Write;
+use std::{io::Write, vec};
 
 pub const INFO_KIND_COLOR: Color = Color::BrightCyan;
 pub const WARNING_KIND_COLOR: Color = Color::BrightYellow;
@@ -19,20 +19,61 @@ pub const BUG_KIND_COLOR: Color = Color::Red;
 pub const HINT_COLOR: Color = Color::Fixed(69);
 pub const ADVICE_COLOR: Color = Color::Fixed(147);
 
-/// This type is the top-level of all diagnostics that can be emitted by the
-/// engine.
+/// This type may be used to collect diagnostics and iterate over them to
+/// create a final report.
+pub struct DiagnosticCollector {
+    diagnostics: Vec<Diagnostic>,
+}
+
+impl DiagnosticCollector {
+    /// Create a new diagnostic collector.
+    pub fn new() -> Self {
+        Self { diagnostics: Vec::new() }
+    }
+
+    /// Add a diagnostic in this collector.
+    pub fn add(&mut self, diagnostic: Diagnostic) {
+        self.diagnostics.push(diagnostic);
+    }
+
+    /// Get whether this diagnostic collector hasn't any diagnostic.
+    pub fn is_empty(&self) -> bool {
+        self.diagnostics.is_empty()
+    }
+}
+
+impl From<Diagnostic> for DiagnosticCollector {
+    fn from(value: Diagnostic) -> Self {
+        Self { diagnostics: vec![value] }
+    }
+}
+
+impl From<Vec<Diagnostic>> for DiagnosticCollector {
+    fn from(diagnostics: Vec<Diagnostic>) -> Self {
+        Self { diagnostics }
+    }
+}
+
+impl<'a> IntoIterator for &'a DiagnosticCollector {
+    type Item = &'a Diagnostic;
+    type IntoIter = slice::Iter<'a, Diagnostic>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        (&self.diagnostics).into_iter()
+    }
+}
+
+/// This type represents a diagnostic that may be emitted by the tool.
 /// This type is designed to be used in [`Result::Err`] values, and can be
 /// easily created from existing error types.
 #[derive(Debug, Clone)]
-pub enum Diagnostic {
-    Single { kind: DiagnosticKind, variant: DiagnosticVariant },
-    Composed(Vec<Diagnostic>),
-}
-
-impl From<String> for Diagnostic {
-    fn from(value: String) -> Self {
-        Self::error_msg(value)
-    }
+pub struct Diagnostic {
+    kind: DiagnosticKind,
+    title: Option<String>,
+    message: String,
+    location: Option<SourceSection>,
+    hints: Vec<Hint>,
+    stack_trace: Vec<CallLocation>,
 }
 
 impl From<std::io::Error> for Diagnostic {
@@ -52,41 +93,83 @@ impl Diagnostic {
 
     /// Create a new information diagnostic with a message.
     pub fn info_msg(message: String) -> Self {
-        Self::single_msg(DiagnosticKind::Info, message)
+        Self {
+            kind: DiagnosticKind::Info,
+            title: None,
+            message,
+            location: None,
+            hints: vec![],
+            stack_trace: vec![],
+        }
     }
 
     /// Create a new information diagnostic with a located message.
-    pub fn info_diag(title: String, message: String, location: SourceSection) -> Self {
-        Self::single_diag(DiagnosticKind::Info, location, title, message, vec![], vec![])
+    pub fn info_located(title: String, message: String, location: SourceSection) -> Self {
+        Self {
+            kind: DiagnosticKind::Info,
+            title: Some(title),
+            message,
+            location: Some(location),
+            hints: vec![],
+            stack_trace: vec![],
+        }
     }
 
     // --- Warning diagnostics
 
     /// Create a new warning diagnostic with a message.
     pub fn warning_msg(message: String) -> Self {
-        Self::single_msg(DiagnosticKind::Warning, message)
+        Self {
+            kind: DiagnosticKind::Warning,
+            title: None,
+            message,
+            location: None,
+            hints: vec![],
+            stack_trace: vec![],
+        }
     }
 
     /// Create a new warning diagnostic with a located message.
-    pub fn warning_diag(title: String, message: String, location: SourceSection) -> Self {
-        Self::single_diag(DiagnosticKind::Warning, location, title, message, vec![], vec![])
+    pub fn warning_located(title: String, message: String, location: SourceSection) -> Self {
+        Self {
+            kind: DiagnosticKind::Warning,
+            title: Some(title),
+            message,
+            location: Some(location),
+            hints: vec![],
+            stack_trace: vec![],
+        }
     }
 
     // --- Error diagnostics
 
     /// Create a new error diagnostic with a message.
     pub fn error_msg(message: String) -> Self {
-        Self::single_msg(DiagnosticKind::Error, message)
+        Self {
+            kind: DiagnosticKind::Error,
+            title: None,
+            message,
+            location: None,
+            hints: vec![],
+            stack_trace: vec![],
+        }
     }
 
     /// Create a new error diagnostic with a located message.
-    pub fn error_diag(title: String, message: String, location: SourceSection) -> Self {
-        Self::single_diag(DiagnosticKind::Error, location, title, message, vec![], vec![])
+    pub fn error_located(title: String, message: String, location: SourceSection) -> Self {
+        Self {
+            kind: DiagnosticKind::Error,
+            title: Some(title),
+            message,
+            location: Some(location),
+            hints: vec![],
+            stack_trace: vec![],
+        }
     }
 
     /// Create a new error diagnostic from an error template with message
     /// arguments.
-    pub fn from_error_template<T>(
+    pub fn error_from_template<T>(
         location: &SourceSection,
         error_template: &ErrorTemplate,
         message_args: &Vec<T>,
@@ -94,14 +177,14 @@ impl Diagnostic {
     where
         T: AsRef<str>,
     {
-        Self::single_diag(
-            DiagnosticKind::Error,
-            location.clone(),
-            String::from(error_template.title),
-            error_template.render_message(message_args),
-            vec![],
-            vec![],
-        )
+        Self {
+            kind: DiagnosticKind::Error,
+            title: Some(String::from(error_template.title)),
+            message: error_template.render_message(message_args),
+            location: Some(location.clone()),
+            hints: vec![],
+            stack_trace: vec![],
+        }
     }
 
     /// Create a new error diagnostic from an error template with message
@@ -115,14 +198,14 @@ impl Diagnostic {
     where
         T: AsRef<str>,
     {
-        Self::single_diag(
-            DiagnosticKind::Error,
-            location.clone(),
-            String::from(error_template.title),
-            error_template.render_message(message_args),
-            hints,
-            vec![],
-        )
+        Self {
+            kind: DiagnosticKind::Error,
+            title: Some(String::from(error_template.title)),
+            message: error_template.render_message(message_args),
+            location: Some(location.clone()),
+            hints: hints,
+            stack_trace: vec![],
+        }
     }
 
     /// Create a new error diagnostic from an error template with arguments and
@@ -136,85 +219,58 @@ impl Diagnostic {
     where
         T: AsRef<str>,
     {
-        Self::single_diag(
-            DiagnosticKind::Error,
-            location.clone(),
-            String::from(error_template.title),
-            error_template.render_message(message_args),
-            vec![],
-            stack_trace,
-        )
+        Self {
+            kind: DiagnosticKind::Error,
+            title: Some(String::from(error_template.title)),
+            message: error_template.render_message(message_args),
+            location: Some(location.clone()),
+            hints: vec![],
+            stack_trace: stack_trace,
+        }
     }
 
     // --- Bug diagnostics
 
     /// Create a new bug diagnostic with a message.
     pub fn bug_msg(message: String) -> Self {
-        Self::single_msg(DiagnosticKind::Bug, message)
+        Self {
+            kind: DiagnosticKind::Bug,
+            title: None,
+            message,
+            location: None,
+            hints: vec![],
+            stack_trace: vec![],
+        }
     }
 
     /// Create a new bug diagnostic with a located message.
     pub fn bug_diag(title: String, message: String, location: SourceSection) -> Self {
-        Self::single_diag(DiagnosticKind::Bug, location, title, message, vec![], vec![])
+        Self {
+            kind: DiagnosticKind::Bug,
+            title: Some(title),
+            message,
+            location: Some(location),
+            hints: vec![],
+            stack_trace: vec![],
+        }
     }
 
     // --- Creation helpers
 
     /// Create a new diagnostic from an LKQL parsing diagnostic in the provided
     /// source.
-    pub fn from_lkql_diagnostic(
-        source: SourceId,
-        diagnostic: &liblkqllang::Diagnostic,
-    ) -> Result<Self, Diagnostic> {
-        Ok(Self::single_diag(
-            DiagnosticKind::Error,
-            SourceSection::new(
+    pub fn from_lkql_diagnostic(source: SourceId, diagnostic: &liblkqllang::Diagnostic) -> Self {
+        Self {
+            kind: DiagnosticKind::Error,
+            title: Some(String::from("Parsing error")),
+            message: diagnostic.message.clone(),
+            location: Some(SourceSection::new(
                 source,
                 Location::from_lkql_location(diagnostic.sloc_range.start),
                 Location::from_lkql_location(diagnostic.sloc_range.end),
-            ),
-            String::from("Parsing error"),
-            diagnostic.message.clone(),
-            vec![],
-            vec![],
-        ))
-    }
-
-    /// Shortcut function to create a single message diagnostic.
-    fn single_msg(kind: DiagnosticKind, message: String) -> Self {
-        Self::Single { kind, variant: DiagnosticVariant::Message(message) }
-    }
-
-    /// Shortcut function to create a single diagnostic diagnostic.
-    fn single_diag(
-        kind: DiagnosticKind,
-        location: SourceSection,
-        title: String,
-        message: String,
-        hints: Vec<Hint>,
-        stack_trace: Vec<CallLocation>,
-    ) -> Self {
-        Self::Single {
-            kind: kind,
-            variant: DiagnosticVariant::Located { location, title, message, hints, stack_trace },
-        }
-    }
-
-    /// Combine two diagnostic in a [`Diagnostic::Composed`] one.
-    pub fn combine(self, other: Diagnostic) -> Self {
-        match (self, other) {
-            (l @ Diagnostic::Single { .. }, r @ Diagnostic::Single { .. }) => {
-                Self::Composed(vec![l, r])
-            }
-            (Diagnostic::Composed(mut diags), single @ Diagnostic::Single { .. })
-            | (single @ Diagnostic::Single { .. }, Diagnostic::Composed(mut diags)) => {
-                diags.push(single);
-                Self::Composed(diags)
-            }
-            (Diagnostic::Composed(mut self_diags), Diagnostic::Composed(mut other_diags)) => {
-                self_diags.append(&mut other_diags);
-                Self::Composed(self_diags)
-            }
+            )),
+            hints: vec![],
+            stack_trace: vec![],
         }
     }
 
@@ -229,77 +285,74 @@ impl Diagnostic {
         output: &mut W,
         for_stdout: bool,
     ) {
-        match self {
-            Diagnostic::Composed(diags) => diags
-                .iter()
-                .for_each(|r| r.print(source_repo, output, for_stdout)),
-            Diagnostic::Single { kind, variant } => match variant {
-                DiagnosticVariant::Message(msg) => {
-                    let line_prefix = format!("{}:", kind.label()).fg(kind.color());
-                    writeln!(output, "{line_prefix} {msg}")
-                        .expect(format!("Error while printing diagnostic \"{msg}\"").as_str());
-                }
-                DiagnosticVariant::Located { location, title, message, hints, stack_trace } => {
-                    // Create a new diagnostic builder
-                    let rep_builder =
-                        Report::build(kind.to_ariadne_kind(), location.to_span(source_repo))
-                            // Add the error message
-                            .with_message(title)
-                            // Add the main label with the diagnostic color
-                            .with_label(
-                                Label::new(location.to_span(source_repo))
-                                    .with_message(message)
-                                    .with_color(kind.color())
-                                    .with_priority(10)
-                                    .with_order(0),
+        if let Some(ref location) = self.location {
+            // Create a new diagnostic builder
+            let rep_builder =
+                Report::build(self.kind.to_ariadne_kind(), location.to_span(source_repo))
+                    // Add the report title
+                    .with_message(self.title.as_ref().unwrap_or(&format!(
+                        "Untitled {} diagnostic",
+                        self.kind.label().to_lowercase()
+                    )))
+                    // Add the main label with the diagnostic color
+                    .with_label(
+                        Label::new(location.to_span(source_repo))
+                            .with_message(&self.message)
+                            .with_color(self.kind.color())
+                            .with_priority(10)
+                            .with_order(0),
+                    )
+                    // Add all hints
+                    .with_labels(self.hints.iter().map(|h| {
+                        Label::new(h.location.to_span(source_repo))
+                            .with_message(
+                                format!("{} {}", "Hint:".fg(HINT_COLOR), &h.message).as_str(),
                             )
-                            // Add all hints
-                            .with_labels(hints.iter().map(|h| {
-                                Label::new(h.location.to_span(source_repo))
-                                    .with_message(
-                                        format!("{} {}", "Hint:".fg(HINT_COLOR), &h.message)
-                                            .as_str(),
-                                    )
-                                    .with_color(HINT_COLOR)
-                                    .with_priority(1)
-                                    .with_order(1)
-                            }));
+                            .with_color(HINT_COLOR)
+                            .with_priority(1)
+                            .with_order(1)
+                    }));
 
-                    // Then print the diagnostic
-                    if for_stdout {
-                        rep_builder
-                            .finish()
-                            .write_for_stdout(source_repo, &mut *output)
-                    } else {
-                        rep_builder.finish().write(source_repo, &mut *output)
-                    }
-                    .expect(format!("Error while printing diagnostic {:?}", self).as_str());
+            // Then print the diagnostic
+            if for_stdout {
+                rep_builder
+                    .finish()
+                    .write_for_stdout(source_repo, &mut *output)
+            } else {
+                rep_builder.finish().write(source_repo, &mut *output)
+            }
+            .unwrap();
 
-                    // Print the error stack trace
-                    for trace_element in stack_trace {
-                        let trace_element_builder = Report::build(
-                            ReportKind::Advice,
-                            trace_element.location.to_span(source_repo),
-                        )
+            // Print the error stack trace
+            for trace_element in &self.stack_trace {
+                let trace_element_builder =
+                    Report::build(ReportKind::Advice, trace_element.location.to_span(source_repo))
                         .with_label(
                             Label::new(trace_element.location.to_span(source_repo))
                                 .with_color(ADVICE_COLOR),
                         )
                         .with_message(format!("Called in \"{}\"", trace_element.call_context));
-                        if for_stdout {
-                            trace_element_builder
-                                .finish()
-                                .write_for_stdout(source_repo, &mut *output)
-                        } else {
-                            trace_element_builder
-                                .finish()
-                                .write(source_repo, &mut *output)
-                        }
-                        .expect(format!("Error while printing diagnostic {:?}", self).as_str());
-                    }
+                if for_stdout {
+                    trace_element_builder
+                        .finish()
+                        .write_for_stdout(source_repo, &mut *output)
+                } else {
+                    trace_element_builder
+                        .finish()
+                        .write(source_repo, &mut *output)
                 }
-            },
+                .unwrap();
+            }
+        } else {
+            self.print_message(output);
         }
+    }
+
+    /// Print the diagnostic in the format "<kind_name>: <message>". This can
+    /// be used at places where you cannot access the source repository.
+    pub fn print_message<W: Write>(&self, output: &mut W) {
+        let line_prefix = format!("{}:", self.kind.label()).fg(self.kind.color());
+        writeln!(output, "{line_prefix} {}", self.message).unwrap();
     }
 }
 
@@ -333,18 +386,6 @@ impl DiagnosticKind {
             DiagnosticKind::Bug => "Bug",
         }
     }
-}
-
-#[derive(Debug, Clone)]
-pub enum DiagnosticVariant {
-    Message(String),
-    Located {
-        location: SourceSection,
-        title: String,
-        message: String,
-        hints: Vec<Hint>,
-        stack_trace: Vec<CallLocation>,
-    },
 }
 
 /// This structure represents an hint in a diagnostic. A hint is a located

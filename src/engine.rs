@@ -7,7 +7,7 @@ use crate::{
     Config, ExecutionContext,
     builtins::{get_builtin_bindings, get_builtin_types, types::BuiltinTypeRepo},
     bytecode::extended_bytecode::ExtendedBytecodeUnit,
-    diagnostics::{CallLocation, Diagnostic},
+    diagnostics::{CallLocation, Diagnostic, DiagnosticCollector},
     engine::analysis_lib::AnalysisLibrary,
     errors::{ERROR_TEMPLATE_REPOSITORY, ErrorInstance, ErrorInstanceArg, LUA_ENGINE_ERROR},
     lua::{
@@ -47,7 +47,7 @@ impl Drop for Engine {
 
 impl Engine {
     /// Create a new engine and initialize it to be ready to run bytecode.
-    pub fn new(config: &Config) -> Result<Self, Vec<String>> {
+    pub fn new(config: &Config) -> Result<Self, DiagnosticCollector> {
         // Create a new Lua state
         let lua_state = new_lua_state();
 

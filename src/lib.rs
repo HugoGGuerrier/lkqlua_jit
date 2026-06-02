@@ -5,7 +5,7 @@
 
 use crate::{
     bytecode::extended_bytecode::ExtendedBytecodeUnit,
-    diagnostics::Diagnostic,
+    diagnostics::{Diagnostic, DiagnosticCollector},
     engine::Engine,
     intermediate_tree::ExecutionUnit,
     sources::{SourceId, SourceRepository},
@@ -53,7 +53,7 @@ impl ExecutionContext {
     /// point to the LKQL engine.
     /// If any error occurs during the execution context initialization, this
     /// function returns [`Err`] with all error messages.
-    pub fn new(config: Config) -> Result<Self, Vec<String>> {
+    pub fn new(config: Config) -> Result<Self, DiagnosticCollector> {
         let engine = Engine::new(&config)?;
         Ok(Self {
             config,
@@ -73,14 +73,16 @@ impl ExecutionContext {
         let exec_res = self.execute_lkql_file(file);
 
         // If there are errors, display them on STDERR
-        if let Err(diag) = exec_res {
-            diag.print(&self.source_repo, &mut self.config.std_err, false);
+        if let Err(diagnostics) = exec_res {
+            for diag in &diagnostics {
+                diag.print(&self.source_repo, &mut self.config.std_err, false);
+            }
         }
     }
 
     /// Execute the provided LKQL file, returning possible [`Diagnostic`] if
     /// the execution is not successful.
-    pub fn execute_lkql_file(&mut self, file: &Path) -> Result<(), Diagnostic> {
+    pub fn execute_lkql_file(&mut self, file: &Path) -> Result<(), DiagnosticCollector> {
         // Add the source file to the source repo updating it if required
         let (source, updated) = self.source_repo.add_source_file(file)?;
         if updated {
@@ -96,19 +98,19 @@ impl ExecutionContext {
 
         // Then, run the encoded bytecode with the custom engine
         let time_point = Instant::now();
-        let res = self.engine.run_bytecode(self, bytecode_unit);
+        self.engine.run_bytecode(self, bytecode_unit)?;
         self.get_timings_for_source(source).execution = time_point.elapsed();
 
         // Pop the source from the execution stack
         self.execution_stack.pop();
 
-        // Finally, return the execution result
-        res
+        // Return the success
+        Ok(())
     }
 
     /// Inner function that compile the provided source as an LKQL input and
     /// place the result of this compilation in the cache.
-    fn compile_lkql_source(&mut self, source: SourceId) -> Result<(), Diagnostic> {
+    fn compile_lkql_source(&mut self, source: SourceId) -> Result<(), DiagnosticCollector> {
         // First of all check in the compilation cache whether the source has
         // already been compiled. In that case, don't perform compilation.
         if self.compilation_cache.contains_key(&source) {
@@ -122,13 +124,18 @@ impl ExecutionContext {
         // Parse the source file
         time_point = Instant::now();
         let unit = self.source_repo.parse_as_lkql(source)?;
-        let root = unit.root()?.unwrap();
+        let root = unit.root().map_err(|e| Diagnostic::from(e))?.unwrap();
         self.get_timings_for_source(source).parsing = time_point.elapsed();
 
         // If required, display the parsing tree
         if self.config.is_verbose(VerboseElement::ParsingTree) {
-            writeln!(self.config.std_out, "===== Parsing tree =====\n")?;
-            writeln!(self.config.std_out, "{}\n", root.tree_dump(0)?)?;
+            writeln!(self.config.std_out, "===== Parsing tree =====\n").unwrap();
+            writeln!(
+                self.config.std_out,
+                "{}\n",
+                root.tree_dump(0).map_err(|e| Diagnostic::from(e))?
+            )
+            .unwrap();
         }
 
         // Lower the parsing tree
@@ -138,8 +145,8 @@ impl ExecutionContext {
 
         // If required, display the lowered tree
         if self.config.is_verbose(VerboseElement::LoweringTree) {
-            writeln!(self.config.std_out, "===== Lowering tree =====\n")?;
-            writeln!(self.config.std_out, "{}\n", lowering_tree)?;
+            writeln!(self.config.std_out, "===== Lowering tree =====\n").unwrap();
+            writeln!(self.config.std_out, "{}\n", lowering_tree).unwrap();
         }
 
         // Compile the lowering tree to the extended bytecode format
@@ -152,16 +159,16 @@ impl ExecutionContext {
 
         // If required, display the compiled bytecode
         if self.config.is_verbose(VerboseElement::Bytecode) {
-            writeln!(self.config.std_out, "===== Bytecode =====\n")?;
-            writeln!(self.config.std_out, "{}\n", bytecode_unit)?;
+            writeln!(self.config.std_out, "===== Bytecode =====\n").unwrap();
+            writeln!(self.config.std_out, "{}\n", bytecode_unit).unwrap();
         }
 
         // If required, display the raw bytecode buffer
         if self.config.is_verbose(VerboseElement::RawBytecode) {
             let mut encoded_bytecode_unit = Vec::new();
             bytecode_unit.encode(&mut encoded_bytecode_unit);
-            writeln!(self.config.std_out, "===== Raw bytecode =====\n")?;
-            writeln!(self.config.std_out, "{:?}\n", encoded_bytecode_unit.hex_dump())?;
+            writeln!(self.config.std_out, "===== Raw bytecode =====\n").unwrap();
+            writeln!(self.config.std_out, "{:?}\n", encoded_bytecode_unit.hex_dump()).unwrap();
         }
 
         // Store the compilation result in the cache

@@ -160,8 +160,10 @@ pub unsafe extern "C" fn lkql_import(l: LuaState) -> c_int {
     }
 
     // Then execute the module file, report errors if there are some
-    if let Err(diag) = ctx.execute_lkql_file(Path::new(module_file)) {
-        diag.print(&ctx.source_repo, &mut ctx.config.std_err, false);
+    if let Err(diagnostics) = ctx.execute_lkql_file(Path::new(module_file)) {
+        for diag in &diagnostics {
+            diag.print(&ctx.source_repo, &mut ctx.config.std_err, false);
+        }
         raise_error(
             l,
             &ErrorInstance::new(ERROR_DURING_IMPORTATION.id, vec![]).to_json_string(),

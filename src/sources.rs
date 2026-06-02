@@ -5,7 +5,7 @@
 //! This module provide a [`SourceRepository`] type to load, retrieve and parse
 //! sources.
 
-use crate::diagnostics::Diagnostic;
+use crate::diagnostics::{Diagnostic, DiagnosticCollector};
 use ariadne::Cache;
 use liblkqllang::{AnalysisContext, AnalysisUnit, SourceLocation};
 use std::{
@@ -62,8 +62,8 @@ impl SourceRepository {
     /// This function tries to avoid useless file reload, so before reading
     /// the file, it checks if the latter has been modified since the last
     /// load. If not, the source repository isn't modified, and the second
-    /// part of the result is [`false`].
-    /// This method may fail if:
+    /// part of the result is `false`.
+    /// This method may result [`Err`] if:
     ///   * The provided path doesn't designate an existing file
     ///   * The file designated by the provided file is not UTF-8 encoded
     ///     (see https://github.com/HugoGGuerrier/lkqlua_jit/issues/1)
@@ -141,31 +141,29 @@ impl SourceRepository {
     /// Parse the source designated by the provided identifier using the LKQL
     /// parsing library. If the parsing succeeds, this function return the
     /// resulting analysis unit that contains the parsing tree.
-    /// This method may fail if:
-    ///   * An exception occurs in the parsing library
+    /// If the parsing encounter syntax error or an internal exception, an
+    /// [`Err`] instance is returned with all collected diagnostics.
+    /// This method may panic if:
     ///   * There is no source corresponding to the provided identifier
-    ///   * The source designated by the provided identifier is not a valid
-    ///     LKQL source
-    pub fn parse_as_lkql(&mut self, source_id: SourceId) -> Result<AnalysisUnit, Diagnostic> {
+    pub fn parse_as_lkql(
+        &mut self,
+        source_id: SourceId,
+    ) -> Result<AnalysisUnit, DiagnosticCollector> {
         // Parse the source as LKQL
-        let source = self
-            .get_source_by_id(source_id)
-            .ok_or(format!("No sources with id {source_id}"))?;
-        let unit = self.lkql_context.get_unit_from_buffer(
-            &source.name(),
-            source.content().text(),
-            None,
-            None,
-        )?;
+        let source = self.get_source_by_id(source_id).expect("Invalid source id");
+        let unit = self
+            .lkql_context
+            .get_unit_from_buffer(&source.name(), source.content().text(), None, None)
+            .map_err(|e| Diagnostic::from(e))?;
 
         // Check parsing diagnostics
-        let lkql_parsing_diags = unit.diagnostics()?;
+        let lkql_parsing_diags = unit.diagnostics().map_err(|e| Diagnostic::from(e))?;
         if !lkql_parsing_diags.is_empty() {
-            let mut parsing_diags = Vec::with_capacity(lkql_parsing_diags.len());
-            for diag in &lkql_parsing_diags {
-                parsing_diags.push(Diagnostic::from_lkql_diagnostic(source_id, diag)?);
+            let mut diagnostics = DiagnosticCollector::new();
+            for lkql_diag in &lkql_parsing_diags {
+                diagnostics.add(Diagnostic::from_lkql_diagnostic(source_id, lkql_diag));
             }
-            Err(Diagnostic::Composed(parsing_diags))
+            Err(diagnostics)
         } else {
             Ok(unit)
         }

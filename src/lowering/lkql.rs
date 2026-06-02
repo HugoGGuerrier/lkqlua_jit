@@ -10,7 +10,7 @@ use crate::{
         traits::{self, BuiltinTrait},
         types::{self, BuiltinType},
     },
-    diagnostics::{Diagnostic, Hint},
+    diagnostics::{Diagnostic, DiagnosticCollector, Hint},
     errors::{
         AMBIGUOUS_IMPORT, INVALID_SELECTOR_CALL, MODULE_NOT_FOUND, MULTIPLE_SPLAT_PATTERNS,
         POS_AFTER_NAMED_ARGUMENT, PREVIOUS_NAMED_ARG_HINT, PREVIOUS_SPLAT_PATTERN_HINT,
@@ -36,6 +36,8 @@ impl ExecutionUnit {
     ///   * [`LkqlNode::TopLevelList`]
     ///   * [`LkqlNode::FunDecl`]
     ///   * [`LkqlNode::AnonymousFunction`]
+    ///   * [`LkqlNode::ListComprehension`]
+    ///   * [`LkqlNode::NodePatternSelector`]
     ///
     /// If there is errors during the lowering of LKQL source, this function
     /// returns a [`Result::Err`] which contains all diagnostics.
@@ -43,13 +45,20 @@ impl ExecutionUnit {
         execution_context: &ExecutionContext,
         source: SourceId,
         node: &LkqlNode,
-    ) -> Result<Self, Diagnostic> {
+    ) -> Result<Self, DiagnosticCollector> {
         let mut lowering_context = LoweringContext::new(execution_context, source);
-        let res = Self::internal_lower_lkql_node(node, &mut lowering_context)?;
-        if lowering_context.diagnostics.is_empty() {
-            Ok(res)
-        } else {
-            Err(Diagnostic::Composed(lowering_context.diagnostics))
+        match Self::internal_lower_lkql_node(node, &mut lowering_context) {
+            Ok(res) => {
+                if lowering_context.diagnostics.is_empty() {
+                    Ok(res)
+                } else {
+                    Err(lowering_context.diagnostics)
+                }
+            }
+            Err(diag) => {
+                lowering_context.diagnostics.add(diag);
+                Err(lowering_context.diagnostics)
+            }
         }
     }
 
@@ -279,7 +288,7 @@ impl Node {
                 let module_file = match &module_files[..] {
                     [f] => f,
                     [] => {
-                        ctx.diagnostics.push(Diagnostic::from_error_template(
+                        ctx.diagnostics.add(Diagnostic::error_from_template(
                             &origin_location,
                             &MODULE_NOT_FOUND,
                             &vec![module_name],
@@ -287,7 +296,7 @@ impl Node {
                         &PathBuf::new()
                     }
                     x => {
-                        ctx.diagnostics.push(Diagnostic::from_error_template(
+                        ctx.diagnostics.add(Diagnostic::error_from_template(
                             &origin_location,
                             &AMBIGUOUS_IMPORT,
                             &vec![
@@ -663,7 +672,7 @@ impl Node {
                                 .push(Self::lower_lkql_node(ctx, &expr_arg.f_value_expr()?)?);
                         } else {
                             let (last_id, last_node) = named_args.last().unwrap();
-                            ctx.diagnostics.push(
+                            ctx.diagnostics.add(
                                 Diagnostic::from_error_template_with_hints::<&str>(
                                     &SourceSection::from_lkql_node(ctx.lowered_source, arg)?,
                                     &POS_AFTER_NAMED_ARGUMENT,
@@ -778,7 +787,7 @@ impl Node {
                         expected_type_tag: node_type.tag,
                     }
                 } else {
-                    ctx.diagnostics.push(Diagnostic::from_error_template(
+                    ctx.diagnostics.add(Diagnostic::error_from_template(
                         &origin_location,
                         &UNKNOWN_NODE_TYPE,
                         &vec![&node_type_name],
@@ -806,7 +815,7 @@ impl Node {
                             // been stored.
                             if let Some(old_splat_pattern) = maybe_splat_pattern {
                                 ctx.diagnostics
-                                    .push(Diagnostic::from_error_template_with_hints::<&str>(
+                                    .add(Diagnostic::from_error_template_with_hints::<&str>(
                                         &SourceSection::from_lkql_node(
                                             ctx.lowered_source,
                                             &splat_pattern.as_node(),
@@ -831,7 +840,7 @@ impl Node {
                             // splat one.
                             if let Some(ref splat_pattern) = maybe_splat_pattern {
                                 ctx.diagnostics
-                                    .push(Diagnostic::from_error_template_with_hints::<&str>(
+                                    .add(Diagnostic::from_error_template_with_hints::<&str>(
                                         &SourceSection::from_lkql_node(
                                             ctx.lowered_source,
                                             &sub_pattern_source,
@@ -1152,10 +1161,10 @@ impl Node {
                         Self::lower_lkql_node(ctx, &fun_call.f_name()?)?.variant
                     }
                     _ => {
-                        ctx.diagnostics.push(Diagnostic::from_error_template(
+                        ctx.diagnostics.add(Diagnostic::error_from_template::<&str>(
                             &origin_location,
                             &INVALID_SELECTOR_CALL,
-                            &Vec::<&str>::new(),
+                            &Vec::new(),
                         ));
                         NodeVariant::NilLiteral
                     }
