@@ -910,7 +910,7 @@ impl Node {
                             ctx.diagnostics.add(Diagnostic::error_from_template(
                                 &self.origin_location,
                                 &UNKNOWN_SYMBOL,
-                                &vec![&identifier.text],
+                                &[&identifier.text],
                             ));
                         }
                     }
@@ -1049,7 +1049,7 @@ impl Node {
                             .add(Diagnostic::from_error_template_with_hints(
                                 &key.origin_location,
                                 &DUPLICATED_KEY,
-                                &vec![key.text.clone()],
+                                &[key.text.clone()],
                                 vec![Hint::new(
                                     String::from("Previous key declared here"),
                                     previous_key.origin_location.clone(),
@@ -1101,7 +1101,7 @@ impl Node {
                 ctx.diagnostics.add(Diagnostic::error_from_template::<&str>(
                     &operation.origin_location,
                     &DIV_BY_ZERO,
-                    &vec![],
+                    &[],
                 ));
                 return true;
             }
@@ -1824,10 +1824,10 @@ impl Node {
             match body_elem.expr_type() {
                 Some(t) if t == &unit::TYPE => elem_access.release(ctx),
                 Some(_) => {
-                    ctx.diagnostics.add(Diagnostic::error_from_template(
+                    ctx.diagnostics.add(Diagnostic::error_from_template::<&str>(
                         &body_elem.origin_location,
                         &NOT_UNIT_BLOCK_ELEM,
-                        &Vec::<&str>::new(),
+                        &[],
                     ));
                     elem_access.release(ctx)
                 }
@@ -1925,7 +1925,7 @@ impl Node {
             Some(t) => ctx.diagnostics.add(Diagnostic::error_from_template(
                 &expression.origin_location,
                 &WRONG_TYPE,
-                &vec![required_type.display_name(), t.display_name()],
+                &[required_type.display_name(), t.display_name()],
             )),
             None => {
                 // Create the next label
@@ -1986,7 +1986,7 @@ impl Node {
             Some(t) => ctx.diagnostics.add(Diagnostic::error_from_template(
                 &expression.origin_location,
                 &MISSING_TRAIT,
-                &vec![required_trait.name, t.display_name()],
+                &[required_trait.name, t.display_name()],
             )),
             None => {
                 // Create the label for the next instruction
@@ -2619,7 +2619,7 @@ impl<'a> CompilationContext<'a> {
                     .add(Diagnostic::from_error_template_with_hints(
                         &symbol.origin_location,
                         &DUPLICATED_SYMBOL,
-                        &vec![&symbol.text],
+                        &[&symbol.text],
                         vec![Hint::new(
                             String::from(PREVIOUS_SYMBOL_HINT),
                             previous_binding.declaration_location.clone(),

@@ -172,7 +172,7 @@ impl Diagnostic {
     pub fn error_from_template<T>(
         location: &SourceSection,
         error_template: &ErrorTemplate,
-        message_args: &Vec<T>,
+        message_args: &[T],
     ) -> Self
     where
         T: AsRef<str>,
@@ -192,7 +192,7 @@ impl Diagnostic {
     pub fn from_error_template_with_hints<T>(
         location: &SourceSection,
         error_template: &ErrorTemplate,
-        message_args: &Vec<T>,
+        message_args: &[T],
         hints: Vec<Hint>,
     ) -> Self
     where
@@ -213,7 +213,7 @@ impl Diagnostic {
     pub fn from_error_template_with_stack_trace<T>(
         location: &SourceSection,
         error_template: &ErrorTemplate,
-        message_args: &Vec<T>,
+        message_args: &[T],
         stack_trace: Vec<CallLocation>,
     ) -> Self
     where

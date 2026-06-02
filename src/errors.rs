@@ -279,7 +279,7 @@ impl ErrorTemplate {
     /// Render the message template with the provided arguments. This function
     /// panics if the provided argument count is not the same as the expected
     /// one.
-    pub fn render_message<T>(&self, args: &Vec<T>) -> String
+    pub fn render_message<T>(&self, args: &[T]) -> String
     where
         T: AsRef<str>,
     {
@@ -368,39 +368,33 @@ mod test {
     #[test]
     fn test_valid_template_rendering() {
         // Now ensure valid rendering
-        assert_eq!(&NO_ARGS.render_message::<&str>(&vec![]), "No arguments");
-        assert_eq!(&ONE_ARGS.render_message(&vec!["a"]), "Argument is \"a\"");
-        assert_eq!(
-            &THREE_ARGS.render_message(&vec!["a", "b", "c"]),
-            "Arguments: 1=a, 2=b, 3=c"
-        );
-        assert_eq!(
-            &THREE_ARGS.render_message(&vec!["a", "c", "b"]),
-            "Arguments: 1=a, 2=c, 3=b"
-        );
+        assert_eq!(&NO_ARGS.render_message::<&str>(&[]), "No arguments");
+        assert_eq!(&ONE_ARGS.render_message(&["a"]), "Argument is \"a\"");
+        assert_eq!(&THREE_ARGS.render_message(&["a", "b", "c"]), "Arguments: 1=a, 2=b, 3=c");
+        assert_eq!(&THREE_ARGS.render_message(&["a", "c", "b"]), "Arguments: 1=a, 2=c, 3=b");
     }
 
     #[test]
     #[should_panic(expected = "Invalid argument count: expected 0, got 2")]
     fn test_too_many_args_for_no_args() {
-        NO_ARGS.render_message(&vec!["invalid", "arg"]);
+        NO_ARGS.render_message(&["invalid", "arg"]);
     }
 
     #[test]
     #[should_panic(expected = "Invalid argument count: expected 3, got 4")]
     fn test_too_many_args_for_three_args() {
-        THREE_ARGS.render_message(&vec!["invalid", "arg", "too", "many"]);
+        THREE_ARGS.render_message(&["invalid", "arg", "too", "many"]);
     }
 
     #[test]
     #[should_panic(expected = "Invalid argument count: expected 1, got 0")]
     fn test_too_few_args_for_one_args() {
-        ONE_ARGS.render_message::<&str>(&vec![]);
+        ONE_ARGS.render_message::<&str>(&[]);
     }
 
     #[test]
     #[should_panic(expected = "Invalid argument count: expected 3, got 2")]
     fn test_too_few_args_for_three_args() {
-        THREE_ARGS.render_message(&vec!["invalid", "arg"]);
+        THREE_ARGS.render_message(&["invalid", "arg"]);
     }
 }

@@ -291,7 +291,7 @@ impl Node {
                         ctx.diagnostics.add(Diagnostic::error_from_template(
                             &origin_location,
                             &MODULE_NOT_FOUND,
-                            &vec![module_name],
+                            &[module_name],
                         ));
                         &PathBuf::new()
                     }
@@ -299,12 +299,10 @@ impl Node {
                         ctx.diagnostics.add(Diagnostic::error_from_template(
                             &origin_location,
                             &AMBIGUOUS_IMPORT,
-                            &vec![
-                                x.iter()
-                                    .map(|f| f.to_string_lossy())
-                                    .collect::<Vec<_>>()
-                                    .join(" & "),
-                            ],
+                            &[x.iter()
+                                .map(|f| f.to_string_lossy())
+                                .collect::<Vec<_>>()
+                                .join(" & ")],
                         ));
                         &PathBuf::new()
                     }
@@ -676,7 +674,7 @@ impl Node {
                                 Diagnostic::from_error_template_with_hints::<&str>(
                                     &SourceSection::from_lkql_node(ctx.lowered_source, arg)?,
                                     &POS_AFTER_NAMED_ARGUMENT,
-                                    &vec![],
+                                    &[],
                                     vec![Hint::new(
                                         String::from(PREVIOUS_NAMED_ARG_HINT),
                                         SourceSection::range(
@@ -790,7 +788,7 @@ impl Node {
                     ctx.diagnostics.add(Diagnostic::error_from_template(
                         &origin_location,
                         &UNKNOWN_NODE_TYPE,
-                        &vec![&node_type_name],
+                        &[&node_type_name],
                     ));
                     NodeVariant::BoolLiteral(false)
                 }
@@ -821,7 +819,7 @@ impl Node {
                                             &splat_pattern.as_node(),
                                         )?,
                                         &MULTIPLE_SPLAT_PATTERNS,
-                                        &vec![],
+                                        &[],
                                         vec![Hint::new(
                                             String::from(PREVIOUS_SPLAT_PATTERN_HINT),
                                             SourceSection::from_lkql_node(
@@ -846,7 +844,7 @@ impl Node {
                                             &sub_pattern_source,
                                         )?,
                                         &SUBPATTERN_AFTER_SPLAT,
-                                        &vec![],
+                                        &[],
                                         vec![Hint::new(
                                             String::from(PREVIOUS_SPLAT_PATTERN_HINT),
                                             SourceSection::from_lkql_node(
@@ -1164,7 +1162,7 @@ impl Node {
                         ctx.diagnostics.add(Diagnostic::error_from_template::<&str>(
                             &origin_location,
                             &INVALID_SELECTOR_CALL,
-                            &Vec::new(),
+                            &[],
                         ));
                         NodeVariant::NilLiteral
                     }
