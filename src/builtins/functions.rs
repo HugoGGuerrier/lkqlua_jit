@@ -20,8 +20,7 @@ use crate::{
     },
 };
 use regex::RegexBuilder;
-use std::io::Write;
-use std::{ffi::c_int, path::Path};
+use std::{ffi::c_int, io::Write, path::Path};
 
 /// The default image of a value when the latter doesn't define one.
 const DEFAULT_VALUE_IMAGE: &str = "<lkql_value>";
