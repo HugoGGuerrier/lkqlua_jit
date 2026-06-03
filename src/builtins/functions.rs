@@ -11,8 +11,7 @@ use crate::{
     },
     engine::{CONTEXT_GLOBAL_NAME, analysis_lib::ANALYSIS_UNITS_GLOBAL_NAME, register_for_gc},
     errors::{
-        DEPENDENCY_CYCLE, ERROR_DURING_IMPORTATION, ErrorInstance, ErrorInstanceArg,
-        REGEX_SYNTAX_ERROR, REGEX_TOO_BIG,
+        DEPENDENCY_CYCLE, ErrorInstance, ErrorInstanceArg, REGEX_SYNTAX_ERROR, REGEX_TOO_BIG,
     },
     lua::{
         LuaState, get_global, get_string, get_top, get_type, get_user_data, pop, push_string,
@@ -66,7 +65,7 @@ pub unsafe extern "C" fn lkql_pattern(l: LuaState) -> c_int {
                 ),
                 _ => unreachable!(),
             };
-            raise_error(l, &error_instance.to_json_string());
+            raise_error(l, &error_instance.to_json());
             0
         }
     }
@@ -153,20 +152,14 @@ pub unsafe extern "C" fn lkql_import(l: LuaState) -> c_int {
                         module_file.file_stem().unwrap().to_string_lossy()
                     ))],
                 )
-                .to_json_string(),
+                .to_json(),
             );
         }
     }
 
     // Then execute the module file, report errors if there are some
     if let Err(diagnostics) = ctx.execute_lkql_file(Path::new(module_file)) {
-        for diag in &diagnostics {
-            diag.print(&ctx.source_repo, &mut ctx.config.std_err, false);
-        }
-        raise_error(
-            l,
-            &ErrorInstance::new(ERROR_DURING_IMPORTATION.id, vec![]).to_json_string(),
-        );
+        raise_error(l, &diagnostics.to_json());
         0
     } else {
         1

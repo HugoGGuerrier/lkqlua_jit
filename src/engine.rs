@@ -6,20 +6,21 @@
 use crate::{
     Config, ExecutionContext,
     builtins::{get_builtin_bindings, get_builtin_types, types::BuiltinTypeRepo},
-    bytecode::extended_bytecode::ExtendedBytecodeUnit,
+    bytecode::extended_bytecode::{ExtendedBytecodeUnit, ExtendedPrototype},
     diagnostics::{CallLocation, Diagnostic, DiagnosticCollector},
     engine::analysis_lib::AnalysisLibrary,
     errors::{ERROR_TEMPLATE_REPOSITORY, ErrorInstance, ErrorInstanceArg, LUA_ENGINE_ERROR},
     lua::{
         LuaCFunction, LuaState, call, close_lua_state, copy_value, debug_frame, debug_get_local,
         debug_get_source, debug_info, debug_proto_and_pc, get_field, get_global, get_metatable,
-        get_string, get_top, load_buffer, load_lua_code, move_top_value, new_lua_state,
-        open_lua_libs, pop, push_bool, push_c_closure, push_c_function, push_integer, push_string,
-        push_user_data, remove_value, safe_call, set_field, set_global, to_string,
+        get_string, get_top, get_user_data, load_buffer, load_lua_code, move_top_value,
+        new_lua_state, open_lua_libs, pop, push_bool, push_c_closure, push_c_function,
+        push_integer, push_string, push_user_data, remove_value, safe_call, set_field, set_global,
+        to_string,
     },
+    sources::SourceSection,
 };
 use regex::Regex;
-use serde::{Deserialize, Serialize};
 use std::ffi::c_int;
 
 pub mod analysis_lib;
@@ -79,7 +80,7 @@ impl Engine {
         &self,
         ctx: &ExecutionContext,
         bytecode_unit: &ExtendedBytecodeUnit,
-    ) -> Result<(), Diagnostic> {
+    ) -> Result<(), DiagnosticCollector> {
         let l = self.lua_state;
 
         // Encode the bytecode unit
@@ -131,42 +132,10 @@ impl Engine {
         // Pop the error handler
         remove_value(self.lua_state, error_handler);
 
-        // If there was an error during the execution, parse the error message
-        // as JSON to extract all information.
-        if let Err(encoded_error) = call_res {
-            let runtime_error = RuntimeError::from_json(&encoded_error).unwrap();
-
-            // Transform the runtime error stack trace into an iterator
-            // associating prototype names to the call location.
-            let mut stack_trace = runtime_error.stack_trace.iter().filter_map(|e| {
-                ctx.compilation_cache
-                    .get(&e.source_id)
-                    .and_then(|bytecode_unit| {
-                        let prototype = &bytecode_unit.prototypes[e.prototype_identifier];
-                        Some((
-                            &prototype.name,
-                            prototype.instructions.get_location_or_default(
-                                e.program_counter,
-                                &prototype.origin_location,
-                            ),
-                        ))
-                    })
-            });
-
-            // Get the frame of the error
-            let error_frame = stack_trace.next().unwrap();
-
-            // Then create the diagnostic and return it
-            Err(Diagnostic::from_error_template_with_stack_trace(
-                error_frame.1,
-                ERROR_TEMPLATE_REPOSITORY[runtime_error.template_id],
-                &runtime_error.message_args,
-                stack_trace
-                    .map(|(call_context, call_location)| {
-                        CallLocation::new(call_context.clone(), call_location.clone())
-                    })
-                    .collect(),
-            ))
+        // If there was an error during the execution, parse diagnostics as
+        // JSON and return them.
+        if let Err(serialized_diagnostics) = call_res {
+            Err(DiagnosticCollector::from_json(&serialized_diagnostics).unwrap())
         }
         // Otherwise, just return the success
         else {
@@ -182,28 +151,56 @@ impl Engine {
 /// the LKQL [`Engine`] to display a beautiful error about the LKQL source.
 #[unsafe(no_mangle)]
 unsafe extern "C" fn handle_error(l: LuaState) -> c_int {
-    // Start by gathering the whole stack trace
+    /// This type represents an element in the call stack
+    struct TraceElement {
+        source_id: usize,
+        prototype_id: usize,
+        program_counter: usize,
+    }
+
+    impl TraceElement {
+        /// Get the [`ExtendedPrototype`] instance this trace element is
+        /// leading to.
+        fn get_prototype<'a>(&'a self, ctx: &'a ExecutionContext) -> &'a ExtendedPrototype {
+            ctx.compilation_cache
+                .get(&self.source_id)
+                .unwrap()
+                .prototypes
+                .get(self.prototype_id)
+                .unwrap()
+        }
+
+        /// Get the [`SourceSection`] object this trace element is
+        /// representing.
+        fn to_source_section(&self, ctx: &ExecutionContext) -> SourceSection {
+            let current_prototype = self.get_prototype(ctx);
+            current_prototype
+                .instructions
+                .get_location_or_default(self.program_counter, &current_prototype.origin_location)
+                .clone()
+        }
+    }
+
+    // Create values to store location information
     let mut stack_trace = Vec::new();
-    let mut current_frame = None;
+    let mut current_frame_and_trace_element = None;
+
+    // Unwind the execution stack
     let mut level = 0;
     let mut no_more_frame = false;
     while !no_more_frame {
         let maybe_frame = debug_frame(l, level);
         if let Some(mut frame) = maybe_frame {
             if debug_info(l, &mut frame, "S") {
-                if let Some((proto_id, pc)) = debug_proto_and_pc(l, &mut frame) {
-                    let source_id_str = debug_get_source(&frame).unwrap();
-                    if let Ok(source_id) = source_id_str.parse::<usize>() {
-                        stack_trace.push(StackTraceElement::new(
-                            source_id,
-                            proto_id,
-                            // We subtract 1 to the PC because Lua index
-                            // instructions from 1.
-                            pc - 1,
-                        ));
-                    }
-                    if current_frame.is_none() {
-                        let _ = current_frame.insert(frame);
+                if let Some((prototype_id, pc)) = debug_proto_and_pc(l, &mut frame)
+                    && let Ok(source_id) = debug_get_source(&frame).unwrap().parse::<usize>()
+                {
+                    let trace_element =
+                        TraceElement { source_id, prototype_id, program_counter: pc - 1 };
+                    if current_frame_and_trace_element.is_none() {
+                        let _ = current_frame_and_trace_element.insert((frame, trace_element));
+                    } else {
+                        stack_trace.push(trace_element);
                     }
                 }
             }
@@ -224,86 +221,74 @@ unsafe extern "C" fn handle_error(l: LuaState) -> c_int {
     };
 
     // Then process the message part to get the runtime error instance
-    let runtime_error =
-        if let Some(runtime_error_instance) = ErrorInstance::from_json(error_message) {
-            // If the message can be parsed as an error instance, we have to fetch
-            // message arguments.
-            let message_args = runtime_error_instance
-                .message_args
-                .into_iter()
-                .map(|a| match a {
-                    ErrorInstanceArg::Static(s) => s,
-                    ErrorInstanceArg::LocalValue(index) => {
-                        if let Some(_) =
-                            debug_get_local(l, current_frame.as_ref().unwrap(), 1 + index as i32)
-                        {
-                            let res = String::from(to_string(l, -1, "<lkql_value>"));
-                            pop(l, 1);
-                            res
-                        } else {
-                            String::from(ERROR_VALUE)
+    let diagnostics = if let Some(diagnostics) = DiagnosticCollector::from_json(error_message) {
+        diagnostics
+    } else {
+        // Fetch the error template id and all arguments for it
+        let (template_id, message_args) =
+            if let Some(error_instance) = ErrorInstance::from_json(error_message) {
+                // If the message can be parsed as an error instance, we have
+                // to fetch error template arguments.
+                let message_args = error_instance
+                    .message_args
+                    .into_iter()
+                    .map(|a| match a {
+                        ErrorInstanceArg::Static(s) => s,
+                        ErrorInstanceArg::LocalValue(index) => {
+                            if let Some(_) = debug_get_local(
+                                l,
+                                &current_frame_and_trace_element.as_ref().unwrap().0,
+                                1 + index as i32,
+                            ) {
+                                let res = String::from(to_string(l, -1, "<lkql_value>"));
+                                pop(l, 1);
+                                res
+                            } else {
+                                String::from(ERROR_VALUE)
+                            }
                         }
-                    }
-                })
-                .collect::<Vec<_>>();
+                    })
+                    .collect::<Vec<_>>();
+                (error_instance.template_id, message_args)
+            } else {
+                // If the error message is not a valid JSON, parse it with the
+                // custom function.
+                parse_lua_error(error_message)
+            };
 
-            // Then we create the runtime error
-            RuntimeError::new(runtime_error_instance.template_id, message_args, stack_trace)
-        } else {
-            let (template_id, message_args) = parse_lua_error(error_message);
-            RuntimeError::new(template_id, message_args, stack_trace)
-        };
+        // Get the execution context
+        get_global(l, CONTEXT_GLOBAL_NAME);
+        let execution_context = get_user_data::<ExecutionContext>(l, get_top(l)).unwrap();
+        pop(l, 1);
+
+        // Get the location of the diagnostic
+        let diagnostic_location = current_frame_and_trace_element
+            .unwrap()
+            .1
+            .to_source_section(execution_context);
+
+        // Finally, create the diagnostic collector with the new diagnostic in
+        // it.
+        DiagnosticCollector::from(Diagnostic::from_error_template_with_stack_trace(
+            &diagnostic_location,
+            ERROR_TEMPLATE_REPOSITORY[template_id],
+            &message_args,
+            stack_trace
+                .iter()
+                .map(|e| {
+                    CallLocation::new(
+                        e.get_prototype(execution_context).name.clone(),
+                        e.to_source_section(execution_context),
+                    )
+                })
+                .collect(),
+        ))
+    };
 
     // Finally, place the encoded runtime error on the stack as the function
     // result.
-    push_string(l, &runtime_error.to_json_string());
+    push_string(l, &diagnostics.to_json());
     1
-}
-
-/// This type represents an error that happened during the runtime. It contains
-/// the error template and arguments for it, alongside the stack trace of the
-/// error.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct RuntimeError {
-    pub template_id: usize,
-    pub message_args: Vec<String>,
-    pub stack_trace: Vec<StackTraceElement>,
-}
-
-impl RuntimeError {
-    /// Create a new runtime error object.
-    fn new(
-        template_id: usize,
-        message_args: Vec<String>,
-        stack_trace: Vec<StackTraceElement>,
-    ) -> Self {
-        Self { template_id, message_args, stack_trace }
-    }
-
-    /// Get a runtime error instance from a serialized JSON string.
-    fn from_json(json: &str) -> Option<Self> {
-        serde_json::from_str::<Self>(json).ok()
-    }
-
-    /// Get this runtime error serialized as JSON.
-    fn to_json_string(&self) -> String {
-        serde_json::to_string(self).unwrap()
-    }
-}
-
-/// This type represents an element of a runtime stack trace.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct StackTraceElement {
-    pub source_id: usize,
-    pub prototype_identifier: usize,
-    pub program_counter: usize,
-}
-
-impl StackTraceElement {
-    /// Create a new stack trace element object.
-    fn new(source_id: usize, prototype_identifier: usize, program_counter: usize) -> Self {
-        Self { source_id, prototype_identifier, program_counter }
-    }
 }
 
 /// Parse the error message coming from the Lua engine and map it to an LKQL

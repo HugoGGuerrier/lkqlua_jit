@@ -158,18 +158,11 @@ pub const DEPENDENCY_CYCLE: ErrorTemplate = ErrorTemplate {
     message_template: "There is a cycle in modules dependency chain ({})",
 };
 
-// Error when an error occurs in during the importation of a module.
-pub const ERROR_DURING_IMPORTATION: ErrorTemplate = ErrorTemplate {
-    id: DEPENDENCY_CYCLE.id + 1,
-    title: "Error when importing a module",
-    message_template: "An error occurred during the module importation, please check the related file",
-};
-
 // --- Regular expression errors
 
 /// Error when there is a syntax error in a regular expression.
 pub const REGEX_SYNTAX_ERROR: ErrorTemplate = ErrorTemplate {
-    id: ERROR_DURING_IMPORTATION.id + 1,
+    id: DEPENDENCY_CYCLE.id + 1,
     title: "Invalid regular expression syntax",
     message_template: "Syntax error in the \"{}\" regular expression",
 };
@@ -245,7 +238,6 @@ pub const ERROR_TEMPLATE_REPOSITORY: &[&ErrorTemplate] = &[
     &MODULE_NOT_FOUND,
     &AMBIGUOUS_IMPORT,
     &DEPENDENCY_CYCLE,
-    &ERROR_DURING_IMPORTATION,
     &REGEX_SYNTAX_ERROR,
     &REGEX_TOO_BIG,
     &SUBPATTERN_AFTER_SPLAT,
@@ -328,7 +320,7 @@ impl ErrorInstance {
     }
 
     /// Serialize this error instance as JSON.
-    pub fn to_json_string(&self) -> String {
+    pub fn to_json(&self) -> String {
         serde_json::to_string(self).unwrap()
     }
 }

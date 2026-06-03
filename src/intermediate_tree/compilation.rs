@@ -2187,7 +2187,7 @@ fn emit_runtime_error(
     let message_cst = ctx
         .unit_data
         .constants
-        .get_from_string(&runtime_error_instance.to_json_string());
+        .get_from_string(&runtime_error_instance.to_json());
 
     // Reserve temporary slots, fill them and call the function
     let call_slots = ctx.frame.borrow_mut().reserve_contiguous_slots(3);

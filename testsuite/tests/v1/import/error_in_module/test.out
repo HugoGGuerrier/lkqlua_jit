@@ -8,10 +8,3 @@ Error: Symbol declared multiple times
    │ ────────┬────────  
    │         ╰────────── The symbol "foo_value" already exists in the current scope
 ───╯
-Error: Error when importing a module
-   ╭─[ <working-dir>/script.lkql:1:1 ]
-   │
- 1 │ import foo
-   │ ─────┬────  
-   │      ╰────── An error occurred during the module importation, please check the related file
-───╯

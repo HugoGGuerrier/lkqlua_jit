@@ -39,7 +39,7 @@ pub extern "C" fn get_bool_param(
     } else if default_value.is_some() {
         default_value.unwrap()
     } else {
-        raise_error(l, &maybe_param_index.unwrap_err().to_json_string());
+        raise_error(l, &maybe_param_index.unwrap_err().to_json());
         false
     }
 }
@@ -66,7 +66,7 @@ pub extern "C" fn get_int_param(
     } else if default_value.is_some() {
         default_value.unwrap()
     } else {
-        raise_error(l, &maybe_param_index.unwrap_err().to_json_string());
+        raise_error(l, &maybe_param_index.unwrap_err().to_json());
         0
     }
 }
@@ -93,7 +93,7 @@ pub extern "C" fn get_string_param(
     } else if default_value.is_some() {
         default_value.unwrap()
     } else {
-        raise_error(l, &maybe_param_index.unwrap_err().to_json_string());
+        raise_error(l, &maybe_param_index.unwrap_err().to_json());
         ""
     }
 }
@@ -108,7 +108,7 @@ pub extern "C" fn get_param(l: LuaState, param_count: i32, index: i32, name: &st
     if let Ok(param_index) = maybe_param_index {
         param_index
     } else {
-        raise_error(l, &maybe_param_index.unwrap_err().to_json_string());
+        raise_error(l, &maybe_param_index.unwrap_err().to_json());
         0
     }
 }
@@ -178,7 +178,7 @@ extern "C" fn check_param_type(
                     ErrorInstanceArg::Static(String::from(param_type_name)),
                 ],
             )
-            .to_json_string(),
+            .to_json(),
         )
     }
 }
@@ -203,7 +203,7 @@ pub extern "C" fn verify_param(
                     ErrorInstanceArg::Static(String::from(error_message)),
                 ],
             )
-            .to_json_string(),
+            .to_json(),
         );
     }
 }

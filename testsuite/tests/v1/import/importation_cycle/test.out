@@ -10,10 +10,3 @@ Advice: Called in "script.lkql"
    │
  1 │ import foo
 ───╯
-Error: Error when importing a module
-   ╭─[ <working-dir>/script.lkql:1:1 ]
-   │
- 1 │ import foo
-   │ ─────┬────  
-   │      ╰────── An error occurred during the module importation, please check the related file
-───╯

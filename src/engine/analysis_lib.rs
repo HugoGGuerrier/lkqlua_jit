@@ -424,6 +424,6 @@ unsafe extern "C" fn analysis_lib_error_formatter(l: LuaState) -> c_int {
     );
 
     // Finally push the encoded error instance as a JSON string
-    push_string(l, &error_instance.to_json_string());
+    push_string(l, &error_instance.to_json());
     return 1;
 }

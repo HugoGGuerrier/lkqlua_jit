@@ -10,6 +10,7 @@ use crate::{
 use ariadne::{Color, Label, Report, ReportKind, StdoutFmt};
 use core::slice;
 use liblkqllang;
+use serde::{Deserialize, Serialize};
 use std::{io::Write, vec};
 
 pub const INFO_KIND_COLOR: Color = Color::BrightCyan;
@@ -21,6 +22,7 @@ pub const ADVICE_COLOR: Color = Color::Fixed(147);
 
 /// This type may be used to collect diagnostics and iterate over them to
 /// create a final report.
+#[derive(Debug, Serialize, Deserialize)]
 pub struct DiagnosticCollector {
     diagnostics: Vec<Diagnostic>,
 }
@@ -39,6 +41,16 @@ impl DiagnosticCollector {
     /// Get whether this diagnostic collector hasn't any diagnostic.
     pub fn is_empty(&self) -> bool {
         self.diagnostics.is_empty()
+    }
+
+    /// Get a diagnostic collector from a serialized JSON string.
+    pub fn from_json(json: &str) -> Option<Self> {
+        serde_json::from_str::<Self>(json).ok()
+    }
+
+    /// Serialize this diagnostic collector as JSON.
+    pub fn to_json(&self) -> String {
+        serde_json::to_string(self).unwrap()
     }
 }
 
@@ -66,7 +78,7 @@ impl<'a> IntoIterator for &'a DiagnosticCollector {
 /// This type represents a diagnostic that may be emitted by the tool.
 /// This type is designed to be used in [`Result::Err`] values, and can be
 /// easily created from existing error types.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Diagnostic {
     kind: DiagnosticKind,
     title: Option<String>,
@@ -356,7 +368,7 @@ impl Diagnostic {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum DiagnosticKind {
     Info,
     Warning,
@@ -391,7 +403,7 @@ impl DiagnosticKind {
 /// This structure represents an hint in a diagnostic. A hint is a located
 /// additional piece of information that brings more context or advices about
 /// a diagnostic.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Hint {
     pub message: String,
     pub location: SourceSection,
@@ -406,7 +418,7 @@ impl Hint {
 
 /// This structure represents the location and the context of a call in a stack
 /// trace.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CallLocation {
     pub call_context: String,
     pub location: SourceSection,

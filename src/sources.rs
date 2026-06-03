@@ -8,6 +8,7 @@
 use crate::diagnostics::{Diagnostic, DiagnosticCollector};
 use ariadne::Cache;
 use liblkqllang::{AnalysisContext, AnalysisUnit, SourceLocation};
+use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     fmt::Display,
@@ -223,7 +224,7 @@ impl Source {
 }
 
 /// This structure represents an extract from a source object.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SourceSection {
     pub source: SourceId,
     pub start: Location,
@@ -294,7 +295,7 @@ impl SourceSection {
 
 /// This structure represents a location in a source, defined by a line and
 /// a colon.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Location {
     pub line: u32,
     pub col: u16,
