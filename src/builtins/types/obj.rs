@@ -31,7 +31,7 @@ pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
 
 /// Overload of "__tostring" for the "Object" type.
 #[unsafe(no_mangle)]
-unsafe extern "C" fn obj_tostring(l: LuaState) -> c_int {
+extern "C" fn obj_tostring(l: LuaState) -> c_int {
     // Create the vector to place pairs in
     let mut pairs: Vec<(&str, &str)> = Vec::new();
 

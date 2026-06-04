@@ -28,7 +28,7 @@ pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
 
 /// Overload of "__tostring" for the "Namespace" type
 #[unsafe(no_mangle)]
-unsafe extern "C" fn namespace_tostring(l: LuaState) -> c_int {
+extern "C" fn namespace_tostring(l: LuaState) -> c_int {
     // Create the vector to place symbols in
     let mut symbols: Vec<&str> = Vec::new();
 

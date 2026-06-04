@@ -142,6 +142,7 @@ impl BuiltinType {
     /// Place at the top of the Lua stack, in this order:
     ///   * A table that is going to contain all fields of the type
     ///   * A table that is going to contain all properties of the type
+    ///
     /// This function pre-fill some of those table with already known values,
     /// but main content is going to be [`TypeImplementation`] specific.
     fn prepare_field_tables(&self, l: LuaState) {
@@ -151,7 +152,7 @@ impl BuiltinType {
         // Store the type tag
         push_table(l, 0, 0);
         push_bool(l, true);
-        set_index(l, -2, self.tag as i32);
+        set_index(l, -2, self.tag);
         set_field(l, -2, TYPE_TAGS_FIELD);
 
         // Store the type display name
@@ -355,10 +356,10 @@ end";
 
 /// The "img" property, it relies on the [`lkql_img`] function to execute.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn img_property(l: LuaState) -> c_int {
+pub extern "C" fn img_property(l: LuaState) -> c_int {
     push_nil(l);
     move_top_value(l, 1);
-    unsafe { lkql_img(l) }
+    lkql_img(l)
 }
 
 /// This is the generic meta-table registering function, it places the

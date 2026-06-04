@@ -109,7 +109,7 @@ impl ExecutionUnit {
                         "symbols",
                         format!("{:?}", symbols.iter().map(|i| &i.text).collect::<Vec<_>>()),
                     ),
-                    ("elements", Node::pretty_print_vec(&elements, child_level)),
+                    ("elements", Node::pretty_print_vec(elements, child_level)),
                 ],
             ),
             ExecutionUnitVariant::Function { params, body } => (
@@ -128,7 +128,7 @@ impl ExecutionUnit {
                                         }),
                                     )
                                 })
-                                .collect(),
+                                .collect::<Vec<_>>(),
                             child_level,
                         ),
                     ),
@@ -156,13 +156,13 @@ impl ExecutionUnit {
                     .iter()
                     .enumerate()
                     .map(|(i, c)| (i.to_string(), c.pretty_print(child_level)))
-                    .collect(),
+                    .collect::<Vec<_>>(),
                 indent_level,
             ),
         )]);
 
         // Finally pretty print all elements of the execution unit
-        pretty_print_node_helper(&(&name, pretty_children), indent_level)
+        pretty_print_node_helper(&(&name, &pretty_children), indent_level)
     }
 }
 
@@ -334,10 +334,10 @@ impl Node {
     fn pretty_print(&self, indent_level: usize) -> String {
         let child_level = indent_level + 1;
         // Match the node variant to extract information to display
-        let pretty_node: (&str, Vec<(&str, String)>) = match &self.variant {
+        let pretty_node: (&str, &[(&str, String)]) = match &self.variant {
             NodeVariant::FunCall { callee, positional_args, named_args } => (
                 "FunCall",
-                vec![
+                &[
                     ("callee", callee.pretty_print(child_level)),
                     ("positional_args", Self::pretty_print_vec(positional_args, child_level)),
                     ("named_args", Self::pretty_print_labeled_vec(named_args, child_level)),
@@ -345,7 +345,7 @@ impl Node {
             ),
             NodeVariant::DottedExpr { prefix, suffix, is_safe } => (
                 "DottedExpr",
-                vec![
+                &[
                     ("is_safe", is_safe.to_string()),
                     ("prefix", prefix.pretty_print(child_level)),
                     ("suffix", format!("\"{}\"", suffix.text)),
@@ -353,7 +353,7 @@ impl Node {
             ),
             NodeVariant::IndexExpr { indexed_val, index, is_safe } => (
                 "IndexExpr",
-                vec![
+                &[
                     ("is_safe", is_safe.to_string()),
                     ("indexed_val", indexed_val.pretty_print(child_level)),
                     ("index", index.pretty_print(child_level)),
@@ -361,14 +361,14 @@ impl Node {
             ),
             NodeVariant::InClause { value, collection } => (
                 "InClause",
-                vec![
+                &[
                     ("value", value.pretty_print(child_level)),
                     ("collection", collection.pretty_print(child_level)),
                 ],
             ),
             NodeVariant::IfExpr { condition, consequence, alternative } => (
                 "IfExpr",
-                vec![
+                &[
                     ("condition", condition.pretty_print(child_level)),
                     ("consequence", consequence.pretty_print(child_level)),
                     ("alternative", alternative.pretty_print(child_level)),
@@ -376,21 +376,21 @@ impl Node {
             ),
             NodeVariant::BlockExpr { body, val } => (
                 "BlockExpr",
-                vec![
+                &[
                     ("body", Self::pretty_print_vec(body, child_level)),
                     ("val", val.pretty_print(child_level)),
                 ],
             ),
             NodeVariant::LazyComprehension { source_iterables, body_index } => (
                 "LazyComprehension",
-                vec![
+                &[
                     ("source_iterables", Self::pretty_print_vec(source_iterables, child_level)),
                     ("body_index", body_index.to_string()),
                 ],
             ),
             NodeVariant::ArithBinOp { left, operator, right } => (
                 "ArithBinOp",
-                vec![
+                &[
                     ("left", left.pretty_print(child_level)),
                     ("operator", operator.to_string()),
                     ("right", right.pretty_print(child_level)),
@@ -398,7 +398,7 @@ impl Node {
             ),
             NodeVariant::LogicBinOp { left, operator, right } => (
                 "LogicBinOp",
-                vec![
+                &[
                     ("left", left.pretty_print(child_level)),
                     ("operator", operator.to_string()),
                     ("right", right.pretty_print(child_level)),
@@ -406,7 +406,7 @@ impl Node {
             ),
             NodeVariant::CompBinOp { left, operator, right } => (
                 "CompBinOp",
-                vec![
+                &[
                     ("left", left.pretty_print(child_level)),
                     ("operator", operator.to_string()),
                     ("right", right.pretty_print(child_level)),
@@ -414,7 +414,7 @@ impl Node {
             ),
             NodeVariant::MiscBinOp { left, operator, right } => (
                 "MiscBinOp",
-                vec![
+                &[
                     ("left", left.pretty_print(child_level)),
                     ("operator", operator.to_string()),
                     ("right", right.pretty_print(child_level)),
@@ -422,21 +422,21 @@ impl Node {
             ),
             NodeVariant::ArithUnOp { operator, operand } => (
                 "ArithUnOp",
-                vec![
+                &[
                     ("operator", operator.to_string()),
                     ("operand", operand.pretty_print(child_level)),
                 ],
             ),
             NodeVariant::LogicUnOp { operator, operand } => (
                 "LogicUnOp",
-                vec![
+                &[
                     ("operator", operator.to_string()),
                     ("operand", operand.pretty_print(child_level)),
                 ],
             ),
             NodeVariant::InLexicalScope { local_symbols, expr } => (
                 "InLexicalScope",
-                vec![
+                &[
                     (
                         "symbols",
                         format!("{:?}", local_symbols.iter().map(|i| &i.text).collect::<Vec<_>>()),
@@ -446,76 +446,74 @@ impl Node {
             ),
             NodeVariant::InitLocal { symbol, val } => (
                 "InitLocal",
-                vec![
+                &[
                     ("symbol", format!("\"{}\"", symbol.text)),
                     ("val", val.pretty_print(child_level)),
                 ],
             ),
             NodeVariant::InitLocalFun(child_index) => {
-                ("InitLocalFun", vec![("child_index", child_index.to_string())])
+                ("InitLocalFun", &[("child_index", child_index.to_string())])
             }
             NodeVariant::ImportModule { name, file } => (
                 "ImportModule",
-                vec![
+                &[
                     ("name", format!("\"{}\"", name.text)),
                     ("file", format!("\"{}\"", file.as_os_str().to_string_lossy())),
                 ],
             ),
             NodeVariant::ReadSymbol(symbol) => {
-                ("ReadSymbol", vec![("symbol", format!("\"{}\"", symbol.text))])
+                ("ReadSymbol", &[("symbol", format!("\"{}\"", symbol.text))])
             }
             NodeVariant::LambdaFun(child_index) => {
-                ("LambdaFun", vec![("child_index", child_index.to_string())])
+                ("LambdaFun", &[("child_index", child_index.to_string())])
             }
             NodeVariant::Let { id, value, r#in } => (
                 "Let",
-                vec![
+                &[
                     ("id", format!("\"{id}\"")),
                     ("value", value.pretty_print(child_level)),
                     ("in", r#in.pretty_print(child_level)),
                 ],
             ),
-            NodeVariant::Read(id) => ("Read", vec![("id", format!("\"{id}\""))]),
+            NodeVariant::Read(id) => ("Read", &[("id", format!("\"{id}\""))]),
             NodeVariant::InstanceOf { expression, expected_type_tag } => (
                 "InstanceOf",
-                vec![
+                &[
                     ("expression", expression.pretty_print(child_level)),
                     ("expected_type", expected_type_tag.to_string()),
                 ],
             ),
             NodeVariant::RequireType { expression, expected_type } => (
                 "RequireType",
-                vec![
+                &[
                     ("expression", expression.pretty_print(child_level)),
                     ("expected_type", expected_type.display_name().to_string()),
                 ],
             ),
             NodeVariant::RequireTrait { expression, required_trait } => (
                 "RequireTrait",
-                vec![
+                &[
                     ("expression", expression.pretty_print(child_level)),
                     ("required_trait", required_trait.name.to_string()),
                 ],
             ),
-            NodeVariant::NilLiteral => ("NilLiteral", vec![]),
-            NodeVariant::NullLiteral => ("NullLiteral", vec![]),
-            NodeVariant::UnitLiteral => ("UnitLiteral", vec![]),
-            NodeVariant::BoolLiteral(value) => ("BoolLiteral", vec![("value", value.to_string())]),
-            NodeVariant::IntLiteral(value) => {
-                ("IntLiteral", vec![("value", format!("\"{value}\""))])
-            }
+            NodeVariant::NilLiteral => ("NilLiteral", &[]),
+            NodeVariant::NullLiteral => ("NullLiteral", &[]),
+            NodeVariant::UnitLiteral => ("UnitLiteral", &[]),
+            NodeVariant::BoolLiteral(value) => ("BoolLiteral", &[("value", value.to_string())]),
+            NodeVariant::IntLiteral(value) => ("IntLiteral", &[("value", format!("\"{value}\""))]),
             NodeVariant::StringLiteral(value) => {
-                ("StringLiteral", vec![("value", format!("{:?}", value))])
+                ("StringLiteral", &[("value", format!("{:?}", value))])
             }
             NodeVariant::TupleLiteral(items) => {
-                ("TupleLiteral", vec![("items", Self::pretty_print_vec(items, child_level))])
+                ("TupleLiteral", &[("items", Self::pretty_print_vec(items, child_level))])
             }
             NodeVariant::ListLiteral(items) => {
-                ("ListLiteral", vec![("items", Self::pretty_print_vec(items, child_level))])
+                ("ListLiteral", &[("items", Self::pretty_print_vec(items, child_level))])
             }
             NodeVariant::ObjectLiteral(items) => (
                 "ObjectLiteral",
-                vec![("items", Self::pretty_print_labeled_vec(items, child_level))],
+                &[("items", Self::pretty_print_labeled_vec(items, child_level))],
             ),
         };
 
@@ -525,27 +523,27 @@ impl Node {
 
     /// Internal util function used to ease the pretty print of a vector of
     /// nodes.
-    fn pretty_print_vec(nodes: &Vec<Node>, indent_level: usize) -> String {
+    fn pretty_print_vec(nodes: &[Node], indent_level: usize) -> String {
         pretty_print_vec_helper(
             &nodes
                 .iter()
                 .enumerate()
                 .map(|(i, n)| (i.to_string(), n.pretty_print(indent_level + 1)))
-                .collect(),
+                .collect::<Vec<_>>(),
             indent_level,
         )
     }
 
     /// Internal util function used to ease the pretty print of a vector of
     /// labeled nodes.
-    fn pretty_print_labeled_vec(nodes: &Vec<(Identifier, Node)>, indent_level: usize) -> String {
+    fn pretty_print_labeled_vec(nodes: &[(Identifier, Node)], indent_level: usize) -> String {
         pretty_print_vec_helper(
             &nodes
                 .iter()
                 .map(|(id, n)| {
                     (format!("\"{}\"", id.text.clone()), n.pretty_print(indent_level + 1))
                 })
-                .collect(),
+                .collect::<Vec<_>>(),
             indent_level,
         )
     }
@@ -702,7 +700,7 @@ impl Identifier {
 
 /// Helper function to get the image of a node in a pretty-tree representation.
 fn pretty_print_node_helper(
-    pretty_node: &(&str, Vec<(&str, String)>),
+    pretty_node: &(&str, &[(&str, String)]),
     indent_level: usize,
 ) -> String {
     let indent = INDENT_STR.repeat(indent_level);
@@ -729,7 +727,7 @@ fn pretty_print_node_helper(
 }
 
 /// Internal util function factorizing the node vector printing process.
-fn pretty_print_vec_helper(labeled_values: &Vec<(String, String)>, indent_level: usize) -> String {
+fn pretty_print_vec_helper(labeled_values: &[(String, String)], indent_level: usize) -> String {
     let indent = INDENT_STR.repeat(indent_level);
     if labeled_values.is_empty() {
         String::from(EMPTY_STR)

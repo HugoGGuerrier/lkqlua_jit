@@ -34,7 +34,7 @@ pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
 
 /// Overload of "__tostring" for the "Tuple" type
 #[unsafe(no_mangle)]
-unsafe extern "C" fn tuple_tostring(l: LuaState) -> c_int {
+extern "C" fn tuple_tostring(l: LuaState) -> c_int {
     // Get image of items inside the tuple
     let tuple_len = get_length(l, 1);
     let mut item_images = Vec::with_capacity(tuple_len);

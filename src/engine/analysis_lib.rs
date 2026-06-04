@@ -23,7 +23,7 @@ use crate::{
         push_table, safe_call, set_field, set_global, set_index, set_metatable,
     },
 };
-use std::{cmp::min, ffi::c_int, i32, path::PathBuf};
+use std::{cmp::min, ffi::c_int, path::PathBuf};
 
 pub const ANALYSIS_LIB_GLOBAL_NAME: &str = "value@analysis_lib";
 pub const ANALYSIS_CONTEXT_GLOBAL_NAME: &str = "value@analysis_context";
@@ -34,8 +34,6 @@ pub const ANALYSIS_UNITS_GLOBAL_NAME: &str = "value@analysis_units";
 /// it.
 #[derive(Debug)]
 pub struct AnalysisLibrary {
-    lua_state: LuaState,
-    pub(crate) struct_types: Vec<String>,
     pub(crate) node_types: NodeTypeRepo,
 }
 
@@ -55,10 +53,9 @@ impl AnalysisLibrary {
             Some(f) => f,
             None => {
                 return Err(DiagnosticCollector::from(Diagnostic::error_msg(format!(
-                    "Cannot find the {} analysis library, please ensure \"{}\" is accessible \
+                    "Cannot find the {} analysis library, please ensure \"{}.lua\" is accessible \
                      through the LUA_PATH",
-                    config.analyzed_lang_name,
-                    format!("{module_name}.lua")
+                    config.analyzed_lang_name, module_name
                 ))));
             }
         };
@@ -123,7 +120,7 @@ impl AnalysisLibrary {
         Self::register_error_formatter(l);
 
         // Return the new analysis library object
-        Ok(Self { lua_state, struct_types, node_types })
+        Ok(Self { node_types })
     }
 
     /// Internal helper to create a new analysis context from the loaded
@@ -138,7 +135,7 @@ impl AnalysisLibrary {
         Ok(())
     }
 
-    fn parse_sources(l: LuaState, sources: &Vec<PathBuf>) -> Result<(), DiagnosticCollector> {
+    fn parse_sources(l: LuaState, sources: &[PathBuf]) -> Result<(), DiagnosticCollector> {
         // Create the analysis unit list table
         let array_size = min(sources.len(), i32::MAX as usize) as i32;
         push_table(l, array_size, 0);
@@ -314,7 +311,7 @@ impl AnalysisLibrary {
         set_index(l, -2, node_type.tag);
         for base_type in &node_type.base_types {
             push_bool(l, true);
-            set_index(l, -2, *base_type as i32);
+            set_index(l, -2, *base_type);
         }
         set_field(l, -2, TYPE_TAGS_FIELD);
 
@@ -408,7 +405,7 @@ impl NodeType {
 
 /// Callback used to format an error from the analysis library
 #[unsafe(no_mangle)]
-unsafe extern "C" fn analysis_lib_error_formatter(l: LuaState) -> c_int {
+extern "C" fn analysis_lib_error_formatter(l: LuaState) -> c_int {
     // Get kind and message of the error
     get_field(l, 1, "kind");
     get_field(l, 1, "message");
@@ -425,5 +422,5 @@ unsafe extern "C" fn analysis_lib_error_formatter(l: LuaState) -> c_int {
 
     // Finally push the encoded error instance as a JSON string
     push_string(l, &error_instance.to_json());
-    return 1;
+    1
 }

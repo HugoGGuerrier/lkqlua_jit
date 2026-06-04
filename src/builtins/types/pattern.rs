@@ -36,7 +36,7 @@ pub const NATIVE_HANDLE_FIELD: &str = "field@native_handle";
 
 /// Overload of "__tostring" for the "Pattern" type
 #[unsafe(no_mangle)]
-unsafe extern "C" fn pattern_tostring(l: LuaState) -> c_int {
+extern "C" fn pattern_tostring(l: LuaState) -> c_int {
     // Get the Rust compiled regex
     get_field(l, -1, NATIVE_HANDLE_FIELD);
     let compiled_regex = get_user_data::<Regex>(l, -1).unwrap();
@@ -49,7 +49,7 @@ unsafe extern "C" fn pattern_tostring(l: LuaState) -> c_int {
 
 /// Overload of "__gc" for the "Pattern" type
 #[unsafe(no_mangle)]
-unsafe extern "C" fn pattern_gc(l: LuaState) -> c_int {
+extern "C" fn pattern_gc(l: LuaState) -> c_int {
     // Get the Rust compiled regex and take its ownership to free it
     get_field(l, -1, NATIVE_HANDLE_FIELD);
     let _ = unsafe { Box::from_raw(get_user_data::<Regex>(l, -1).unwrap()) };

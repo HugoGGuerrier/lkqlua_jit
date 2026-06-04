@@ -51,7 +51,7 @@ pub const TYPE: BuiltinType = BuiltinType {
 
 /// Overload of "__tostring" for the "Stream" type.
 #[unsafe(no_mangle)]
-unsafe extern "C" fn stream_tostring(l: LuaState) -> c_int {
+extern "C" fn stream_tostring(l: LuaState) -> c_int {
     // We don't want to compute the content of a stream when displaying it
     push_string(l, "<Stream>");
     1

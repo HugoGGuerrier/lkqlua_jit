@@ -53,7 +53,8 @@ pub fn register_metatable(l: LuaState, _: &TypeImplementation) {
 }
 
 /// The "base_name" method for the "Str" type
-unsafe extern "C" fn str_base_name(l: LuaState) -> c_int {
+#[unsafe(no_mangle)]
+extern "C" fn str_base_name(l: LuaState) -> c_int {
     let path = PathBuf::from_str(get_string(l, 2).unwrap()).unwrap();
     if let Some(base_name) = path.file_name() {
         push_string(l, &base_name.to_string_lossy());
@@ -62,7 +63,8 @@ unsafe extern "C" fn str_base_name(l: LuaState) -> c_int {
 }
 
 /// The "starts_with" method for the "Str" type
-unsafe extern "C" fn str_starts_with(l: LuaState) -> c_int {
+#[unsafe(no_mangle)]
+extern "C" fn str_starts_with(l: LuaState) -> c_int {
     let param_count = get_top(l) - 1;
     let this = get_string(l, 2).unwrap();
     let prefix = get_string_param(l, param_count, 2, "prefix", None);
@@ -71,7 +73,8 @@ unsafe extern "C" fn str_starts_with(l: LuaState) -> c_int {
 }
 
 /// The "substring" function for the "Str" type
-unsafe extern "C" fn str_substring(l: LuaState) -> c_int {
+#[unsafe(no_mangle)]
+extern "C" fn str_substring(l: LuaState) -> c_int {
     // Get parameters
     let param_count = get_top(l) - 1;
     let this = get_string(l, 2).unwrap();

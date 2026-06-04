@@ -39,7 +39,7 @@ fn register_metatable(l: LuaState, _: &TypeImplementation) {
 
 /// Overload of "__tostring" for the "Function" type
 #[unsafe(no_mangle)]
-unsafe extern "C" fn function_tostring(l: LuaState) -> c_int {
+extern "C" fn function_tostring(l: LuaState) -> c_int {
     // Define the default function name
     let default_function_name = "anonymous";
 

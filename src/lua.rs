@@ -88,23 +88,23 @@ impl LuaDebug {
 // ----- Public API -----
 
 /// Create a new [`LuaState`] and return it.
-pub fn new_lua_state() -> LuaState {
+pub(crate) fn new_lua_state() -> LuaState {
     unsafe { luaL_newstate() }
 }
 
 /// Close the provided Lua state.
-pub fn close_lua_state(l: LuaState) {
+pub(crate) fn close_lua_state(l: LuaState) {
     unsafe { lua_close(l) }
 }
 
 /// Open all Lua base libraries in the given state.
-pub fn open_lua_libs(l: LuaState) {
+pub(crate) fn open_lua_libs(l: LuaState) {
     unsafe { luaL_openlibs(l) }
 }
 
 /// Load the given buffer to the Lua stack as a callable value, returning
 /// whether the function succeeded.
-pub fn load_buffer(l: LuaState, buffer: &Vec<u8>, buffer_name: &str) -> bool {
+pub(crate) fn load_buffer(l: LuaState, buffer: &[u8], buffer_name: &str) -> bool {
     unsafe {
         let ext_buffer = buffer.as_ptr() as *const c_char;
         let ext_buffer_name = CString::from_str(buffer_name).unwrap();
@@ -114,7 +114,7 @@ pub fn load_buffer(l: LuaState, buffer: &Vec<u8>, buffer_name: &str) -> bool {
 
 /// Load the Lua source code in `source` in the current state, returning
 /// whether the parsing succeeded.
-pub fn load_lua_code(l: LuaState, source: &str, source_name: &str) -> bool {
+pub(crate) fn load_lua_code(l: LuaState, source: &str, source_name: &str) -> bool {
     unsafe {
         let ext_source = CString::from_str(source).unwrap();
         let ext_source_name = CString::from_str(source_name).unwrap();
@@ -124,7 +124,7 @@ pub fn load_lua_code(l: LuaState, source: &str, source_name: &str) -> bool {
 
 /// Load the provided file as a Lua source and return whether the operation
 /// succeeded.
-pub fn load_lua_file(l: LuaState, file: &Path) -> bool {
+pub(crate) fn load_lua_file(l: LuaState, file: &Path) -> bool {
     unsafe {
         let ext_filename = CString::from_str(file.to_str().unwrap()).unwrap();
         luaL_loadfile(l, ext_filename.as_ptr()) == 0
@@ -132,36 +132,36 @@ pub fn load_lua_file(l: LuaState, file: &Path) -> bool {
 }
 
 /// Get the type of the value on the stack at the given index.
-pub fn get_type(l: LuaState, index: i32) -> LuaType {
+pub(crate) fn get_type(l: LuaState, index: i32) -> LuaType {
     unsafe { lua_type(l, index) }
 }
 
 /// Get whether the value at the provided `index` is `nil`.
-pub fn is_nil(l: LuaState, index: i32) -> bool {
+pub(crate) fn is_nil(l: LuaState, index: i32) -> bool {
     get_type(l, index) == LuaType::Nil
 }
 
 /// Get the length of the object of the provided index. The result is the same
 /// as the one obtained through the `#` Lua operator.
-pub fn get_length(l: LuaState, index: i32) -> usize {
+pub(crate) fn get_length(l: LuaState, index: i32) -> usize {
     unsafe { lua_objlen(l, index) }
 }
 
 /// Get the value at the provided index as a boolean, implicitly converting
 /// all values that aren't of the boolean type to one.
-pub fn get_boolean(l: LuaState, index: i32) -> bool {
+pub(crate) fn get_boolean(l: LuaState, index: i32) -> bool {
     unsafe { lua_toboolean(l, index) != 0 }
 }
 
 /// Get the value at the provided `index` as an integer, implicitly converting
 /// it. If the value is not convertible the behavior is not specified.
-pub fn get_integer(l: LuaState, index: i32) -> isize {
+pub(crate) fn get_integer(l: LuaState, index: i32) -> isize {
     unsafe { lua_tointeger(l, index) }
 }
 
 /// Try to get the value at the provided index as a string and return it. If
 /// this is not possible, the result is [`None`].
-pub fn get_string(l: LuaState, index: i32) -> Option<&'static str> {
+pub(crate) fn get_string(l: LuaState, index: i32) -> Option<&'static str> {
     unsafe {
         let ext_res = lua_tolstring(l, index, ptr::null_mut());
         if ext_res.is_null() {
@@ -174,7 +174,7 @@ pub fn get_string(l: LuaState, index: i32) -> Option<&'static str> {
 
 /// Try to get user data on the stack at the provided `index`, if this is not
 /// possible, return [`None`].
-pub fn get_user_data<'a, T: Any>(l: LuaState, index: i32) -> Option<&'a mut T> {
+pub(crate) fn get_user_data<'a, T: Any>(l: LuaState, index: i32) -> Option<&'a mut T> {
     unsafe {
         let c_data = lua_topointer(l, index);
         if c_data.is_null() { None } else { Some(&mut *(c_data as *mut T)) }
@@ -184,32 +184,32 @@ pub fn get_user_data<'a, T: Any>(l: LuaState, index: i32) -> Option<&'a mut T> {
 /// Pop a key from the stack and push the next key / values pair from the table
 /// at the provided index. This function pushes the key first then the value.
 /// Returns whether a new pair has been pushed on the stack.
-pub fn get_next_pair(l: LuaState, index: i32) -> bool {
+pub(crate) fn get_next_pair(l: LuaState, index: i32) -> bool {
     unsafe { lua_next(l, index) != 0 }
 }
 
 /// Push the `nil` value to the top of the stack.
-pub fn push_nil(l: LuaState) {
+pub(crate) fn push_nil(l: LuaState) {
     unsafe { lua_pushnil(l) }
 }
 
 /// Push a boolean value to the top of the stack.
-pub fn push_bool(l: LuaState, value: bool) {
+pub(crate) fn push_bool(l: LuaState, value: bool) {
     unsafe { lua_pushboolean(l, if value { 1 } else { 0 }) }
 }
 
 /// Push an integer value to the top of the stack.
-pub fn push_integer(l: LuaState, integer: isize) {
+pub(crate) fn push_integer(l: LuaState, integer: isize) {
     unsafe { lua_pushinteger(l, integer) }
 }
 
 /// Push a number to the top of the Lua stack.
-pub fn push_number(l: LuaState, number: f64) {
+pub(crate) fn push_number(l: LuaState, number: f64) {
     unsafe { lua_pushnumber(l, number) }
 }
 
 /// Push a new string to the top of the Lua stack.
-pub fn push_string(l: LuaState, s: &str) {
+pub(crate) fn push_string(l: LuaState, s: &str) {
     unsafe {
         let ext_s = CString::from_str(s).unwrap();
         lua_pushstring(l, ext_s.as_ptr());
@@ -219,40 +219,40 @@ pub fn push_string(l: LuaState, s: &str) {
 /// Create a new table value and push it on the top of the stack. You can
 /// provide initial size for the table array and hash parts to avoid later
 /// memory allocation.
-pub fn push_table(l: LuaState, array_part_size: i32, hash_part_size: i32) {
+pub(crate) fn push_table(l: LuaState, array_part_size: i32, hash_part_size: i32) {
     unsafe { lua_createtable(l, array_part_size, hash_part_size) }
 }
 
 /// Push arbitrary data on the Lua stack as a value.
-pub fn push_user_data<T: Any>(l: LuaState, data: &T) {
+pub(crate) fn push_user_data<T: Any>(l: LuaState, data: &T) {
     unsafe { lua_pushlightuserdata(l, data as *const T as *mut c_void) }
 }
 
 /// Push a pointer to arbitrary data on the Lua stack.
-pub fn push_user_data_ptr<T: Any>(l: LuaState, data: *mut T) {
+pub(crate) fn push_user_data_ptr<T: Any>(l: LuaState, data: *mut T) {
     unsafe { lua_pushlightuserdata(l, data as *mut c_void) }
 }
 
 /// Push a new C function value to the top of the Lua stack.
-pub fn push_c_function(l: LuaState, function: LuaCFunction) {
+pub(crate) fn push_c_function(l: LuaState, function: LuaCFunction) {
     unsafe { lua_pushcclosure(l, function, 0) }
 }
 
 /// Push a new C function value to the top of the Lua stack. Additionally, this
 /// function pops `up_value_count` values from the stack and store them in the
 /// newly created function value, making them up-values.
-pub fn push_c_closure(l: LuaState, function: LuaCFunction, up_value_count: u8) {
+pub(crate) fn push_c_closure(l: LuaState, function: LuaCFunction, up_value_count: u8) {
     unsafe { lua_pushcclosure(l, function, up_value_count as c_int) }
 }
 
 /// Copy the value at the provided index on the top of the stack.
-pub fn copy_value(l: LuaState, index: i32) {
+pub(crate) fn copy_value(l: LuaState, index: i32) {
     unsafe { lua_pushvalue(l, index) }
 }
 
 /// Get the global value that has the provided `name` and push it on the top of
 /// the stack. If this value doesn't exists, the `nil` value is pushed instead.
-pub fn get_global(l: LuaState, name: &str) {
+pub(crate) fn get_global(l: LuaState, name: &str) {
     unsafe {
         let c_name = CString::from_str(name).unwrap();
         lua_getfield(l, GLOBAL_INDEX, c_name.as_ptr());
@@ -261,35 +261,30 @@ pub fn get_global(l: LuaState, name: &str) {
 
 /// Pop the value at the top of the stack and place it in the field of the
 /// provided `name` in the global table.
-pub fn set_global(l: LuaState, name: &str) {
+pub(crate) fn set_global(l: LuaState, name: &str) {
     unsafe {
         let c_name = CString::from_str(name).unwrap();
         lua_setfield(l, GLOBAL_INDEX, c_name.as_ptr());
     }
 }
 
-/// Get the pseudo index of the up-value at the provided index.
-pub fn get_up_value_index(uv_index: i32) -> i32 {
-    GLOBAL_INDEX - uv_index
-}
-
 /// Get the meta-table of the value at the provided `index` and push it on the
 /// top of the stack. If the index is invalid or the value hasn't any
 /// meta-table, this function returns `false` and doesn't push anything.
-pub fn get_metatable(l: LuaState, index: i32) -> bool {
+pub(crate) fn get_metatable(l: LuaState, index: i32) -> bool {
     unsafe { lua_getmetatable(l, index) != 0 }
 }
 
 /// Pop the table at the top of the stack and set it as meta-table of the
 /// value at the provided `index`. This function returns whether the operation
 /// was a success.
-pub fn set_metatable(l: LuaState, index: i32) -> bool {
+pub(crate) fn set_metatable(l: LuaState, index: i32) -> bool {
     unsafe { lua_setmetatable(l, index) != 0 }
 }
 
 /// Get the field of the provided `name` in the table at the provided `index`
 /// and place it on the top of the stack.
-pub fn get_field(l: LuaState, index: i32, name: &str) {
+pub(crate) fn get_field(l: LuaState, index: i32, name: &str) {
     unsafe {
         let c_name = CString::from_str(name).unwrap();
         lua_getfield(l, index, c_name.as_ptr());
@@ -298,13 +293,13 @@ pub fn get_field(l: LuaState, index: i32, name: &str) {
 
 /// Given a table value at the provided index, get the element at the provided
 /// given index in it and place it on the top of the stack.
-pub fn get_index(l: LuaState, index: i32, inner_index: i32) {
+pub(crate) fn get_index(l: LuaState, index: i32, inner_index: i32) {
     unsafe { lua_rawgeti(l, index, inner_index) }
 }
 
 /// Pop the value on the top of the stack and place it in the field of the
 /// provided `name` in the table at the provided `index`.
-pub fn set_field(l: LuaState, index: i32, name: &str) {
+pub(crate) fn set_field(l: LuaState, index: i32, name: &str) {
     unsafe {
         let c_name = CString::from_str(name).unwrap();
         lua_setfield(l, index, c_name.as_ptr());
@@ -313,35 +308,35 @@ pub fn set_field(l: LuaState, index: i32, name: &str) {
 
 /// Pop the value on the top of the stack and place it at the provided
 /// `inner_index` in the table at the provided `index`.
-pub fn set_index(l: LuaState, index: i32, inner_index: i32) {
+pub(crate) fn set_index(l: LuaState, index: i32, inner_index: i32) {
     unsafe { lua_rawseti(l, index, inner_index) }
 }
 
 /// Get the index of the top of the stack. Since the stack is 1-indexed, this
 /// function also returns the number of values in the stack.
-pub fn get_top(l: LuaState) -> i32 {
+pub(crate) fn get_top(l: LuaState) -> i32 {
     unsafe { lua_gettop(l) }
 }
 
 /// Set the top of the lua stack, removing all values that are higher than the
 /// new top index.
-pub fn set_top(l: LuaState, index: i32) {
+pub(crate) fn set_top(l: LuaState, index: i32) {
     unsafe { lua_settop(l, index) }
 }
 
 /// Pop the provided number of elements from the top of the stack.
-pub fn pop(l: LuaState, count: i32) {
+pub(crate) fn pop(l: LuaState, count: i32) {
     set_top(l, -count - 1);
 }
 
 /// Move the value at the top of the stack to the provided index, shifting all
 /// values at this index and above upward.
-pub fn move_top_value(l: LuaState, index: i32) {
+pub(crate) fn move_top_value(l: LuaState, index: i32) {
     unsafe { lua_insert(l, index) }
 }
 
 /// Remove the value at the provided index, shifting all values above downward.
-pub fn remove_value(l: LuaState, index: i32) {
+pub(crate) fn remove_value(l: LuaState, index: i32) {
     unsafe { lua_remove(l, index) }
 }
 
@@ -350,7 +345,7 @@ pub fn remove_value(l: LuaState, index: i32) {
 /// value with all arguments. Places the specified number of results on the top
 /// of the stack if any, otherwise this function place them all.
 /// This function propagate any error raised by the callable value.
-pub fn call(l: LuaState, arg_count: i32, res_count: Option<i32>) {
+pub(crate) fn call(l: LuaState, arg_count: i32, res_count: Option<i32>) {
     unsafe { lua_call(l, arg_count, res_count.unwrap_or(MUTRET)) }
 }
 
@@ -360,7 +355,7 @@ pub fn call(l: LuaState, arg_count: i32, res_count: Option<i32>) {
 /// of the stack if any, otherwise this function place them all.
 /// This function returns an [`Err`] containing the error message if an error
 /// has been raised during the call.
-pub fn safe_call(
+pub(crate) fn safe_call(
     l: LuaState,
     arg_count: i32,
     res_count: Option<i32>,
@@ -380,7 +375,7 @@ pub fn safe_call(
 /// provided index is [`None`], the object on the top of the stack is used.
 /// This function returns whether the call succeeded, and if so, the result
 /// of the call is push on the top of the stack.
-pub fn call_meta(l: LuaState, index: i32, meta_method: &str) -> bool {
+pub(crate) fn call_meta(l: LuaState, index: i32, meta_method: &str) -> bool {
     let ext_meta_method = CString::from_str(meta_method).unwrap();
     unsafe { luaL_callmeta(l, index, ext_meta_method.as_ptr()) == 1 }
 }
@@ -388,7 +383,7 @@ pub fn call_meta(l: LuaState, index: i32, meta_method: &str) -> bool {
 /// Raise an error in the Lua context. This function never returns.
 #[unsafe(no_mangle)]
 #[allow(improper_ctypes_definitions)]
-pub extern "C" fn raise_error(l: LuaState, message: &str) {
+pub(crate) extern "C" fn raise_error(l: LuaState, message: &str) {
     unsafe {
         let c_message = CString::from_str(message).unwrap();
         luaL_error(l, c_message.as_ptr());
@@ -398,7 +393,7 @@ pub extern "C" fn raise_error(l: LuaState, message: &str) {
 /// Get debug information about the frame at the specified level. This function
 /// returns [`None`] if the specified level is higher that the current stack
 /// depth.
-pub fn debug_frame(l: LuaState, level: i32) -> Option<LuaDebug> {
+pub(crate) fn debug_frame(l: LuaState, level: i32) -> Option<LuaDebug> {
     unsafe {
         let mut maybe_res = LuaDebug::new();
         if lua_getstack(l, level, &mut maybe_res) != 0 { Some(maybe_res) } else { None }
@@ -407,7 +402,7 @@ pub fn debug_frame(l: LuaState, level: i32) -> Option<LuaDebug> {
 
 /// Fill the provided debug data structure with required information in the
 /// `what` parameter. See do of `lua_getinfo` for more information.
-pub fn debug_info(l: LuaState, ar: &mut LuaDebug, what: &str) -> bool {
+pub(crate) fn debug_info(l: LuaState, ar: &mut LuaDebug, what: &str) -> bool {
     unsafe {
         let ext_what = CString::from_str(what).unwrap();
         lua_getinfo(l, ext_what.as_ptr(), ar) != 0
@@ -415,7 +410,7 @@ pub fn debug_info(l: LuaState, ar: &mut LuaDebug, what: &str) -> bool {
 }
 
 /// Get the name of the source from which the provided debug frame is coming.
-pub fn debug_get_source(ar: &LuaDebug) -> Option<String> {
+pub(crate) fn debug_get_source(ar: &LuaDebug) -> Option<String> {
     unsafe {
         if !ar.source.is_null() {
             let source = CStr::from_ptr(ar.source);
@@ -430,7 +425,7 @@ pub fn debug_get_source(ar: &LuaDebug) -> Option<String> {
 /// the program counter inside this prototype.
 /// This function returns [`None`] if such information doesn't exists for the
 /// current frame.
-pub fn debug_proto_and_pc(l: LuaState, ar: &mut LuaDebug) -> Option<(usize, usize)> {
+pub(crate) fn debug_proto_and_pc(l: LuaState, ar: &mut LuaDebug) -> Option<(usize, usize)> {
     unsafe {
         let mut ext_pc: c_uint = 0;
         let mut ext_protoid: c_uint = 0;
@@ -446,7 +441,7 @@ pub fn debug_proto_and_pc(l: LuaState, ar: &mut LuaDebug) -> Option<(usize, usiz
 
 /// Get the prototype identifier of the function at the provided index if
 /// possible, [`None`] otherwise.
-pub fn debug_get_func_id(l: LuaState, index: i32) -> Option<usize> {
+pub(crate) fn debug_get_func_id(l: LuaState, index: i32) -> Option<usize> {
     unsafe {
         let mut ext_id: c_uint = 0;
         if lua_getfuncid(l, index, &mut ext_id) != 0 {
@@ -461,7 +456,7 @@ pub fn debug_get_func_id(l: LuaState, index: i32) -> Option<usize> {
 /// its value on the current stack if it exists.
 /// This function returns the local value name if it has been found, [`None`]
 /// otherwise.
-pub fn debug_get_local(l: LuaState, ar: &LuaDebug, index: i32) -> Option<&'static str> {
+pub(crate) fn debug_get_local(l: LuaState, ar: &LuaDebug, index: i32) -> Option<&'static str> {
     unsafe {
         let ext_var_name = lua_getlocal(l, ar, index);
         if ext_var_name.is_null() {
@@ -477,7 +472,7 @@ pub fn debug_get_local(l: LuaState, ar: &LuaDebug, index: i32) -> Option<&'stati
 
 /// Helper function to get the absolute path to the file defining the required
 /// module if it exists. This function looks in the defined `LUA_PATH`.
-pub fn find_in_lua_path(module_name: &str) -> Option<PathBuf> {
+pub(crate) fn find_in_lua_path(module_name: &str) -> Option<PathBuf> {
     // Create the list of patterns to use for module search
     let mut searching_patterns: Vec<String> = Vec::new();
 
@@ -504,7 +499,7 @@ pub fn find_in_lua_path(module_name: &str) -> Option<PathBuf> {
 /// return it. This function use the `__tostring` Lua meta-method if the
 /// type of the value requires it. If the call to this method fails, the
 /// provided default value is returned.
-pub fn to_string(l: LuaState, index: i32, default: &'static str) -> &'static str {
+pub(crate) fn to_string(l: LuaState, index: i32, default: &'static str) -> &'static str {
     let value_type = get_type(l, index);
     match value_type {
         LuaType::Number | LuaType::String => get_string(l, index).unwrap(),
@@ -528,12 +523,13 @@ pub fn to_string(l: LuaState, index: i32, default: &'static str) -> &'static str
 }
 
 /// Dump the string representation of the Lua stack on the standard output.
-pub fn dump_stack(l: LuaState) -> () {
+#[allow(dead_code)]
+pub(crate) fn dump_stack(l: LuaState) {
     println!("{}", stack_image(l));
 }
 
 /// Get a string representation of the Lua stack.
-pub fn stack_image(l: LuaState) -> String {
+fn stack_image(l: LuaState) -> String {
     let stack_top = unsafe { lua_gettop(l) };
     let mut res = String::new();
     if stack_top > 0 {

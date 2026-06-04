@@ -114,7 +114,7 @@ const LIST_SUBLIST: RuntimeValue = RuntimeValue::Function(FunctionValue::LuaFunc
 
 /// Overload of "__tostring" for the "List" type
 #[unsafe(no_mangle)]
-unsafe extern "C" fn list_tostring(l: LuaState) -> c_int {
+extern "C" fn list_tostring(l: LuaState) -> c_int {
     // Get image of items inside the list
     let list_len = get_length(l, 1);
     let mut item_images = Vec::with_capacity(list_len);

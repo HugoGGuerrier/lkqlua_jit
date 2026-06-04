@@ -26,7 +26,7 @@ const DEFAULT_VALUE_IMAGE: &str = "<lkql_value>";
 
 /// The "pattern" function
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn lkql_pattern(l: LuaState) -> c_int {
+pub extern "C" fn lkql_pattern(l: LuaState) -> c_int {
     // Get the function parameter values
     let param_count = get_top(l) - 1;
     let regex = get_string_param(l, param_count, 1, "regex", None);
@@ -73,7 +73,7 @@ pub unsafe extern "C" fn lkql_pattern(l: LuaState) -> c_int {
 
 /// The "print" function
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn lkql_print(l: LuaState) -> c_int {
+pub extern "C" fn lkql_print(l: LuaState) -> c_int {
     // Get the function parameter values
     let param_count = get_top(l) - 1;
     let to_print_index = get_param(l, param_count, 1, "to_print");
@@ -100,7 +100,7 @@ pub unsafe extern "C" fn lkql_print(l: LuaState) -> c_int {
 
 /// The "img" function
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn lkql_img(l: LuaState) -> c_int {
+pub extern "C" fn lkql_img(l: LuaState) -> c_int {
     let param_count = get_top(l) - 1;
     let value_index = get_param(l, param_count, 1, "value");
     match get_type(l, value_index) {
@@ -113,14 +113,15 @@ pub unsafe extern "C" fn lkql_img(l: LuaState) -> c_int {
 }
 
 /// The "units" function
-pub unsafe extern "C" fn lkql_units(l: LuaState) -> c_int {
+#[unsafe(no_mangle)]
+pub extern "C" fn lkql_units(l: LuaState) -> c_int {
     get_global(l, ANALYSIS_UNITS_GLOBAL_NAME);
-    return 1;
+    1
 }
 
 /// The importation function, this is not intended to be called by the user.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn lkql_import(l: LuaState) -> c_int {
+pub extern "C" fn lkql_import(l: LuaState) -> c_int {
     // Get the name of the file to import
     let module_file = Path::new(get_string(l, 1).unwrap());
 
@@ -130,31 +131,31 @@ pub unsafe extern "C" fn lkql_import(l: LuaState) -> c_int {
     pop(l, 1);
 
     // Check dependency cycle
-    if let Some(module_source) = &ctx.source_repo.get_id_by_file(module_file) {
-        if ctx.execution_stack.contains(module_source) {
-            let exec_stack_image = ctx
-                .execution_stack
-                .iter()
-                .map(|s| {
-                    Path::new(ctx.source_repo.get_name_by_id(*s))
-                        .file_stem()
-                        .unwrap()
-                        .to_string_lossy()
-                })
-                .collect::<Vec<_>>()
-                .join(" -> ");
-            raise_error(
-                l,
-                &ErrorInstance::new(
-                    DEPENDENCY_CYCLE.id,
-                    vec![ErrorInstanceArg::Static(format!(
-                        "{exec_stack_image} -> {}",
-                        module_file.file_stem().unwrap().to_string_lossy()
-                    ))],
-                )
-                .to_json(),
-            );
-        }
+    if let Some(module_source) = &ctx.source_repo.get_id_by_file(module_file)
+        && ctx.execution_stack.contains(module_source)
+    {
+        let exec_stack_image = ctx
+            .execution_stack
+            .iter()
+            .map(|s| {
+                Path::new(ctx.source_repo.get_name_by_id(*s))
+                    .file_stem()
+                    .unwrap()
+                    .to_string_lossy()
+            })
+            .collect::<Vec<_>>()
+            .join(" -> ");
+        raise_error(
+            l,
+            &ErrorInstance::new(
+                DEPENDENCY_CYCLE.id,
+                vec![ErrorInstanceArg::Static(format!(
+                    "{exec_stack_image} -> {}",
+                    module_file.file_stem().unwrap().to_string_lossy()
+                ))],
+            )
+            .to_json(),
+        );
     }
 
     // Then execute the module file, report errors if there are some

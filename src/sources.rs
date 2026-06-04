@@ -39,12 +39,18 @@ impl Cache<SourceId> for &SourceRepository {
         source_id: &SourceId,
     ) -> Result<&ariadne::Source<Self::Storage>, impl std::fmt::Debug> {
         self.get_source_by_id(*source_id)
-            .map_or(Err(format!("No sources with id {source_id}")), |s| Ok(&s.content()))
+            .map_or(Err(format!("No sources with id {source_id}")), |s| Ok(s.content()))
     }
 
     fn display<'a>(&self, source_id: &'a SourceId) -> Option<impl std::fmt::Display + 'a> {
         self.get_source_by_id(*source_id)
             .map(|s| String::from(s.name()))
+    }
+}
+
+impl Default for SourceRepository {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -68,9 +74,12 @@ impl SourceRepository {
     ///   * The provided path doesn't designate an existing file
     ///   * The file designated by the provided file is not UTF-8 encoded
     ///     (see https://github.com/HugoGGuerrier/lkqlua_jit/issues/1)
-    pub fn add_source_file(&mut self, file_path: &Path) -> Result<(SourceId, bool), Diagnostic> {
+    pub fn add_source_file(
+        &mut self,
+        file_path: &Path,
+    ) -> Result<(SourceId, bool), DiagnosticCollector> {
         // Get the absolute path to the file
-        let canonical_path = file_path.canonicalize()?;
+        let canonical_path = file_path.canonicalize().map_err(Diagnostic::from)?;
 
         // Then get the last time the file has been modified
         let last_modification = fs::metadata(&canonical_path)
@@ -79,14 +88,12 @@ impl SourceRepository {
 
         // Then, if this file has already been loaded in this repository,
         // compare the stored modification date with the one from metadata.
-        if let Some(&source_id) = self.file_to_source.get(&canonical_path) {
-            if let Some(known_last_change) = self.sources[source_id].last_modification() {
-                if let Some(current_last_change) = last_modification {
-                    if known_last_change == current_last_change {
-                        return Ok((source_id, false));
-                    }
-                }
-            }
+        if let Some(&source_id) = self.file_to_source.get(&canonical_path)
+            && let Some(known_last_change) = self.sources[source_id].last_modification()
+            && let Some(current_last_change) = last_modification
+            && known_last_change == current_last_change
+        {
+            return Ok((source_id, false));
         }
 
         // If we're here, the source must be updated or inserted in the
@@ -99,7 +106,9 @@ impl SourceRepository {
         self.file_to_source
             .insert(canonical_path.clone(), source_id);
         let source = Source::File {
-            content: ariadne::Source::from(fs::read_to_string(&canonical_path)?),
+            content: ariadne::Source::from(
+                fs::read_to_string(&canonical_path).map_err(Diagnostic::from)?,
+            ),
             path: canonical_path,
             last_modification,
         };
@@ -154,11 +163,11 @@ impl SourceRepository {
         let source = self.get_source_by_id(source_id).expect("Invalid source id");
         let unit = self
             .lkql_context
-            .get_unit_from_buffer(&source.name(), source.content().text(), None, None)
-            .map_err(|e| Diagnostic::from(e))?;
+            .get_unit_from_buffer(source.name(), source.content().text(), None, None)
+            .map_err(Diagnostic::from)?;
 
         // Check parsing diagnostics
-        let lkql_parsing_diags = unit.diagnostics().map_err(|e| Diagnostic::from(e))?;
+        let lkql_parsing_diags = unit.diagnostics().map_err(Diagnostic::from)?;
         if !lkql_parsing_diags.is_empty() {
             let mut diagnostics = DiagnosticCollector::new();
             for lkql_diag in &lkql_parsing_diags {
@@ -217,7 +226,7 @@ impl Source {
     /// applicable to it.
     pub fn last_modification(&self) -> Option<SystemTime> {
         match self {
-            Source::File { last_modification, .. } => last_modification.clone(),
+            Source::File { last_modification, .. } => *last_modification,
             Source::Buffer { .. } => None,
         }
     }
@@ -259,7 +268,7 @@ impl SourceSection {
         assert!(from.start <= to.end, "Cannot create a span from {from} to {to}");
 
         // Finally create the new source section
-        Self::new(from.source, from.start.clone(), to.end.clone())
+        Self::new(from.source, from.start, to.end)
     }
 
     /// Create an [`ariadne::Span`] value from this source section.
@@ -289,7 +298,7 @@ impl SourceSection {
         });
 
         // Return the resulting span
-        (self.source.clone(), start_offset..end_offset)
+        (self.source, start_offset..end_offset)
     }
 }
 
@@ -303,10 +312,7 @@ pub struct Location {
 
 impl PartialOrd for Location {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        match self.line.partial_cmp(&other.line) {
-            Some(core::cmp::Ordering::Equal) => self.col.partial_cmp(&other.col),
-            ord => ord,
-        }
+        Some(self.cmp(other))
     }
 }
 

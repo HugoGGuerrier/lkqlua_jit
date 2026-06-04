@@ -240,6 +240,7 @@
 //!         sequence, this info is simply the birth instruction index.
 //!       * The variable death instruction as an ULEB128 encoded instruction
 //!         index difference from the birth instruction.
+//!
 //!     The variable information section is always terminated by a `0` byte.
 
 use crate::bytecode::op_codes::JMP;
@@ -382,7 +383,7 @@ pub struct Prototype {
 
 impl Display for Prototype {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        fn vec_image<T>(vec: &Vec<T>) -> String
+        fn vec_image<T>(vec: &[T]) -> String
         where
             T: Display,
         {
@@ -526,7 +527,7 @@ impl Prototype {
             match self.line_count {
                 0..256 => offset_buffer.push(offset as u8),
                 256..65536 => offset_buffer.extend_from_slice(&(offset as u16).to_ne_bytes()),
-                65536.. => offset_buffer.extend_from_slice(&(offset as u32).to_ne_bytes()),
+                65536.. => offset_buffer.extend_from_slice(&offset.to_ne_bytes()),
             };
             res.append(&mut offset_buffer);
         }
@@ -861,7 +862,7 @@ fn write_uleb128(output_buffer: &mut Vec<u8>, val: u64) {
 
 /// Function to encode a string into the LuaJIT constant format and append the
 /// result to the provided output buffer.
-fn encode_string_constant(s: &String, output_buffer: &mut Vec<u8>) {
+fn encode_string_constant(s: &str, output_buffer: &mut Vec<u8>) {
     write_uleb128(output_buffer, (s.len() + COMPLEX_CONST_STR_KIND as usize) as u64);
     for b in s.bytes() {
         output_buffer.push(b);

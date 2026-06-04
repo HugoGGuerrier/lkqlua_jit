@@ -40,13 +40,13 @@ use crate::{
     },
     sources::SourceSection,
 };
+use core::slice;
 use num_bigint::BigInt;
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
     mem,
     rc::Rc,
-    u8, usize,
 };
 
 pub mod frame;
@@ -109,8 +109,7 @@ impl ExecutionUnit {
 
         // Save the previous instruction buffer and create a new one for this
         // unit.
-        let previous_instructions =
-            mem::replace(&mut ctx.instructions, ExtendedInstructionBuffer::new());
+        let previous_instructions = std::mem::take(&mut ctx.instructions);
 
         // Create compilation working values
         let mut arg_count = 0;
@@ -136,7 +135,7 @@ impl ExecutionUnit {
 
                 // Create a source section at the end of the module
                 let end_source_section = SourceSection::new(
-                    self.origin_location.source.clone(),
+                    self.origin_location.source,
                     self.origin_location.end,
                     self.origin_location.end,
                 );
@@ -232,7 +231,7 @@ impl ExecutionUnit {
                             ctx,
                             None,
                             &NO_VALUE_FOR_PARAM,
-                            &vec![ErrorInstanceArg::Static(param_id.text.clone())],
+                            &[ErrorInstanceArg::Static(param_id.text.clone())],
                         );
                     }
 
@@ -256,7 +255,7 @@ impl ExecutionUnit {
                         ctx,
                         None,
                         &POS_AND_NAMED_VALUE_FOR_PARAM,
-                        &vec![ErrorInstanceArg::Static(param_id.text.clone())],
+                        &[ErrorInstanceArg::Static(param_id.text.clone())],
                     );
 
                     // Label the next instruction
@@ -276,7 +275,7 @@ impl ExecutionUnit {
                 arg_count = params.len();
 
                 // Declare all parameters as locals and initialize them
-                ctx.declare_locals(&params);
+                ctx.declare_locals(params);
                 let birth_label = ctx.instructions.new_label();
                 for param in params {
                     ctx.frame.borrow_mut().init_local(&param.text, birth_label);
@@ -335,7 +334,7 @@ impl ExecutionUnit {
         match &ctx.frame.borrow().variant {
             FrameVariant::Semantic { maximum_size, up_values, .. } => {
                 // Sort up-values from their index
-                let mut sorted_up_values = up_values.into_iter().collect::<Vec<_>>();
+                let mut sorted_up_values = up_values.iter().collect::<Vec<_>>();
                 sorted_up_values.sort_by_key(|(_, uv)| uv.index);
 
                 // Then push the new prototype in the result
@@ -386,10 +385,10 @@ impl Node {
     fn compile_as_value(&self, ctx: &mut CompilationContext, result_slot: u8) {
         // If the node can be evaluated as a constant value that can be
         // directly compiled, just return now.
-        if let Some(constant) = self.eval_as_constant() {
-            if constant.try_to_compile(ctx, result_slot) {
-                return;
-            }
+        if let Some(constant) = self.eval_as_constant()
+            && constant.try_to_compile(ctx, result_slot)
+        {
+            return;
         }
 
         // If we reach here the node can't be evaluated as a constant, so we
@@ -468,7 +467,7 @@ impl Node {
                         ctx,
                         Some(&index.origin_location),
                         &INDEX_OUT_OF_BOUNDS,
-                        &vec![ErrorInstanceArg::LocalValue(index_access.slot())],
+                        &[ErrorInstanceArg::LocalValue(index_access.slot())],
                     );
                 }
 
@@ -889,7 +888,7 @@ impl Node {
                                 ctx,
                                 Some(&identifier.origin_location),
                                 &UNINITIALIZED_SYMBOL,
-                                &vec![ErrorInstanceArg::Static(identifier.text.clone())],
+                                &[ErrorInstanceArg::Static(identifier.text.clone())],
                             );
                             ctx.instructions.label(next_label);
                         }
@@ -1049,7 +1048,7 @@ impl Node {
                             .add(Diagnostic::from_error_template_with_hints(
                                 &key.origin_location,
                                 &DUPLICATED_KEY,
-                                &[key.text.clone()],
+                                slice::from_ref(&key.text),
                                 vec![Hint::new(
                                     String::from("Previous key declared here"),
                                     previous_key.origin_location.clone(),
@@ -1091,7 +1090,7 @@ impl Node {
             result_slot: u8,
             operation: &Node,
             operator: &ArithOperator,
-            variable_operand: &Box<Node>,
+            variable_operand: &Node,
             constant_operand: NumericConstant,
             is_constant_left: bool,
         ) -> bool {
@@ -1151,7 +1150,7 @@ impl Node {
                     op,
                     result_slot,
                     operand_access.slot(),
-                    numeric_cst as u8,
+                    numeric_cst,
                 );
                 operand_access.release(ctx);
 
@@ -1319,6 +1318,70 @@ impl Node {
             if_false_label: Label,
             branching_kind: BranchingKind,
         ) {
+            // Closure to try compiling the provided comparison operation in a
+            // constant optimized way, returning whether it is successful.
+            let compile_comp_bin_op_with_constant_operand =
+                |ctx: &mut CompilationContext,
+                 operator: &CompOperator,
+                 variable_operand: &Node,
+                 constant_operand: &ConstantValue| {
+                    // Get operation code and the "d" operand if possible
+                    let maybe_op_and_d = match (operator.variant, branching_kind) {
+                        (CompOperatorVariant::Equals, BranchingKind::IfFalse)
+                        | (CompOperatorVariant::NotEquals, BranchingKind::IfTrue) => {
+                            match &constant_operand.variant {
+                                ConstantValueVariant::Bool(constant_bool) => Some((
+                                    ISNEP,
+                                    if *constant_bool { PRIM_TRUE } else { PRIM_FALSE },
+                                )),
+                                ConstantValueVariant::String(s) => {
+                                    Some((ISNES, ctx.unit_data.constants.get_from_string(s)))
+                                }
+                                _ => constant_operand.to_numeric_constant().map(|n| {
+                                    (ISNEN, ctx.unit_data.constants.get_from_numeric_constant(n))
+                                }),
+                            }
+                        }
+                        (CompOperatorVariant::NotEquals, BranchingKind::IfFalse)
+                        | (CompOperatorVariant::Equals, BranchingKind::IfTrue) => {
+                            match &constant_operand.variant {
+                                ConstantValueVariant::Bool(constant_bool) => Some((
+                                    ISEQP,
+                                    if *constant_bool { PRIM_TRUE } else { PRIM_FALSE },
+                                )),
+                                ConstantValueVariant::String(s) => {
+                                    Some((ISEQS, ctx.unit_data.constants.get_from_string(s)))
+                                }
+                                _ => constant_operand.to_numeric_constant().map(|n| {
+                                    (ISEQN, ctx.unit_data.constants.get_from_numeric_constant(n))
+                                }),
+                            }
+                        }
+                        _ => None,
+                    };
+
+                    // Compile the node if possible
+                    if let Some((op, d)) = maybe_op_and_d {
+                        // Get an access to the variable operand
+                        let operand_access = variable_operand.compile_as_access(ctx, None);
+
+                        // Emit the branching instruction
+                        ctx.instructions
+                            .ad(&node.origin_location, op, operand_access.slot(), d);
+                        ctx.goto(match branching_kind {
+                            BranchingKind::IfTrue => if_true_label,
+                            BranchingKind::IfFalse => if_false_label,
+                        });
+
+                        // Label the next instruction as such and release the operand
+                        // access.
+                        operand_access.release(ctx);
+                        true
+                    } else {
+                        false
+                    }
+                };
+
             match &node.variant {
                 NodeVariant::LogicBinOp { left, operator, right } => {
                     // Create a label in case left operand is also a short
@@ -1360,25 +1423,17 @@ impl Node {
                         (_, Some(right_constant_value)) => {
                             compile_comp_bin_op_with_constant_operand(
                                 ctx,
-                                node,
                                 operator,
                                 left,
                                 &right_constant_value,
-                                if_true_label,
-                                if_false_label,
-                                branching_kind,
                             )
                         }
                         (Some(left_constant_value), _) => {
                             compile_comp_bin_op_with_constant_operand(
                                 ctx,
-                                node,
                                 operator,
                                 right,
                                 &left_constant_value,
-                                if_true_label,
-                                if_false_label,
-                                branching_kind,
                             )
                         }
                         _ => false,
@@ -1468,73 +1523,6 @@ impl Node {
                     ctx.goto(label);
                     result_access.release(ctx);
                 }
-            }
-        }
-
-        /// Try compiling the provided comparison operation in a constant
-        /// optimized way, returning whether it is successful.
-        fn compile_comp_bin_op_with_constant_operand(
-            ctx: &mut CompilationContext,
-            operation: &Node,
-            operator: &CompOperator,
-            variable_operand: &Box<Node>,
-            constant_operand: &ConstantValue,
-            if_true_label: Label,
-            if_false_label: Label,
-            branching_kind: BranchingKind,
-        ) -> bool {
-            // Get operation code and the "d" operand if possible
-            let maybe_op_and_d = match (operator.variant, branching_kind) {
-                (CompOperatorVariant::Equals, BranchingKind::IfFalse)
-                | (CompOperatorVariant::NotEquals, BranchingKind::IfTrue) => {
-                    match &constant_operand.variant {
-                        ConstantValueVariant::Bool(constant_bool) => {
-                            Some((ISNEP, if *constant_bool { PRIM_TRUE } else { PRIM_FALSE }))
-                        }
-                        ConstantValueVariant::String(s) => {
-                            Some((ISNES, ctx.unit_data.constants.get_from_string(s)))
-                        }
-                        _ => constant_operand
-                            .to_numeric_constant()
-                            .map(|n| (ISNEN, ctx.unit_data.constants.get_from_numeric_constant(n))),
-                    }
-                }
-                (CompOperatorVariant::NotEquals, BranchingKind::IfFalse)
-                | (CompOperatorVariant::Equals, BranchingKind::IfTrue) => {
-                    match &constant_operand.variant {
-                        ConstantValueVariant::Bool(constant_bool) => {
-                            Some((ISEQP, if *constant_bool { PRIM_TRUE } else { PRIM_FALSE }))
-                        }
-                        ConstantValueVariant::String(s) => {
-                            Some((ISEQS, ctx.unit_data.constants.get_from_string(s)))
-                        }
-                        _ => constant_operand
-                            .to_numeric_constant()
-                            .map(|n| (ISEQN, ctx.unit_data.constants.get_from_numeric_constant(n))),
-                    }
-                }
-                _ => None,
-            };
-
-            // Compile the node if possible
-            if let Some((op, d)) = maybe_op_and_d {
-                // Get an access to the variable operand
-                let operand_access = variable_operand.compile_as_access(ctx, None);
-
-                // Emit the branching instruction
-                ctx.instructions
-                    .ad(&operation.origin_location, op, operand_access.slot(), d);
-                ctx.goto(match branching_kind {
-                    BranchingKind::IfTrue => if_true_label,
-                    BranchingKind::IfFalse => if_false_label,
-                });
-
-                // Label the next instruction as such and release the operand
-                // access.
-                operand_access.release(ctx);
-                true
-            } else {
-                false
             }
         }
 
@@ -1689,8 +1677,8 @@ impl Node {
         ctx: &mut CompilationContext,
         result_slot: u8,
         origin_location: &SourceSection,
-        array_part_nodes: &Vec<Node>,
-        hash_part_nodes: &Vec<(Identifier, Node)>,
+        array_part_nodes: &[Node],
+        hash_part_nodes: &[(Identifier, Node)],
     ) {
         // Create the constant array part
         let mut array_constant_elems = Vec::new();
@@ -1778,8 +1766,8 @@ impl Node {
         ctx: &mut CompilationContext,
         origin_location: &SourceSection,
         callee: &Node,
-        positional_args: &Vec<Node>,
-        named_args: &Vec<(Identifier, Node)>,
+        positional_args: &[Node],
+        named_args: &[(Identifier, Node)],
     ) -> SlotRange {
         // Reserve slots for the call
         let call_slots = ctx
@@ -1810,7 +1798,7 @@ impl Node {
     }
 
     /// Util function to compile the body of a block expression.
-    fn compile_block_body(ctx: &mut CompilationContext, working_slot: u8, body: &Vec<Node>) {
+    fn compile_block_body(ctx: &mut CompilationContext, working_slot: u8, body: &[Node]) {
         // Get the unit value to compare it to element result
         let unit_tmp = ctx.frame.borrow_mut().get_slot();
         emit_global_read(ctx, None, unit_tmp, UNIT_SINGLETON_GLOBAL_NAME);
@@ -1845,7 +1833,7 @@ impl Node {
                         ctx,
                         Some(&body_elem.origin_location),
                         &NOT_UNIT_BLOCK_ELEM,
-                        &vec![],
+                        &[],
                     );
 
                     // Release resources
@@ -1885,7 +1873,7 @@ impl Node {
                 .ad(origin_location, MOV, result_slot, null_tmp as u16);
             ctx.goto(next_label);
         } else {
-            emit_runtime_error(ctx, Some(origin_location), &NULL_DOT_RECEIVER, &vec![]);
+            emit_runtime_error(ctx, Some(origin_location), &NULL_DOT_RECEIVER, &[]);
         }
         ctx.frame.borrow_mut().release_slot(null_tmp);
 
@@ -1901,7 +1889,7 @@ impl Node {
             ctx,
             Some(&suffix.origin_location),
             &UNKNOWN_MEMBER,
-            &vec![ErrorInstanceArg::Static(suffix.text.clone())],
+            &[ErrorInstanceArg::Static(suffix.text.clone())],
         );
 
         // Label the next instruction
@@ -1955,7 +1943,7 @@ impl Node {
                     ctx,
                     Some(&expression.origin_location),
                     &WRONG_TYPE,
-                    &vec![
+                    &[
                         ErrorInstanceArg::Static(String::from(required_type.display_name())),
                         ErrorInstanceArg::LocalValue(actual_name),
                     ],
@@ -2020,7 +2008,7 @@ impl Node {
                     ctx,
                     Some(&expression.origin_location),
                     &MISSING_TRAIT,
-                    &vec![
+                    &[
                         ErrorInstanceArg::Static(String::from(required_trait.name)),
                         ErrorInstanceArg::LocalValue(type_name),
                     ],
@@ -2076,14 +2064,11 @@ impl ConstantValue {
                 // If the value is in the i16 bounds, we can emit a simple
                 // immediate loading instruction.
                 if value <= &BigInt::from(i16::MAX) && value >= &BigInt::from(i16::MIN) {
-                    let mut le_bytes = [0 as u8; 2];
-                    for i in 0..le_bytes.len() {
-                        le_bytes[i] = *value_le_bytes.get(i).unwrap_or(if value < &BigInt::ZERO {
-                            &0xFF
-                        } else {
-                            &0
-                        });
-                    }
+                    let mut le_bytes = [if value < &BigInt::ZERO { 0xFF_u8 } else { 0_u8 }; 2];
+                    value_le_bytes
+                        .iter()
+                        .enumerate()
+                        .for_each(|(i, b)| le_bytes[i] = *b);
                     ctx.instructions.ad(
                         &self.origin_location,
                         KSHORT,
@@ -2178,10 +2163,10 @@ fn emit_runtime_error(
     ctx: &mut CompilationContext,
     maybe_error_location: Option<&SourceSection>,
     error_template: &ErrorTemplate,
-    message_args: &Vec<ErrorInstanceArg>,
+    message_args: &[ErrorInstanceArg],
 ) {
     // Create the runtime error instance object
-    let runtime_error_instance = ErrorInstance::new(error_template.id, message_args.clone());
+    let runtime_error_instance = ErrorInstance::new(error_template.id, Vec::from(message_args));
 
     // Add constants in the current repository
     let message_cst = ctx
@@ -2454,7 +2439,7 @@ fn emit_div_by_zero_check(
     ctx.instructions
         .ad_maybe_loc(maybe_origin_location, ISNEN, divider_slot, zero_cst);
     ctx.goto(next_label);
-    emit_runtime_error(ctx, maybe_origin_location, &DIV_BY_ZERO, &vec![]);
+    emit_runtime_error(ctx, maybe_origin_location, &DIV_BY_ZERO, &[]);
     ctx.instructions.label(next_label);
 }
 
@@ -2579,7 +2564,7 @@ impl<'a> CompilationContext<'a> {
     /// Util function to open a new lexical frame, initialize it with all its
     /// local bindings, and return a reference to its parent frame for the
     /// caller to restore the previous state.
-    fn open_lexical_frame(&mut self, local_symbols: &Vec<Identifier>) {
+    fn open_lexical_frame(&mut self, local_symbols: &[Identifier]) {
         // Open a new lexical frame that will contains all symbols
         // declared in the block.
         let parent_frame = self.frame.clone();
@@ -2611,7 +2596,7 @@ impl<'a> CompilationContext<'a> {
     /// Util function to add a collection of symbols in the current frame as local
     /// bindings. This function also checks duplicated declarations and add
     /// corresponding diagnostics in the compilation context.
-    fn declare_locals(&mut self, symbols: &Vec<Identifier>) {
+    fn declare_locals(&mut self, symbols: &[Identifier]) {
         for symbol in symbols {
             let maybe_local_slot = self.frame.borrow().is_conflicting(&symbol.text);
             if let Some(previous_binding) = maybe_local_slot {
@@ -2642,7 +2627,7 @@ impl<'a> CompilationContext<'a> {
             .borrow()
             .bindings
             .keys()
-            .map(|n| n.clone())
+            .cloned()
             .collect::<Vec<_>>();
         for binding in all_bindings {
             let old_binding = self.frame.borrow_mut().release_local(&binding, death_label);

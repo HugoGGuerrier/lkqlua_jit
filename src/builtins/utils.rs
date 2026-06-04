@@ -36,11 +36,11 @@ pub extern "C" fn get_bool_param(
     if let Ok(param_index) = maybe_param_index {
         check_param_type(l, name, param_index, &types::bool::TYPE);
         get_boolean(l, param_index)
-    } else if default_value.is_some() {
-        default_value.unwrap()
     } else {
-        raise_error(l, &maybe_param_index.unwrap_err().to_json());
-        false
+        default_value.unwrap_or_else(|| {
+            raise_error(l, &maybe_param_index.unwrap_err().to_json());
+            false
+        })
     }
 }
 
@@ -63,11 +63,11 @@ pub extern "C" fn get_int_param(
     if let Ok(param_index) = maybe_param_index {
         check_param_type(l, name, param_index, &types::int::TYPE);
         get_integer(l, param_index)
-    } else if default_value.is_some() {
-        default_value.unwrap()
     } else {
-        raise_error(l, &maybe_param_index.unwrap_err().to_json());
-        0
+        default_value.unwrap_or_else(|| {
+            raise_error(l, &maybe_param_index.unwrap_err().to_json());
+            0
+        })
     }
 }
 
@@ -90,11 +90,11 @@ pub extern "C" fn get_string_param(
     if let Ok(param_index) = maybe_param_index {
         check_param_type(l, name, param_index, &types::str::TYPE);
         get_string(l, param_index).unwrap()
-    } else if default_value.is_some() {
-        default_value.unwrap()
     } else {
-        raise_error(l, &maybe_param_index.unwrap_err().to_json());
-        ""
+        default_value.unwrap_or_else(|| {
+            raise_error(l, &maybe_param_index.unwrap_err().to_json());
+            ""
+        })
     }
 }
 

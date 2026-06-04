@@ -124,18 +124,14 @@ impl ExecutionContext {
         // Parse the source file
         time_point = Instant::now();
         let unit = self.source_repo.parse_as_lkql(source)?;
-        let root = unit.root().map_err(|e| Diagnostic::from(e))?.unwrap();
+        let root = unit.root().map_err(Diagnostic::from)?.unwrap();
         self.get_timings_for_source(source).parsing = time_point.elapsed();
 
         // If required, display the parsing tree
         if self.config.is_verbose(VerboseElement::ParsingTree) {
             writeln!(self.config.std_out, "===== Parsing tree =====\n").unwrap();
-            writeln!(
-                self.config.std_out,
-                "{}\n",
-                root.tree_dump(0).map_err(|e| Diagnostic::from(e))?
-            )
-            .unwrap();
+            writeln!(self.config.std_out, "{}\n", root.tree_dump(0).map_err(Diagnostic::from)?)
+                .unwrap();
         }
 
         // Lower the parsing tree
@@ -181,9 +177,7 @@ impl ExecutionContext {
 
     /// Get a mutable reference to timings associated to the given source.
     fn get_timings_for_source(&mut self, source: SourceId) -> &mut Timings {
-        if !self.timings.contains_key(&source) {
-            self.timings.insert(source, Timings::new());
-        }
+        self.timings.entry(source).or_default();
         self.timings.get_mut(&source).unwrap()
     }
 }
@@ -269,6 +263,12 @@ pub struct Timings {
     pub lowering: Duration,
     pub compilation: Duration,
     pub execution: Duration,
+}
+
+impl Default for Timings {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Timings {

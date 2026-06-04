@@ -27,7 +27,8 @@ pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
 };
 
 /// Overload of "__tostring" for the "Unit" type
-unsafe extern "C" fn unit_tostring(l: LuaState) -> c_int {
+#[unsafe(no_mangle)]
+extern "C" fn unit_tostring(l: LuaState) -> c_int {
     push_string(l, "()");
     1
 }

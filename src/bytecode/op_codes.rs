@@ -184,10 +184,18 @@ pub const IST: u8 = 0x0E;
 /// ```
 pub const ISF: u8 = 0x0F;
 
-/// TODO
+/// For now I don't understand what this is doing. To test!
+/// ```text
+/// A: slot
+/// D: lit
+/// ```
 pub const ISTYPE: u8 = 0x10;
 
-/// TODO
+/// For now I don't understand what this is doing. To test!
+/// ```text
+/// A: slot
+/// D: lit
+/// ```
 pub const ISNUM: u8 = 0x11;
 
 // ----- Copying operations -----
@@ -668,6 +676,7 @@ pub const RET1: u8 = 0x4C;
 ///   * A+2 -> The loop step
 ///   * A+3 -> Is the loop current index, this slot is modified when calling
 ///     a [`FORL`] instruction.
+///
 /// D is just pointing to the instruction located immediately after the loop.
 /// ```text
 /// A: slot

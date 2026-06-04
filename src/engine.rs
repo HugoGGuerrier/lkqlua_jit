@@ -5,7 +5,7 @@
 
 use crate::{
     Config, ExecutionContext,
-    builtins::{get_builtin_bindings, get_builtin_types, types::BuiltinTypeRepo},
+    builtins::{get_builtin_bindings, get_builtin_types},
     bytecode::extended_bytecode::{ExtendedBytecodeUnit, ExtendedPrototype},
     diagnostics::{CallLocation, Diagnostic, DiagnosticCollector},
     engine::analysis_lib::AnalysisLibrary,
@@ -36,7 +36,6 @@ pub const CONTEXT_GLOBAL_NAME: &str = "value@execution_context";
 #[derive(Debug)]
 pub struct Engine {
     lua_state: LuaState,
-    pub(crate) builtin_types: BuiltinTypeRepo,
     pub(crate) analysis_lib: AnalysisLibrary,
 }
 
@@ -71,7 +70,7 @@ impl Engine {
         let analysis_lib = AnalysisLibrary::new(lua_state, config, &builtin_types)?;
 
         // Finally create the engine type and return it
-        Ok(Self { lua_state, analysis_lib, builtin_types })
+        Ok(Self { lua_state, analysis_lib })
     }
 
     /// Run the given bytecode buffer in the engine, returning the potential
@@ -101,7 +100,7 @@ impl Engine {
         if !load_buffer(
             self.lua_state,
             &encoded_bytecode_unit,
-            &ctx.source_repo.get_name_by_id(bytecode_unit.source),
+            ctx.source_repo.get_name_by_id(bytecode_unit.source),
         ) {
             panic!(
                 "Cannot load the provided bytecode buffer, error message: {}",
@@ -115,7 +114,7 @@ impl Engine {
             push_string(l, "jit.p");
             call(l, 1, None);
             get_field(l, -1, "start");
-            push_string(l, "f10");
+            push_string(l, "Fli5");
             call(l, 1, None);
             pop(l, 1);
         }
@@ -150,7 +149,7 @@ impl Engine {
 /// an correctly encoded error object containing all information required by
 /// the LKQL [`Engine`] to display a beautiful error about the LKQL source.
 #[unsafe(no_mangle)]
-unsafe extern "C" fn handle_error(l: LuaState) -> c_int {
+extern "C" fn handle_error(l: LuaState) -> c_int {
     /// This type represents an element in the call stack
     struct TraceElement {
         source_id: usize,
@@ -191,17 +190,16 @@ unsafe extern "C" fn handle_error(l: LuaState) -> c_int {
     while !no_more_frame {
         let maybe_frame = debug_frame(l, level);
         if let Some(mut frame) = maybe_frame {
-            if debug_info(l, &mut frame, "S") {
-                if let Some((prototype_id, pc)) = debug_proto_and_pc(l, &mut frame)
-                    && let Ok(source_id) = debug_get_source(&frame).unwrap().parse::<usize>()
-                {
-                    let trace_element =
-                        TraceElement { source_id, prototype_id, program_counter: pc - 1 };
-                    if current_frame_and_trace_element.is_none() {
-                        let _ = current_frame_and_trace_element.insert((frame, trace_element));
-                    } else {
-                        stack_trace.push(trace_element);
-                    }
+            if debug_info(l, &mut frame, "S")
+                && let Some((prototype_id, pc)) = debug_proto_and_pc(l, &mut frame)
+                && let Ok(source_id) = debug_get_source(&frame).unwrap().parse::<usize>()
+            {
+                let trace_element =
+                    TraceElement { source_id, prototype_id, program_counter: pc - 1 };
+                if current_frame_and_trace_element.is_none() {
+                    let _ = current_frame_and_trace_element.insert((frame, trace_element));
+                } else {
+                    stack_trace.push(trace_element);
                 }
             }
             level += 1;
@@ -235,11 +233,13 @@ unsafe extern "C" fn handle_error(l: LuaState) -> c_int {
                     .map(|a| match a {
                         ErrorInstanceArg::Static(s) => s,
                         ErrorInstanceArg::LocalValue(index) => {
-                            if let Some(_) = debug_get_local(
+                            if debug_get_local(
                                 l,
                                 &current_frame_and_trace_element.as_ref().unwrap().0,
                                 1 + index as i32,
-                            ) {
+                            )
+                            .is_some()
+                            {
                                 let res = String::from(to_string(l, -1, "<lkql_value>"));
                                 pop(l, 1);
                                 res
@@ -326,7 +326,7 @@ impl LuaValue for RuntimeValue {
     fn push_on_stack(&self, l: LuaState) {
         match self {
             RuntimeValue::Integer(i) => push_integer(l, *i),
-            RuntimeValue::String(s) => push_string(l, &s),
+            RuntimeValue::String(s) => push_string(l, s),
             RuntimeValue::Function(f) => f.push_on_stack_with_uv(l, 0),
             RuntimeValue::FromBuilder(builder) => builder(l),
         }

@@ -114,7 +114,7 @@ fn main() {
 
     // Run the provided script if any
     if let Some(ref script) = args.script {
-        ctx.just_run_lkql_file(&script);
+        ctx.just_run_lkql_file(script);
     }
 
     // If required, display timings collected by the execution context

@@ -54,6 +54,12 @@ impl DiagnosticCollector {
     }
 }
 
+impl Default for DiagnosticCollector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl From<Diagnostic> for DiagnosticCollector {
     fn from(value: Diagnostic) -> Self {
         Self { diagnostics: vec![value] }
@@ -71,7 +77,7 @@ impl<'a> IntoIterator for &'a DiagnosticCollector {
     type IntoIter = slice::Iter<'a, Diagnostic>;
 
     fn into_iter(self) -> Self::IntoIter {
-        (&self.diagnostics).into_iter()
+        self.diagnostics.iter()
     }
 }
 
@@ -97,6 +103,12 @@ impl From<std::io::Error> for Diagnostic {
 impl From<liblkqllang::Exception> for Diagnostic {
     fn from(value: liblkqllang::Exception) -> Self {
         Self::error_msg(value.information)
+    }
+}
+
+impl From<liblkqllang::Exception> for Box<Diagnostic> {
+    fn from(value: liblkqllang::Exception) -> Self {
+        Self::new(Diagnostic::from(value))
     }
 }
 
@@ -215,7 +227,7 @@ impl Diagnostic {
             title: Some(String::from(error_template.title)),
             message: error_template.render_message(message_args),
             location: Some(location.clone()),
-            hints: hints,
+            hints,
             stack_trace: vec![],
         }
     }
@@ -237,7 +249,7 @@ impl Diagnostic {
             message: error_template.render_message(message_args),
             location: Some(location.clone()),
             hints: vec![],
-            stack_trace: stack_trace,
+            stack_trace,
         }
     }
 
@@ -300,7 +312,7 @@ impl Diagnostic {
         if let Some(ref location) = self.location {
             // Create a new diagnostic builder
             let rep_builder =
-                Report::build(self.kind.to_ariadne_kind(), location.to_span(source_repo))
+                Report::build(self.kind.as_ariadne_kind(), location.to_span(source_repo))
                     // Add the report title
                     .with_message(self.title.as_ref().unwrap_or(&format!(
                         "Untitled {} diagnostic",
@@ -377,7 +389,7 @@ pub enum DiagnosticKind {
 }
 
 impl DiagnosticKind {
-    fn to_ariadne_kind(&self) -> ReportKind<'_> {
+    fn as_ariadne_kind(&self) -> ReportKind<'_> {
         ReportKind::Custom(self.label(), self.color())
     }
 

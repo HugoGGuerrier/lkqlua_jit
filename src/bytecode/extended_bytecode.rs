@@ -42,7 +42,7 @@ impl ExtendedBytecodeUnit {
     pub fn to_bytecode_unit(&self) -> BytecodeUnit {
         BytecodeUnit {
             prototypes: self.prototypes.iter().map(|p| p.to_prototype()).collect(),
-            source_name: String::from(self.source.to_string()),
+            source_name: self.source.to_string(),
         }
     }
 }
@@ -101,7 +101,7 @@ impl ExtendedPrototype {
             is_variadic: self.is_variadic,
             has_ffi: self.has_ffi,
             arg_count: self.arg_count as u8,
-            frame_size: self.frame_size as u8,
+            frame_size: self.frame_size,
             instructions: self.instructions.to_instructions(&self.origin_location),
             up_values: self.up_values.clone(),
             complex_consts: self.complex_consts.clone(),
@@ -152,6 +152,12 @@ impl<'a> Iterator for IntoIter<'a> {
             self.current_index += index_increment;
             res
         })
+    }
+}
+
+impl Default for ExtendedInstructionBuffer {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -327,13 +333,11 @@ impl ExtendedInstructionBuffer {
     /// the it is labeling.
     pub fn label_map(&self) -> HashMap<Label, usize> {
         let mut res: HashMap<Label, usize> = HashMap::new();
-        self.into_iter()
-            .for_each(|(index, inst)| match inst.variant {
-                ExtendedInstructionVariant::Label(l) => {
-                    res.insert(l, index);
-                }
-                _ => (),
-            });
+        self.into_iter().for_each(|(index, inst)| {
+            if let ExtendedInstructionVariant::Label(l) = inst.variant {
+                res.insert(l, index);
+            }
+        });
         res
     }
 

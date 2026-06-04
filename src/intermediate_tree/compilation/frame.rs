@@ -37,7 +37,7 @@ pub enum FrameVariant {
     Semantic {
         /// Array representing all the slots in the current semantic frame,
         /// an array element is set to `true` when it is currently used.
-        occupied_slots: [bool; u8::MAX as usize],
+        occupied_slots: Box<[bool; u8::MAX as usize]>,
 
         /// Maximum number of slots that are occupied simultaneously.
         maximum_size: u8,
@@ -63,7 +63,7 @@ impl Frame {
             bindings: HashMap::new(),
             let_values: HashMap::new(),
             variant: FrameVariant::Semantic {
-                occupied_slots: [false; u8::MAX as usize],
+                occupied_slots: Box::new([false; u8::MAX as usize]),
                 maximum_size: 0,
                 up_values: HashMap::new(),
             },
@@ -141,10 +141,10 @@ impl Frame {
 
         // Now we know we are in a semantic frame, we start by looking in the
         // frame up-values.
-        if let FrameVariant::Semantic { up_values, .. } = &self.variant {
-            if let Some(up_value) = up_values.get(name) {
-                return Some(up_value.clone());
-            }
+        if let FrameVariant::Semantic { up_values, .. } = &self.variant
+            && let Some(up_value) = up_values.get(name)
+        {
+            return Some(up_value.clone());
         }
 
         // If the up-value is not already in the frame ones, we try searching
@@ -241,7 +241,7 @@ impl Frame {
     pub fn release_slots(&mut self, slots: SlotRange) {
         match &mut self.variant {
             FrameVariant::Semantic { occupied_slots: available_slots, .. } => {
-                for slot in slots.to_range() {
+                for slot in slots.as_range() {
                     available_slots[slot as usize] = false;
                 }
             }
@@ -279,9 +279,7 @@ impl Frame {
                     // we check if this is enough.
                     if i - start_bound == count {
                         if update_frame {
-                            for j in start_bound..i {
-                                available_slots[j] = true;
-                            }
+                            available_slots[start_bound..i].fill(true);
                             *maximum_size = cmp::max(i as u8, *maximum_size);
                         }
                         return SlotRange::new(start_bound as u8, i as u8 - 1);
@@ -408,7 +406,7 @@ impl SlotRange {
 
     /// Get a standard range from this slot range to iterate over all slots in
     /// the range.
-    fn to_range(&self) -> Range<u8> {
+    fn as_range(&self) -> Range<u8> {
         self.first..self.last + 1
     }
 

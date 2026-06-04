@@ -73,7 +73,7 @@ impl Node {
                                 }
                                 _ => None,
                             };
-                            result.map(|v| ConstantValueVariant::Int(v))
+                            result.map(ConstantValueVariant::Int)
                         }
                         _ => None,
                     }
@@ -195,7 +195,7 @@ impl Node {
                     ConstantValueVariant::Object(items) => items
                         .iter()
                         .find(|(s, _)| s == &suffix.text)
-                        .and_then(|(_, constant_result)| Some(constant_result.variant.clone())),
+                        .map(|(_, constant_result)| constant_result.variant.clone()),
                     _ => None,
                 }),
                 NodeVariant::IndexExpr { indexed_val, index, is_safe } => {
@@ -350,15 +350,12 @@ impl ConstantValue {
         match &self.variant {
             ConstantValueVariant::Int(value) => {
                 if value >= &BigInt::from(i32::MIN) && value <= &BigInt::from(i32::MAX) {
-                    let value_le_bytes = value.to_signed_bytes_le();
-                    let mut le_bytes = [0 as u8; 4];
-                    for i in 0..le_bytes.len() {
-                        le_bytes[i] = *value_le_bytes.get(i).unwrap_or(if value < &BigInt::ZERO {
-                            &0xFF
-                        } else {
-                            &0
-                        });
-                    }
+                    let mut le_bytes = [if value < &BigInt::ZERO { 0xFF_u8 } else { 0_u8 }; 4];
+                    value
+                        .to_signed_bytes_le()
+                        .iter()
+                        .enumerate()
+                        .for_each(|(i, b)| le_bytes[i] = *b);
                     Some(NumericConstant::Integer(i32::from_le_bytes(le_bytes)))
                 } else {
                     None
@@ -377,15 +374,12 @@ impl ConstantValue {
             }
             ConstantValueVariant::Int(value) => {
                 if value >= &BigInt::from(i32::MIN) && value <= &BigInt::from(i32::MAX) {
-                    let value_le_bytes = value.to_signed_bytes_le();
-                    let mut le_bytes = [0 as u8; 4];
-                    for i in 0..le_bytes.len() {
-                        le_bytes[i] = *value_le_bytes.get(i).unwrap_or(if value < &BigInt::ZERO {
-                            &0xFF
-                        } else {
-                            &0
-                        });
-                    }
+                    let mut le_bytes = [if value < &BigInt::ZERO { 0xFF_u8 } else { 0_u8 }; 4];
+                    value
+                        .to_signed_bytes_le()
+                        .iter()
+                        .enumerate()
+                        .for_each(|(i, b)| le_bytes[i] = *b);
                     Some(TableConstantElement::Integer(i32::from_le_bytes(le_bytes)))
                 } else {
                     None
