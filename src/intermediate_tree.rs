@@ -8,6 +8,7 @@
 
 use crate::{
     builtins::{traits::BuiltinTrait, types::BuiltinType},
+    errors::ErrorTemplate,
     sources::SourceSection,
 };
 use std::{
@@ -189,12 +190,10 @@ pub enum NodeVariant {
     DottedExpr {
         prefix: Box<Node>,
         suffix: Identifier,
-        is_safe: bool,
     },
     IndexExpr {
         indexed_val: Box<Node>,
         index: Box<Node>,
-        is_safe: bool,
     },
     InClause {
         value: Box<Node>,
@@ -209,6 +208,8 @@ pub enum NodeVariant {
         body: Vec<Node>,
         val: Box<Node>,
     },
+
+    // --- List comprehension
     LazyComprehension {
         source_iterables: Vec<Node>,
         body_index: u16,
@@ -247,30 +248,24 @@ pub enum NodeVariant {
     },
 
     // --- Lexical scope introduction
-    /// Introduce a lexical scope in the tree.
     InLexicalScope {
         local_symbols: Vec<Identifier>,
         expr: Box<Node>,
     },
 
     // --- Symbol introduction
-    /// Standard local symbol initialization.
     InitLocal {
         symbol: Identifier,
         val: Box<Node>,
     },
-    /// Special local symbol initialization for function-like values. This node
-    /// must be used for recursion and debug purposes.
     InitLocalFun(u16),
     ImportModule {
         name: Identifier,
         file: PathBuf,
     },
 
-    // --- Symbol accesses
+    // --- Symbol access
     ReadSymbol(Identifier),
-
-    // --- Lambda function access
     LambdaFun(u16),
 
     // --- Let expression
@@ -286,15 +281,10 @@ pub enum NodeVariant {
     Read(usize),
 
     // --- Type checkers
-    /// This node evaluates to `true` at runtime if the sub-expression is an
-    /// instance of the required type.
     InstanceOf {
         expression: Box<Node>,
         expected_type_tag: i32,
     },
-
-    /// Following nodes emit a runtime error if sub-expression isn't matching
-    /// their requirements.
     RequireType {
         expression: Box<Node>,
         expected_type: &'static BuiltinType,
@@ -302,6 +292,12 @@ pub enum NodeVariant {
     RequireTrait {
         expression: Box<Node>,
         required_trait: &'static BuiltinTrait,
+    },
+
+    // --- Error emission
+    RuntimeError {
+        error_template: &'static ErrorTemplate,
+        message_args: Vec<Node>,
     },
 
     // --- Literals
@@ -325,7 +321,7 @@ impl Node {
     /// Create a new node, with the same location as this one, with the
     /// provided variant.
     pub fn related_node(&self, variant: NodeVariant) -> Self {
-        Self::new(self.origin_location.clone(), variant)
+        Self::new(self.origin_location, variant)
     }
 
     // --- Pretty printing
@@ -343,18 +339,16 @@ impl Node {
                     ("named_args", Self::pretty_print_labeled_vec(named_args, child_level)),
                 ],
             ),
-            NodeVariant::DottedExpr { prefix, suffix, is_safe } => (
+            NodeVariant::DottedExpr { prefix, suffix } => (
                 "DottedExpr",
                 &[
-                    ("is_safe", is_safe.to_string()),
                     ("prefix", prefix.pretty_print(child_level)),
                     ("suffix", format!("\"{}\"", suffix.text)),
                 ],
             ),
-            NodeVariant::IndexExpr { indexed_val, index, is_safe } => (
+            NodeVariant::IndexExpr { indexed_val, index } => (
                 "IndexExpr",
                 &[
-                    ("is_safe", is_safe.to_string()),
                     ("indexed_val", indexed_val.pretty_print(child_level)),
                     ("index", index.pretty_print(child_level)),
                 ],
@@ -495,6 +489,13 @@ impl Node {
                 &[
                     ("expression", expression.pretty_print(child_level)),
                     ("required_trait", required_trait.name.to_string()),
+                ],
+            ),
+            NodeVariant::RuntimeError { error_template, message_args } => (
+                "RuntimeError",
+                &[
+                    ("error_template", format!("\"{}\"", error_template.title)),
+                    ("message_args", format!("{:?}", message_args)),
                 ],
             ),
             NodeVariant::NilLiteral => ("NilLiteral", &[]),
@@ -689,12 +690,6 @@ impl Identifier {
     /// Create a new identifier object.
     pub fn new(origin_location: SourceSection, text: String) -> Self {
         Self { origin_location, text }
-    }
-
-    /// Create a new node, with the same location as this identifier, with the
-    /// provided variant.
-    pub fn related_node(&self, variant: NodeVariant) -> Node {
-        Node::new(self.origin_location.clone(), variant)
     }
 }
 

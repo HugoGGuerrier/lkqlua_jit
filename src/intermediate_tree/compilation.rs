@@ -25,9 +25,9 @@ use crate::{
     diagnostics::{Diagnostic, DiagnosticCollector, Hint},
     errors::{
         DIV_BY_ZERO, DUPLICATED_KEY, DUPLICATED_SYMBOL, ErrorInstance, ErrorInstanceArg,
-        ErrorTemplate, INDEX_OUT_OF_BOUNDS, MISSING_TRAIT, NO_VALUE_FOR_PARAM, NOT_UNIT_BLOCK_ELEM,
-        NULL_DOT_RECEIVER, POS_AND_NAMED_VALUE_FOR_PARAM, PREVIOUS_SYMBOL_HINT,
-        UNINITIALIZED_SYMBOL, UNKNOWN_MEMBER, UNKNOWN_SYMBOL, WRONG_TYPE,
+        ErrorTemplate, MISSING_TRAIT, NO_VALUE_FOR_PARAM, NOT_UNIT_BLOCK_ELEM,
+        POS_AND_NAMED_VALUE_FOR_PARAM, PREVIOUS_SYMBOL_HINT, UNINITIALIZED_SYMBOL, UNKNOWN_MEMBER,
+        UNKNOWN_SYMBOL, WRONG_TYPE,
     },
     intermediate_tree::{
         ArithOperator, ArithOperatorVariant, CompOperator, CompOperatorVariant, ExecutionUnit,
@@ -359,7 +359,7 @@ impl ExecutionUnit {
                     complex_consts: data.constants.complex_constants,
                     numeric_consts: data.constants.numeric_constants,
                     name: self.name.clone(),
-                    origin_location: self.origin_location.clone(),
+                    origin_location: self.origin_location,
                     variable_data: data
                         .dead_bindings
                         .iter()
@@ -423,24 +423,43 @@ impl Node {
             }
 
             // --- Composite expressions
-            NodeVariant::DottedExpr { prefix, suffix, is_safe } => {
+            NodeVariant::DottedExpr { prefix, suffix } => {
+                // Prepare working labels
+                let next_label = ctx.instructions.new_label();
+
+                // Compile the prefix node
                 let prefix_access = prefix.compile_as_access(ctx, Some(result_slot));
-                Self::compile_dot_access(
+
+                // Then we get the table member corresponding to the suffix
+                emit_table_member_read(
                     ctx,
+                    Some(&self.origin_location),
                     result_slot,
-                    &self.origin_location,
                     prefix_access.slot(),
-                    suffix,
-                    *is_safe,
+                    &suffix.text,
                 );
                 prefix_access.release(ctx);
+
+                // Emit post access check
+                ctx.instructions
+                    .ad(&self.origin_location, ISNEP, result_slot, PRIM_NIL);
+                ctx.goto(next_label);
+                emit_runtime_error(
+                    ctx,
+                    Some(&suffix.origin_location),
+                    &UNKNOWN_MEMBER,
+                    &[ErrorInstanceArg::Static(suffix.text.clone())],
+                );
+
+                // Label the next instruction
+                ctx.instructions.label(next_label);
             }
-            NodeVariant::IndexExpr { indexed_val, index, is_safe } => {
-                // Get the access to the indexed value and to the index
+            NodeVariant::IndexExpr { indexed_val, index } => {
+                // Compile the indexed value and the index
                 let indexed_value_access = indexed_val.compile_as_access(ctx, Some(result_slot));
                 let index_access = index.compile_as_access(ctx, None);
 
-                // Emit code to the the value at the specified index
+                // Emit indexing instruction
                 ctx.instructions.abc(
                     &self.origin_location,
                     TGETV,
@@ -448,34 +467,10 @@ impl Node {
                     indexed_value_access.slot(),
                     index_access.slot(),
                 );
+
+                // Finally, release reserved slot
                 indexed_value_access.release(ctx);
-
-                // Emit post access check
-                let next_label = ctx.instructions.new_label();
-                ctx.instructions
-                    .ad(&self.origin_location, ISNEP, result_slot, PRIM_NIL);
-                ctx.goto(next_label);
-                if *is_safe {
-                    emit_global_read(
-                        ctx,
-                        Some(&self.origin_location),
-                        result_slot,
-                        UNIT_SINGLETON_GLOBAL_NAME,
-                    );
-                } else {
-                    emit_runtime_error(
-                        ctx,
-                        Some(&index.origin_location),
-                        &INDEX_OUT_OF_BOUNDS,
-                        &[ErrorInstanceArg::LocalValue(index_access.slot())],
-                    );
-                }
-
-                // Release index value access accesses
                 index_access.release(ctx);
-
-                // Label the next instruction
-                ctx.instructions.label(next_label);
             }
             NodeVariant::InClause { value, collection } => {
                 // First compile the value to look for
@@ -1025,6 +1020,30 @@ impl Node {
                 }
             }
 
+            // --- Error emission
+            NodeVariant::RuntimeError { error_template, message_args } => {
+                // Create vectors to store error arguments and slots to release
+                let mut error_args = Vec::with_capacity(message_args.len());
+                let mut slots_to_release = Vec::new();
+
+                // Compile message arguments node, optimizing constant ones
+                for message_arg in message_args {
+                    if let Some(static_value) = message_arg.eval_as_constant() {
+                        error_args.push(ErrorInstanceArg::Static(static_value.to_string()));
+                    } else {
+                        let arg_access = message_arg.compile_as_access(ctx, None);
+                        error_args.push(ErrorInstanceArg::LocalValue(arg_access.slot()));
+                        slots_to_release.push(arg_access);
+                    }
+                }
+
+                // Emit the code to raise the error at runtime
+                emit_runtime_error(ctx, Some(&self.origin_location), error_template, &error_args);
+
+                // Finally, release slots
+                slots_to_release.into_iter().for_each(|s| s.release(ctx));
+            }
+
             // --- Non-trivial literals
             NodeVariant::TupleLiteral(elements) | NodeVariant::ListLiteral(elements) => {
                 // Compile nodes inside the tuple literals and place them in a table
@@ -1051,7 +1070,7 @@ impl Node {
                                 slice::from_ref(&key.text),
                                 vec![Hint::new(
                                     String::from("Previous key declared here"),
-                                    previous_key.origin_location.clone(),
+                                    previous_key.origin_location,
                                 )],
                             ));
                     } else {
@@ -1847,55 +1866,6 @@ impl Node {
         ctx.frame.borrow_mut().release_slot(unit_tmp);
     }
 
-    /// Util function factorizing the compilation process of a (potentially
-    /// safe) dot access. This function also emit the code to check the member
-    /// exists in the accessed prefix.
-    fn compile_dot_access(
-        ctx: &mut CompilationContext,
-        result_slot: u8,
-        origin_location: &SourceSection,
-        prefix: u8,
-        suffix: &Identifier,
-        is_safe: bool,
-    ) {
-        // Prepare working labels
-        let do_access_label = ctx.instructions.new_label();
-        let next_label = ctx.instructions.new_label();
-
-        // First we check if the prefix is null
-        let null_tmp = ctx.frame.borrow_mut().get_slot();
-        emit_global_read(ctx, Some(origin_location), null_tmp, NULL_SINGLETON_GLOBAL_NAME);
-        ctx.instructions
-            .ad(origin_location, ISNEV, prefix, null_tmp as u16);
-        ctx.goto(do_access_label);
-        if is_safe {
-            ctx.instructions
-                .ad(origin_location, MOV, result_slot, null_tmp as u16);
-            ctx.goto(next_label);
-        } else {
-            emit_runtime_error(ctx, Some(origin_location), &NULL_DOT_RECEIVER, &[]);
-        }
-        ctx.frame.borrow_mut().release_slot(null_tmp);
-
-        // Then we get the table member corresponding to the suffix
-        ctx.instructions.label(do_access_label);
-        emit_table_member_read(ctx, Some(origin_location), result_slot, prefix, &suffix.text);
-
-        // Emit post access check
-        ctx.instructions
-            .ad(origin_location, ISNEP, result_slot, PRIM_NIL);
-        ctx.goto(next_label);
-        emit_runtime_error(
-            ctx,
-            Some(&suffix.origin_location),
-            &UNKNOWN_MEMBER,
-            &[ErrorInstanceArg::Static(suffix.text.clone())],
-        );
-
-        // Label the next instruction
-        ctx.instructions.label(next_label);
-    }
-
     /// Util function to compile a type requirement operation. This function
     /// first tries to determine the type of `expr_to_check` statically, and
     /// if it is not possible, the code require to check it at runtime is
@@ -2607,7 +2577,7 @@ impl<'a> CompilationContext<'a> {
                         &[&symbol.text],
                         vec![Hint::new(
                             String::from(PREVIOUS_SYMBOL_HINT),
-                            previous_binding.declaration_location.clone(),
+                            previous_binding.declaration_location,
                         )],
                     ));
             } else {

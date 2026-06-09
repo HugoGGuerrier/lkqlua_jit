@@ -12,9 +12,10 @@ use crate::{
     },
     diagnostics::{Diagnostic, DiagnosticCollector, Hint},
     errors::{
-        AMBIGUOUS_IMPORT, INVALID_SELECTOR_CALL, MODULE_NOT_FOUND, MULTIPLE_SPLAT_PATTERNS,
-        POS_AFTER_NAMED_ARGUMENT, PREVIOUS_NAMED_ARG_HINT, PREVIOUS_SPLAT_PATTERN_HINT,
-        SUBPATTERN_AFTER_SPLAT, UNKNOWN_NODE_TYPE,
+        AMBIGUOUS_IMPORT, INDEX_OUT_OF_BOUNDS, INVALID_SELECTOR_CALL, MODULE_NOT_FOUND,
+        MULTIPLE_SPLAT_PATTERNS, NULL_DOT_RECEIVER, POS_AFTER_NAMED_ARGUMENT,
+        PREVIOUS_NAMED_ARG_HINT, PREVIOUS_SPLAT_PATTERN_HINT, SUBPATTERN_AFTER_SPLAT,
+        UNKNOWN_NODE_TYPE,
     },
     intermediate_tree::{
         ArithOperator, ArithOperatorVariant, CompOperator, CompOperatorVariant, ExecutionUnit,
@@ -24,7 +25,7 @@ use crate::{
     lowering::{LoweringContext, unescape_string},
     sources::{Location, SourceId, SourceSection},
 };
-use liblkqllang::{BaseFunction, Exception, LkqlNode, SplatPattern};
+use liblkqllang::{BaseFunction, LkqlNode};
 use std::{
     env,
     path::{Path, PathBuf},
@@ -68,7 +69,7 @@ impl ExecutionUnit {
         ctx: &mut LoweringContext<LkqlNode>,
     ) -> Result<Self, Box<Diagnostic>> {
         // Create the origin location of the execution unit
-        let origin_location = SourceSection::from_lkql_node(ctx.lowered_source, node)?;
+        let l = loc(ctx, node);
 
         // First, we get the name of the currently lowered execution unit.
         let name = match &node {
@@ -103,22 +104,19 @@ impl ExecutionUnit {
         let variant = match &node {
             LkqlNode::TopLevelList(top_level) => {
                 // Lower the top level elements
-                let mut module_elements = Vec::new();
+                let mut elements = Vec::new();
                 for maybe_top_level_elem in top_level {
                     if let Some(top_level_elem) = maybe_top_level_elem? {
-                        module_elements.push(Node::lower_lkql_node(ctx, &top_level_elem)?);
+                        elements.push(Node::lower_lkql_node(ctx, &top_level_elem)?);
                     }
                 }
 
                 // Create the resulting module
-                ExecutionUnitVariant::Module {
-                    symbols: all_local_symbols(node, ctx)?,
-                    elements: module_elements,
-                }
+                ExecutionUnitVariant::Module { symbols: all_local_symbols(node, ctx)?, elements }
             }
             LkqlNode::FunDecl(_) | LkqlNode::AnonymousFunction(_) => {
                 // Get the function name, parameters and body nodes
-                let (params_node, body_node) = match &node {
+                let (lkql_params, lkql_body) = match &node {
                     LkqlNode::FunDecl(fun_decl) => match fun_decl.f_fun_expr()? {
                         LkqlNode::NamedFunction(named_fun) => {
                             (named_fun.f_parameters()?, named_fun.f_body_expr()?)
@@ -133,12 +131,11 @@ impl ExecutionUnit {
 
                 // Then lower the function parameters
                 let mut params = Vec::new();
-                for maybe_param_decl in &params_node {
+                for maybe_param_decl in &lkql_params {
                     match maybe_param_decl? {
-                        Some(LkqlNode::ParameterDecl(param_decl)) => {
-                            let name =
-                                Identifier::from_lkql_node(&param_decl.f_param_identifier()?, ctx)?;
-                            let default_expr = param_decl
+                        Some(LkqlNode::ParameterDecl(lkql_param_decl)) => {
+                            let name = id(ctx, &lkql_param_decl.f_param_identifier()?);
+                            let default_expr = lkql_param_decl
                                 .f_default_expr()?
                                 .map(|n| Node::lower_lkql_node(ctx, &n))
                                 .transpose()?;
@@ -151,76 +148,67 @@ impl ExecutionUnit {
                 // Then create the function execution unit variant
                 ExecutionUnitVariant::Function {
                     params,
-                    body: Node::lower_lkql_node(ctx, &body_node)?,
+                    body: Node::lower_lkql_node(ctx, &lkql_body)?,
                 }
             }
             LkqlNode::ListComprehension(list_comp) => {
                 // Get the collection bindings in the list comprehension, those
-                // are going to be the parameters of the created function
-                let collection_bindings = list_comp
+                // are going to be the parameters of the created function.
+                let params = list_comp
                     .f_generators()?
                     .into_iter()
                     .map(|n| -> Result<Identifier, Box<Diagnostic>> {
                         match n? {
                             Some(LkqlNode::ListCompAssoc(assoc)) => {
-                                Ok(Identifier::from_lkql_node(&assoc.f_binding_name()?, ctx)?)
+                                Ok(id(ctx, &assoc.f_binding_name()?))
                             }
                             _ => unreachable!(),
                         }
                     })
-                    .collect::<Result<_, _>>();
+                    .collect::<Result<_, _>>()?;
 
-                // Create the intermediate node representing the body of the
-                // function.
+                // Lower the list comprehension mapping logic
+                let mapping = Node::lower_lkql_node(ctx, &list_comp.f_expr()?)?;
+
+                // If there is a guard, wrap the mapping node inside it
                 let body = match list_comp.f_guard()? {
-                    Some(guard) => Node::new(
-                        origin_location.clone(),
+                    Some(lkql_guard) => n(
+                        l,
                         NodeVariant::IfExpr {
-                            condition: Box::new(Node::lower_lkql_node(ctx, &guard)?),
-                            consequence: Box::new(Node::lower_lkql_node(
-                                ctx,
-                                &list_comp.f_expr()?,
-                            )?),
-                            alternative: Box::new(Node::new(
-                                origin_location.clone(),
-                                NodeVariant::NilLiteral,
-                            )),
+                            condition: Box::new(Node::lower_lkql_node(ctx, &lkql_guard)?),
+                            consequence: Box::new(mapping),
+                            alternative: bn(l, NodeVariant::NilLiteral),
                         },
                     ),
-                    None => Node::lower_lkql_node(ctx, &list_comp.f_expr()?)?,
+                    None => mapping,
                 };
 
                 // Then return the new function execution unit variant
-                ExecutionUnitVariant::RawCallable { params: collection_bindings?, body }
+                ExecutionUnitVariant::RawCallable { params, body }
             }
             LkqlNode::NodePatternSelector(selector_pattern) => {
-                let node_param_name =
-                    Identifier::new(origin_location.clone(), String::from("node"));
-                let node_param_id = ctx.new_tmp_id();
+                // Create a name for the "self" parameter, value input in the
+                // pattern.
+                let self_param_name = id_str(l, "self");
+                let self_param_id = ctx.new_tmp_id();
+
+                // Then, lower the selector pattern matching logic as a
+                // function.
                 ExecutionUnitVariant::Function {
-                    params: vec![(node_param_name.clone(), None)],
-                    body: Node::new(
-                        origin_location.clone(),
-                        NodeVariant::Let {
-                            id: node_param_id,
-                            value: Box::new(Node::new(
-                                origin_location.clone(),
-                                NodeVariant::ReadSymbol(node_param_name),
-                            )),
-                            r#in: Box::new(Node::lower_lkql_pattern(
-                                ctx,
-                                &selector_pattern.f_pattern()?,
-                                node_param_id,
-                            )?),
-                        },
-                    ),
+                    params: vec![(self_param_name.clone(), None)],
+                    body: Node::lower_lkql_pattern(
+                        ctx,
+                        &selector_pattern.f_pattern()?,
+                        self_param_id,
+                    )?
+                    .with_let(self_param_id, n(l, NodeVariant::ReadSymbol(self_param_name))),
                 }
             }
             _ => unreachable!(),
         };
 
         // Finally return the new execution unit
-        Ok(ExecutionUnit::new(origin_location, name, children_units, variant))
+        Ok(ExecutionUnit::new(l, name, children_units, variant))
     }
 }
 
@@ -232,19 +220,13 @@ impl Node {
         node: &LkqlNode,
     ) -> Result<Self, Box<Diagnostic>> {
         // Get the location of the node
-        let origin_location = SourceSection::from_lkql_node(ctx.lowered_source, node)?;
-
-        // Util function used to create a node related to the one currently
-        // lowered. The result node is wrapped in a Box and has the same origin
-        // location os the current one.
-        let related_node =
-            |variant: NodeVariant| Box::new(Node::new(origin_location.clone(), variant));
+        let l = loc(ctx, node);
 
         // Lower the node
         let variant = match node {
             // --- Declarations
             LkqlNode::ValDecl(val_decl) => NodeVariant::InitLocal {
-                symbol: Identifier::from_lkql_node(&val_decl.f_identifier()?, ctx)?,
+                symbol: id(ctx, &val_decl.f_identifier()?),
                 val: Box::new(Self::lower_lkql_node(ctx, &val_decl.f_value()?)?),
             },
             LkqlNode::FunDecl(_) | LkqlNode::SelectorDecl(_) => {
@@ -269,13 +251,12 @@ impl Node {
                 }
 
                 // Now look for the LKQL file corresponding to the module
-                let module_name_node = import.f_name()?;
-                let module_name = module_name_node.text()?;
-                let module_file_name = format!("{module_name}.lkql");
-                let module_files = searching_dirs
+                let module_name = id(ctx, &import.f_name()?);
+                let module_base_file = PathBuf::from(format!("{}.lkql", &module_name.text));
+                let mut module_files = searching_dirs
                     .iter()
                     .filter_map(|d| {
-                        let possible_module_file = d.join(Path::new(&module_file_name));
+                        let possible_module_file = d.join(&module_base_file);
                         if possible_module_file.exists() && possible_module_file.is_file() {
                             Some(possible_module_file)
                         } else {
@@ -285,34 +266,30 @@ impl Node {
                     .collect::<Vec<_>>();
 
                 // Check that there is exactly one matching file
-                let module_file = match &module_files[..] {
-                    [f] => f,
-                    [] => {
-                        ctx.diagnostics.add(Diagnostic::error_from_template(
-                            &origin_location,
-                            &MODULE_NOT_FOUND,
-                            &[module_name],
-                        ));
-                        &PathBuf::new()
-                    }
-                    x => {
-                        ctx.diagnostics.add(Diagnostic::error_from_template(
-                            &origin_location,
-                            &AMBIGUOUS_IMPORT,
-                            &[x.iter()
-                                .map(|f| f.to_string_lossy())
-                                .collect::<Vec<_>>()
-                                .join(" & ")],
-                        ));
-                        &PathBuf::new()
-                    }
+                let module_file = if module_files.len() == 1 {
+                    module_files.remove(0)
+                } else if module_files.is_empty() {
+                    ctx.diagnostics.add(Diagnostic::error_from_template(
+                        &l,
+                        &MODULE_NOT_FOUND,
+                        &[&module_name.text],
+                    ));
+                    PathBuf::new()
+                } else {
+                    ctx.diagnostics.add(Diagnostic::error_from_template(
+                        &l,
+                        &AMBIGUOUS_IMPORT,
+                        &[&module_files
+                            .iter()
+                            .map(|f| f.to_string_lossy())
+                            .collect::<Vec<_>>()
+                            .join(" & ")],
+                    ));
+                    PathBuf::new()
                 };
 
                 // Finally return the created node variant
-                NodeVariant::ImportModule {
-                    name: Identifier::from_lkql_node(&module_name_node, ctx)?,
-                    file: module_file.clone(),
-                }
+                NodeVariant::ImportModule { name: module_name, file: module_file }
             }
 
             // --- Function call
@@ -333,12 +310,12 @@ impl Node {
                 match name {
                     LkqlNode::DotAccess(_) | LkqlNode::SafeAccess(_) => {
                         // Get the dot left part and the field name
-                        let (receiver, member, is_safe) = match name {
-                            LkqlNode::DotAccess(dot_access) => {
-                                (dot_access.f_receiver(), dot_access.f_member(), false)
+                        let (prefix, member, is_safe) = match name {
+                            LkqlNode::DotAccess(ref dot_access) => {
+                                (dot_access.f_receiver()?, dot_access.f_member()?, false)
                             }
-                            LkqlNode::SafeAccess(safe_access) => {
-                                (safe_access.f_receiver(), safe_access.f_member(), true)
+                            LkqlNode::SafeAccess(ref safe_access) => {
+                                (safe_access.f_receiver()?, safe_access.f_member()?, true)
                             }
                             _ => unreachable!(),
                         };
@@ -346,44 +323,58 @@ impl Node {
                         // Create a new named temporary value to compute the
                         // prefix part of the dot access only once.
                         let prefix_id = ctx.new_tmp_id();
-                        let prefix_ref =
-                            Node::new(origin_location.clone(), NodeVariant::Read(prefix_id));
+                        let prefix_ref = bn(loc(ctx, &prefix), NodeVariant::Read(prefix_id));
 
                         // Create a callee access node that use the prefix
                         // temporary value created before.
-                        let callee = related_node(NodeVariant::DottedExpr {
-                            prefix: Box::new(prefix_ref.clone()),
-                            suffix: Identifier::from_lkql_node(&member?, ctx)?,
-                            is_safe,
-                        });
+                        let callee = bn(
+                            loc(ctx, &name),
+                            lower_dot_access(
+                                ctx,
+                                &loc(ctx, &name),
+                                prefix_ref.clone(),
+                                &member,
+                                is_safe,
+                            ),
+                        );
 
                         // Then create a vector argument containing the callee
                         // that is used in the case of a method call.
                         let mut method_positional_args = positional_args.clone();
-                        method_positional_args.insert(0, prefix_ref.clone());
+                        method_positional_args.insert(0, *prefix_ref.clone());
 
                         // Finally create a node to check the type of the
                         // prefix and decide at runtime how to act.
-                        NodeVariant::Let {
-                            id: prefix_id,
-                            value: Box::new(Self::lower_lkql_node(ctx, &receiver?)?),
-                            r#in: related_node(NodeVariant::IfExpr {
-                                condition: related_node(NodeVariant::InstanceOf {
-                                    expression: Box::new(prefix_ref),
-                                    expected_type_tag: types::namespace::TYPE.tag,
-                                }),
-                                consequence: related_node(NodeVariant::FunCall {
-                                    callee: callee.clone(),
-                                    positional_args,
-                                    named_args: named_args.clone(),
-                                }),
-                                alternative: related_node(NodeVariant::FunCall {
-                                    callee,
-                                    positional_args: method_positional_args,
-                                    named_args,
-                                }),
-                            }),
-                        }
+                        n(
+                            l,
+                            NodeVariant::IfExpr {
+                                condition: bn(
+                                    l,
+                                    NodeVariant::InstanceOf {
+                                        expression: prefix_ref,
+                                        expected_type_tag: types::namespace::TYPE.tag,
+                                    },
+                                ),
+                                consequence: bn(
+                                    l,
+                                    NodeVariant::FunCall {
+                                        callee: callee.clone(),
+                                        positional_args,
+                                        named_args: named_args.clone(),
+                                    },
+                                ),
+                                alternative: bn(
+                                    l,
+                                    NodeVariant::FunCall {
+                                        callee,
+                                        positional_args: method_positional_args,
+                                        named_args,
+                                    },
+                                ),
+                            },
+                        )
+                        .with_let(prefix_id, Self::lower_lkql_node(ctx, &prefix)?)
+                        .variant
                     }
                     _ => NodeVariant::FunCall {
                         callee: Box::new(Self::lower_lkql_node(ctx, &name)?),
@@ -395,25 +386,30 @@ impl Node {
 
             // --- Dotted expression
             LkqlNode::DotAccess(_) | LkqlNode::SafeAccess(_) => {
-                let (receiver, member, is_safe) = match node {
+                // Get prefix and member nodes
+                let (lkql_prefix, lkql_member, is_safe) = match node {
                     LkqlNode::DotAccess(dot_access) => {
-                        (dot_access.f_receiver(), dot_access.f_member(), false)
+                        (dot_access.f_receiver()?, dot_access.f_member()?, false)
                     }
                     LkqlNode::SafeAccess(safe_access) => {
-                        (safe_access.f_receiver(), safe_access.f_member(), true)
+                        (safe_access.f_receiver()?, safe_access.f_member()?, true)
                     }
                     _ => unreachable!(),
                 };
-                NodeVariant::DottedExpr {
-                    prefix: Box::new(Self::lower_lkql_node(ctx, &receiver?)?),
-                    suffix: Identifier::from_lkql_node(&member?, ctx)?,
-                    is_safe,
-                }
+
+                // Create the identifier and access node for the prefix value
+                let prefix_id = ctx.new_tmp_id();
+                let prefix_ref = bn(loc(ctx, &lkql_prefix), NodeVariant::Read(prefix_id));
+
+                // Then, return the new node
+                n(l, lower_dot_access(ctx, &l, prefix_ref, &lkql_member, is_safe))
+                    .with_let(prefix_id, Node::lower_lkql_node(ctx, &lkql_prefix)?)
+                    .variant
             }
 
             // --- Index expression
             LkqlNode::Indexing(_) | LkqlNode::SafeIndexing(_) => {
-                let (coll_expr, index, is_safe) = match node {
+                let (lkql_collection, lkql_index, is_safe) = match node {
                     LkqlNode::Indexing(indexing) => {
                         (indexing.f_collection_expr()?, indexing.f_index_expr()?, false)
                     }
@@ -422,17 +418,54 @@ impl Node {
                     }
                     _ => unreachable!(),
                 };
-                NodeVariant::IndexExpr {
-                    indexed_val: Box::new(
-                        Self::lower_lkql_node(ctx, &coll_expr)?
-                            .with_trait_requirement(&traits::indexable::TRAIT)?,
+
+                // Prepare the index reference and lower the index node
+                let index_id = ctx.new_tmp_id();
+                let index_ref = n(loc(ctx, &lkql_index), NodeVariant::Read(index_id));
+                let index = Self::lower_lkql_node(ctx, &lkql_index)?
+                    .with_type_requirement(&types::int::TYPE);
+
+                // Create the node to access the indexed value
+                let indexing = n(
+                    l,
+                    NodeVariant::IndexExpr {
+                        indexed_val: Box::new(
+                            Self::lower_lkql_node(ctx, &lkql_collection)?
+                                .with_trait_requirement(&traits::indexable::TRAIT),
+                        ),
+                        index: Box::new(index_ref.clone()),
+                    },
+                );
+
+                // Create the node to execute of the index is out of bounds
+                let if_index_out_of_bounds = n(
+                    loc(ctx, &lkql_index),
+                    if is_safe {
+                        NodeVariant::UnitLiteral
+                    } else {
+                        NodeVariant::RuntimeError {
+                            error_template: &INDEX_OUT_OF_BOUNDS,
+                            message_args: vec![index_ref],
+                        }
+                    },
+                );
+
+                // Create an identifier for the result
+                let result_id = ctx.new_tmp_id();
+                let result_ref = n(l, NodeVariant::Read(result_id));
+
+                // Then, return the indexing node
+                n(
+                    l,
+                    result_ref.clone().with_equality_check(
+                        NodeVariant::NilLiteral,
+                        if_index_out_of_bounds,
+                        result_ref,
                     ),
-                    index: Box::new(
-                        Self::lower_lkql_node(ctx, &index)?
-                            .with_type_requirement(&types::int::TYPE)?,
-                    ),
-                    is_safe,
-                }
+                )
+                .with_let(result_id, indexing)
+                .with_let(index_id, index)
+                .variant
             }
 
             // --- In clause
@@ -440,51 +473,39 @@ impl Node {
                 value: Box::new(Self::lower_lkql_node(ctx, &in_clause.f_value_expr()?)?),
                 collection: Box::new(
                     Self::lower_lkql_node(ctx, &in_clause.f_list_expr()?)?
-                        .with_trait_requirement(&traits::iterable::TRAIT)?,
+                        .with_trait_requirement(&traits::iterable::TRAIT),
                 ),
             },
 
             // --- Is clause
             LkqlNode::IsClause(is_clause) => {
                 let value_id = ctx.new_tmp_id();
-                NodeVariant::Let {
-                    id: value_id,
-                    value: Box::new(Self::lower_lkql_node(ctx, &is_clause.f_node_expr()?)?),
-                    r#in: Box::new(Self::lower_lkql_pattern(
-                        ctx,
-                        &is_clause.f_pattern()?,
-                        value_id,
-                    )?),
-                }
+                Self::lower_lkql_pattern(ctx, &is_clause.f_pattern()?, value_id)?
+                    .with_let(value_id, Self::lower_lkql_node(ctx, &is_clause.f_node_expr()?)?)
+                    .variant
             }
 
             // --- If expression
             LkqlNode::CondExpr(cond_expr) => NodeVariant::IfExpr {
                 condition: Box::new(
                     Self::lower_lkql_node(ctx, &cond_expr.f_condition()?)?
-                        .with_type_requirement(&types::bool::TYPE)?,
+                        .with_type_requirement(&types::bool::TYPE),
                 ),
                 consequence: Box::new(Self::lower_lkql_node(ctx, &cond_expr.f_then_expr()?)?),
                 alternative: cond_expr
                     .f_else_expr()?
                     .map(|n| Self::lower_lkql_node(ctx, &n))
                     .transpose()?
-                    .map_or(
-                        Box::new(Node::new(
-                            SourceSection::from_lkql_node(ctx.lowered_source, node)?,
-                            NodeVariant::BoolLiteral(true),
-                        )),
-                        Box::new,
-                    ),
+                    .map_or(bn(loc(ctx, node), NodeVariant::BoolLiteral(true)), Box::new),
             },
 
             // --- Block expression
             LkqlNode::BlockExpr(block_expr) => {
-                let body_node = block_expr.f_body()?;
-                let mut body = Vec::with_capacity(body_node.children_count()?);
-                for maybe_body_part_node in &body_node {
-                    if let Some(ref body_part_node) = maybe_body_part_node? {
-                        body.push(Self::lower_lkql_node(ctx, body_part_node)?);
+                let lkql_body = block_expr.f_body()?;
+                let mut body = Vec::with_capacity(lkql_body.children_count()?);
+                for maybe_body_part in &lkql_body {
+                    if let Some(ref lkql_body_part) = maybe_body_part? {
+                        body.push(Self::lower_lkql_node(ctx, lkql_body_part)?);
                     }
                 }
                 NodeVariant::BlockExpr {
@@ -504,16 +525,14 @@ impl Node {
                 source_iterables: list_comp
                     .f_generators()?
                     .into_iter()
-                    .map(|n| -> Result<Option<LkqlNode>, Exception> {
-                        Ok(match n? {
-                            Some(LkqlNode::ListCompAssoc(assoc)) => Some(assoc.f_coll_expr()?),
-                            None => None,
+                    .map(|n| -> Result<Node, Box<Diagnostic>> {
+                        Ok(match n?.unwrap() {
+                            LkqlNode::ListCompAssoc(assoc) => {
+                                Self::lower_lkql_node(ctx, &assoc.f_coll_expr()?)?
+                                    .with_trait_requirement(&traits::iterable::TRAIT)
+                            }
                             _ => unreachable!(),
                         })
-                    })
-                    .map(|n| {
-                        let expr = Self::lower_lkql_node(ctx, &n?.unwrap())?;
-                        expr.with_trait_requirement(&traits::iterable::TRAIT)
                     })
                     .collect::<Result<_, Box<Diagnostic>>>()?,
                 body_index: *ctx.child_index_map.get(node).unwrap(),
@@ -527,22 +546,22 @@ impl Node {
             },
             LkqlNode::RelBinOp(rel_bin_op) => NodeVariant::CompBinOp {
                 left: Box::new(Self::lower_lkql_node(ctx, &rel_bin_op.f_left()?)?),
-                operator: CompOperator::lower_lkql_node(&rel_bin_op.f_op()?, ctx)?,
+                operator: CompOperator::lower_lkql_node(&rel_bin_op.f_op()?, ctx),
                 right: Box::new(Self::lower_lkql_node(ctx, &rel_bin_op.f_right()?)?),
             },
             LkqlNode::BinOp(bin_op) => {
-                let operator_node = bin_op.f_op()?;
+                let lkql_operator = bin_op.f_op()?;
                 let left = Self::lower_lkql_node(ctx, &bin_op.f_left()?)?;
                 let right = Self::lower_lkql_node(ctx, &bin_op.f_right()?)?;
-                match &operator_node {
+                match &lkql_operator {
                     LkqlNode::OpAnd(_) | LkqlNode::OpOr(_) => NodeVariant::LogicBinOp {
-                        left: Box::new(left.with_type_requirement(&types::bool::TYPE)?),
-                        operator: LogicOperator::lower_lkql_node(&operator_node, ctx)?,
-                        right: Box::new(right.with_type_requirement(&types::bool::TYPE)?),
+                        left: Box::new(left.with_type_requirement(&types::bool::TYPE)),
+                        operator: LogicOperator::lower_lkql_node(&lkql_operator, ctx)?,
+                        right: Box::new(right.with_type_requirement(&types::bool::TYPE)),
                     },
                     LkqlNode::OpConcat(_) => NodeVariant::MiscBinOp {
                         left: Box::new(left),
-                        operator: MiscOperator::lower_lkql_node(&operator_node, ctx)?,
+                        operator: MiscOperator::lower_lkql_node(&lkql_operator, ctx),
                         right: Box::new(right),
                     },
                     _ => unreachable!(),
@@ -551,16 +570,16 @@ impl Node {
 
             // --- Unary operation
             LkqlNode::UnOp(un_op) => {
+                let lkql_operator = un_op.f_op()?;
                 let operand = Self::lower_lkql_node(ctx, &un_op.f_operand()?)?;
-                let operator_node = un_op.f_op()?;
-                match &operator_node {
+                match &lkql_operator {
                     LkqlNode::OpPlus(_) | LkqlNode::OpMinus(_) => NodeVariant::ArithUnOp {
-                        operator: ArithOperator::lower_lkql_node(&operator_node, ctx)?,
-                        operand: Box::new(operand.with_type_requirement(&types::int::TYPE)?),
+                        operator: ArithOperator::lower_lkql_node(&lkql_operator, ctx)?,
+                        operand: Box::new(operand.with_type_requirement(&types::int::TYPE)),
                     },
                     LkqlNode::OpNot(_) => NodeVariant::LogicUnOp {
-                        operator: LogicOperator::lower_lkql_node(&operator_node, ctx)?,
-                        operand: Box::new(operand.with_type_requirement(&types::bool::TYPE)?),
+                        operator: LogicOperator::lower_lkql_node(&lkql_operator, ctx)?,
+                        operand: Box::new(operand.with_type_requirement(&types::bool::TYPE)),
                     },
                     _ => unreachable!(),
                 }
@@ -579,9 +598,8 @@ impl Node {
                 let mut builder = String::new();
                 for maybe_str_part in &block_string.f_docs()? {
                     if let Some(str_part) = maybe_str_part? {
-                        let text = str_part.text()?;
                         builder.push_str(&unescape_string(
-                            text.trim_start_matches("|\"").trim_start(),
+                            str_part.text()?.trim_start_matches("|\"").trim_start(),
                         ));
                         builder.push('\n');
                     }
@@ -589,9 +607,9 @@ impl Node {
                 NodeVariant::StringLiteral(builder)
             }
             LkqlNode::Tuple(tuple) => {
-                let items_node = tuple.f_exprs()?;
-                let mut items = Vec::with_capacity(items_node.children_count()?);
-                for maybe_item_node in &items_node {
+                let lkql_items = tuple.f_exprs()?;
+                let mut items = Vec::with_capacity(lkql_items.children_count()?);
+                for maybe_item_node in &lkql_items {
                     if let Some(ref item_node) = maybe_item_node? {
                         items.push(Self::lower_lkql_node(ctx, item_node)?);
                     }
@@ -599,9 +617,9 @@ impl Node {
                 NodeVariant::TupleLiteral(items)
             }
             LkqlNode::ListLiteral(list) => {
-                let items_node = list.f_exprs()?;
-                let mut items = Vec::with_capacity(items_node.children_count()?);
-                for maybe_item_node in &items_node {
+                let lkql_items = list.f_exprs()?;
+                let mut items = Vec::with_capacity(lkql_items.children_count()?);
+                for maybe_item_node in &lkql_items {
                     if let Some(ref item_node) = maybe_item_node? {
                         items.push(Self::lower_lkql_node(ctx, item_node)?);
                     }
@@ -609,21 +627,19 @@ impl Node {
                 NodeVariant::ListLiteral(items)
             }
             LkqlNode::ObjectLiteral(object) => {
-                let assocs_node = object.f_assocs()?;
-                let mut assocs = Vec::with_capacity(assocs_node.children_count()?);
-                for maybe_assoc_node in &assocs_node {
+                let lkql_assocs = object.f_assocs()?;
+                let mut assocs = Vec::with_capacity(lkql_assocs.children_count()?);
+                for maybe_assoc_node in &lkql_assocs {
                     if let Some(LkqlNode::ObjectAssoc(ref assoc_node)) = maybe_assoc_node? {
                         assocs.push((
-                            Identifier::from_lkql_node(&assoc_node.f_name()?, ctx)?,
+                            id(ctx, &assoc_node.f_name()?),
                             Self::lower_lkql_node(ctx, &assoc_node.f_expr()?)?,
                         ));
                     }
                 }
                 NodeVariant::ObjectLiteral(assocs)
             }
-            LkqlNode::Identifier(_) => {
-                NodeVariant::ReadSymbol(Identifier::from_lkql_node(node, ctx)?)
-            }
+            LkqlNode::Identifier(_) => NodeVariant::ReadSymbol(id(ctx, node)),
             LkqlNode::AnonymousFunction(_) => {
                 NodeVariant::LambdaFun(*ctx.child_index_map.get(node).unwrap())
             }
@@ -633,7 +649,7 @@ impl Node {
         };
 
         // Create the result node
-        let lowered_node = Node::new(origin_location, variant);
+        let lowered_node = n(l, variant);
 
         // Return the result node, potentially wrapped in a lexical scope
         Ok(if has_lexical_scope(node) {
@@ -672,7 +688,7 @@ impl Node {
                             let (last_id, last_node) = named_args.last().unwrap();
                             ctx.diagnostics.add(
                                 Diagnostic::from_error_template_with_hints::<&str>(
-                                    &SourceSection::from_lkql_node(ctx.lowered_source, arg)?,
+                                    &loc(ctx, arg),
                                     &POS_AFTER_NAMED_ARGUMENT,
                                     &[],
                                     vec![Hint::new(
@@ -687,7 +703,7 @@ impl Node {
                         }
                     }
                     LkqlNode::NamedArg(named_arg) => named_args.push((
-                        Identifier::from_lkql_node(&named_arg.f_arg_name()?, ctx)?,
+                        id(ctx, &named_arg.f_arg_name()?),
                         Self::lower_lkql_node(ctx, &named_arg.f_value_expr()?)?,
                     )),
                     _ => unreachable!(),
@@ -714,36 +730,31 @@ impl Node {
         }
 
         // Get the location of the pattern node
-        let origin_location = SourceSection::from_lkql_node(ctx.lowered_source, node)?;
-
-        // Util function used to create a node related to the one currently
-        // lowered. The result node is wrapped in a Box and has the same origin
-        // location os the current one.
-        let related_node = |variant: NodeVariant| Node::new(origin_location.clone(), variant);
+        let l = loc(ctx, node);
 
         // Util function to combine a predicate vector in a "and" boolean
         // expression.
         let combine_predicates = |mut predicates: Vec<Node>| match predicates.len() {
-            0 => related_node(NodeVariant::BoolLiteral(true)),
+            0 => n(l, NodeVariant::BoolLiteral(true)),
             1 => predicates.remove(0),
             _ => {
                 let mut iter = predicates.into_iter().rev();
                 let init = iter.next().unwrap();
                 iter.fold(init, |res, next| {
-                    related_node(NodeVariant::LogicBinOp {
-                        left: Box::new(next),
-                        operator: LogicOperator::new(
-                            origin_location.clone(),
-                            LogicOperatorVariant::And,
-                        ),
-                        right: Box::new(res),
-                    })
+                    n(
+                        l,
+                        NodeVariant::LogicBinOp {
+                            left: Box::new(next),
+                            operator: LogicOperator::new(l, LogicOperatorVariant::And),
+                            right: Box::new(res),
+                        },
+                    )
                 })
             }
         };
 
         // Create a node to read the matched value
-        let read_value = Box::new(related_node(NodeVariant::Read(matched_value_id)));
+        let matched_value_ref = bn(l, NodeVariant::Read(matched_value_id));
 
         // Lower the pattern not to an intermediate tree node variant
         let variant = match node {
@@ -763,12 +774,9 @@ impl Node {
                     _ => unreachable!(),
                 };
                 NodeVariant::CompBinOp {
-                    left: read_value,
-                    operator: CompOperator::new(
-                        origin_location.clone(),
-                        CompOperatorVariant::Equals,
-                    ),
-                    right: Box::new(related_node(target_literal)),
+                    left: matched_value_ref,
+                    operator: CompOperator::new(l, CompOperatorVariant::Equals),
+                    right: bn(l, target_literal),
                 }
             }
             LkqlNode::NodeKindPattern(node_kind_pattern) => {
@@ -781,12 +789,12 @@ impl Node {
                     .get_type_by_name(&node_type_name);
                 if let Some(node_type) = matched_node_type {
                     NodeVariant::InstanceOf {
-                        expression: read_value,
+                        expression: matched_value_ref,
                         expected_type_tag: node_type.tag,
                     }
                 } else {
                     ctx.diagnostics.add(Diagnostic::error_from_template(
-                        &origin_location,
+                        &l,
                         &UNKNOWN_NODE_TYPE,
                         &[&node_type_name],
                     ));
@@ -797,35 +805,29 @@ impl Node {
             // --- List pattern
             LkqlNode::ListPattern(list_pattern) => {
                 // Create working variables
-                let mut maybe_splat_pattern: Option<SplatPattern> = None;
+                let mut maybe_splat_pattern = None;
                 let sub_patterns_source = list_pattern.f_patterns()?;
 
                 // Start by lowering all sub-patterns
                 let mut sub_patterns = Vec::new();
-                for (i, maybe_sub_pattern_source) in sub_patterns_source
+                for (i, sub_pattern_source) in sub_patterns_source
                     .into_iter()
                     .enumerate()
-                    .filter_map(|(i, c)| c.transpose().map(|c| (i + 1, c)))
+                    .filter_map(|(i, c)| c.transpose().map(|c| (i, c)))
                 {
-                    match maybe_sub_pattern_source? {
-                        LkqlNode::SplatPattern(splat_pattern) => {
+                    match sub_pattern_source? {
+                        splat_pattern @ LkqlNode::SplatPattern(_) => {
                             // Emit an error if a splat pattern has already
                             // been stored.
-                            if let Some(old_splat_pattern) = maybe_splat_pattern {
+                            if let Some(ref previous_splat_pattern) = maybe_splat_pattern {
                                 ctx.diagnostics
                                     .add(Diagnostic::from_error_template_with_hints::<&str>(
-                                        &SourceSection::from_lkql_node(
-                                            ctx.lowered_source,
-                                            &splat_pattern.as_node(),
-                                        )?,
+                                        &loc(ctx, &splat_pattern),
                                         &MULTIPLE_SPLAT_PATTERNS,
                                         &[],
                                         vec![Hint::new(
                                             String::from(PREVIOUS_SPLAT_PATTERN_HINT),
-                                            SourceSection::from_lkql_node(
-                                                ctx.lowered_source,
-                                                &old_splat_pattern.as_node(),
-                                            )?,
+                                            loc(ctx, previous_splat_pattern),
                                         )],
                                     ));
                             }
@@ -839,18 +841,12 @@ impl Node {
                             if let Some(ref splat_pattern) = maybe_splat_pattern {
                                 ctx.diagnostics
                                     .add(Diagnostic::from_error_template_with_hints::<&str>(
-                                        &SourceSection::from_lkql_node(
-                                            ctx.lowered_source,
-                                            &sub_pattern_source,
-                                        )?,
+                                        &loc(ctx, &sub_pattern_source),
                                         &SUBPATTERN_AFTER_SPLAT,
                                         &[],
                                         vec![Hint::new(
                                             String::from(PREVIOUS_SPLAT_PATTERN_HINT),
-                                            SourceSection::from_lkql_node(
-                                                ctx.lowered_source,
-                                                &splat_pattern.as_node(),
-                                            )?,
+                                            loc(ctx, splat_pattern),
                                         )],
                                     ));
                             } else {
@@ -859,21 +855,12 @@ impl Node {
                                     Self::lower_lkql_pattern(ctx, &sub_pattern_source, elem_id)?;
                                 let index_access =
                                     sub_pattern.related_node(NodeVariant::IndexExpr {
-                                        indexed_val: read_value.clone(),
-                                        index: Box::new(
-                                            sub_pattern.related_node(NodeVariant::IntLiteral(
-                                                i.to_string(),
-                                            )),
-                                        ),
-                                        is_safe: false,
+                                        indexed_val: matched_value_ref.clone(),
+                                        index: Box::new(sub_pattern.related_node(
+                                            NodeVariant::IntLiteral((i + 1).to_string()),
+                                        )),
                                     });
-                                sub_patterns.push(sub_pattern.with_wrapper(|n| {
-                                    Ok(NodeVariant::Let {
-                                        id: elem_id,
-                                        value: Box::new(index_access),
-                                        r#in: Box::new(n),
-                                    })
-                                })?);
+                                sub_patterns.push(sub_pattern.with_let(elem_id, index_access));
                             }
                         }
                     }
@@ -885,75 +872,83 @@ impl Node {
                 // Add type checking to subpatterns
                 sub_patterns.insert(
                     0,
-                    related_node(NodeVariant::InstanceOf {
-                        expression: read_value.clone(),
-                        expected_type_tag: types::list::TYPE.tag,
-                    }),
+                    n(
+                        l,
+                        NodeVariant::InstanceOf {
+                            expression: matched_value_ref.clone(),
+                            expected_type_tag: types::list::TYPE.tag,
+                        },
+                    ),
                 );
 
                 // Add the list size checking to subpatterns
                 sub_patterns.insert(
                     1,
-                    related_node(NodeVariant::CompBinOp {
-                        left: Box::new(related_node(NodeVariant::DottedExpr {
-                            prefix: read_value.clone(),
-                            suffix: Identifier::new(
-                                origin_location.clone(),
-                                String::from("length"),
+                    n(
+                        l,
+                        NodeVariant::CompBinOp {
+                            left: bn(
+                                l,
+                                NodeVariant::DottedExpr {
+                                    prefix: matched_value_ref.clone(),
+                                    suffix: id_str(l, "length"),
+                                },
                             ),
-                            is_safe: false,
-                        })),
-                        operator: CompOperator::new(
-                            origin_location.clone(),
-                            if maybe_splat_pattern.is_some() {
-                                CompOperatorVariant::GreaterOrEquals
-                            } else {
-                                CompOperatorVariant::Equals
-                            },
-                        ),
-                        right: Box::new(related_node(NodeVariant::IntLiteral(
-                            sub_pattern_count.to_string(),
-                        ))),
-                    }),
+                            operator: CompOperator::new(
+                                l,
+                                if maybe_splat_pattern.is_some() {
+                                    CompOperatorVariant::GreaterOrEquals
+                                } else {
+                                    CompOperatorVariant::Equals
+                                },
+                            ),
+                            right: bn(l, NodeVariant::IntLiteral(sub_pattern_count.to_string())),
+                        },
+                    ),
                 );
 
                 // If there is a splat pattern with a binding, add its
                 // corresponding initialization at the end of subpatterns
-                if let Some(splat_pattern) = maybe_splat_pattern
+                if let Some(LkqlNode::SplatPattern(splat_pattern)) = maybe_splat_pattern
                     && let Some(binding) = splat_pattern.f_binding()?
                 {
-                    let loc = SourceSection::from_lkql_node(ctx.lowered_source, &binding)?;
-                    let id = Identifier::from_lkql_node(&binding, ctx)?;
-                    let sublist_access = id.related_node(NodeVariant::DottedExpr {
-                        prefix: read_value.clone(),
-                        suffix: Identifier::new(loc.clone(), String::from("sublist")),
-                        is_safe: false,
-                    });
-                    let length_access = id.related_node(NodeVariant::DottedExpr {
-                        prefix: read_value.clone(),
-                        suffix: Identifier::new(loc.clone(), String::from("length")),
-                        is_safe: false,
-                    });
-                    let sublist_call = Box::new(id.related_node(NodeVariant::FunCall {
-                        callee: Box::new(sublist_access),
-                        positional_args: vec![
-                            *read_value,
-                            id.related_node(NodeVariant::IntLiteral(
-                                (sub_pattern_count + 1).to_string(),
-                            )),
-                            length_access,
-                        ],
-                        named_args: vec![],
-                    }));
-                    let bool_lit = id.related_node(NodeVariant::BoolLiteral(true));
-                    sub_patterns.push(Node::new(
-                        loc.clone(),
+                    let l = loc(ctx, &binding);
+                    let binding_id = id(ctx, &binding);
+                    let sublist_access = bn(
+                        l,
+                        NodeVariant::DottedExpr {
+                            prefix: matched_value_ref.clone(),
+                            suffix: id_str(l, "sublist"),
+                        },
+                    );
+                    let length_access = n(
+                        l,
+                        NodeVariant::DottedExpr {
+                            prefix: matched_value_ref.clone(),
+                            suffix: id_str(l, "length"),
+                        },
+                    );
+                    let sublist_call = bn(
+                        l,
+                        NodeVariant::FunCall {
+                            callee: sublist_access,
+                            positional_args: vec![
+                                *matched_value_ref,
+                                n(l, NodeVariant::IntLiteral((sub_pattern_count + 1).to_string())),
+                                length_access,
+                            ],
+                            named_args: vec![],
+                        },
+                    );
+                    let bool_lit = bn(l, NodeVariant::BoolLiteral(true));
+                    sub_patterns.push(n(
+                        l,
                         NodeVariant::BlockExpr {
-                            body: vec![Node::new(
-                                loc.clone(),
-                                NodeVariant::InitLocal { symbol: id, val: sublist_call },
+                            body: vec![n(
+                                l,
+                                NodeVariant::InitLocal { symbol: binding_id, val: sublist_call },
                             )],
-                            val: Box::new(bool_lit),
+                            val: bool_lit,
                         },
                     ));
                 }
@@ -964,7 +959,7 @@ impl Node {
 
             // --- Not pattern
             LkqlNode::NotPattern(not_pattern) => NodeVariant::LogicUnOp {
-                operator: LogicOperator::new(origin_location.clone(), LogicOperatorVariant::Not),
+                operator: LogicOperator::new(l, LogicOperatorVariant::Not),
                 operand: Box::new(Self::lower_lkql_pattern(
                     ctx,
                     &not_pattern.f_pattern()?,
@@ -979,7 +974,7 @@ impl Node {
                     &or_pattern.f_left()?,
                     matched_value_id,
                 )?),
-                operator: LogicOperator::new(origin_location.clone(), LogicOperatorVariant::Or),
+                operator: LogicOperator::new(l, LogicOperatorVariant::Or),
                 right: Box::new(Self::lower_lkql_pattern(
                     ctx,
                     &or_pattern.f_right()?,
@@ -994,11 +989,8 @@ impl Node {
                     .f_binding()?
                     .map(|b| {
                         Ok::<_, Box<Diagnostic>>(Self::new(
-                            SourceSection::from_lkql_node(ctx.lowered_source, &b)?,
-                            NodeVariant::InitLocal {
-                                symbol: Identifier::from_lkql_node(&b, ctx)?,
-                                val: read_value,
-                            },
+                            loc(ctx, &b),
+                            NodeVariant::InitLocal { symbol: id(ctx, &b), val: matched_value_ref },
                         ))
                     })
                     .transpose()?
@@ -1028,7 +1020,7 @@ impl Node {
                 if let Some(predicate) = complex_pattern.f_predicate()? {
                     matching_elems.push(
                         Self::lower_lkql_node(ctx, &predicate)?
-                            .with_type_requirement(&types::bool::TYPE)?,
+                            .with_type_requirement(&types::bool::TYPE),
                     );
                 }
 
@@ -1049,7 +1041,7 @@ impl Node {
         };
 
         // Return the result node
-        Ok(Node::new(origin_location, variant))
+        Ok(n(l, variant))
     }
 
     /// Lower the provided pattern detail node into a intermediate tree node
@@ -1059,38 +1051,30 @@ impl Node {
     fn lower_lkql_pattern_detail(
         ctx: &mut LoweringContext<LkqlNode>,
         node: &LkqlNode,
-        detailed_values_id: usize,
+        matched_value_id: usize,
     ) -> Result<Self, Box<Diagnostic>> {
         // Get the location of the pattern detail node
-        let origin_location = SourceSection::from_lkql_node(ctx.lowered_source, node)?;
-
-        // Util function used to create a node related to the one currently
-        // lowered. The result node is wrapped in a Box and has the same origin
-        // location os the current one.
-        let related_node =
-            |variant: NodeVariant| Box::new(Node::new(origin_location.clone(), variant));
+        let l = loc(ctx, node);
 
         // Create a node to read the matched value
-        let detailed_value_ref =
-            Node::new(origin_location.clone(), NodeVariant::Read(detailed_values_id));
+        let matched_value_ref = n(l, NodeVariant::Read(matched_value_id));
 
         // Get the intermediate node variant from the LKQL pattern detail
         let variant = match node {
             LkqlNode::NodePatternField(pattern_field) => {
                 let field_id = ctx.new_tmp_id();
-                NodeVariant::Let {
-                    id: field_id,
-                    value: related_node(NodeVariant::DottedExpr {
-                        prefix: Box::new(detailed_value_ref),
-                        suffix: Identifier::from_lkql_node(&pattern_field.f_identifier()?, ctx)?,
-                        is_safe: false,
-                    }),
-                    r#in: Box::new(Self::lower_lkql_pattern(
-                        ctx,
-                        &pattern_field.f_expected_value()?,
+                Self::lower_lkql_pattern(ctx, &pattern_field.f_expected_value()?, field_id)?
+                    .with_let(
                         field_id,
-                    )?),
-                }
+                        n(
+                            l,
+                            NodeVariant::DottedExpr {
+                                prefix: Box::new(matched_value_ref),
+                                suffix: id(ctx, &pattern_field.f_identifier()?),
+                            },
+                        ),
+                    )
+                    .variant
             }
             LkqlNode::NodePatternProperty(pattern_property) => {
                 // Get the LKQL call node in the detail and prepare a temporary
@@ -1110,109 +1094,112 @@ impl Node {
                     &mut positional_args,
                     &mut named_args,
                 )?;
-                positional_args.insert(0, detailed_value_ref.clone());
+                positional_args.insert(0, matched_value_ref.clone());
+
+                // Create the node to call the property
+                let property_call = n(
+                    l,
+                    NodeVariant::FunCall {
+                        callee: bn(
+                            l,
+                            NodeVariant::DottedExpr {
+                                prefix: Box::new(matched_value_ref),
+                                suffix: id(ctx, &call.f_name()?),
+                            },
+                        ),
+                        positional_args,
+                        named_args,
+                    },
+                );
 
                 // Then create the node variant to call the property and match
                 // it against expected result.
-                NodeVariant::Let {
-                    id: prop_result_id,
-                    value: related_node(NodeVariant::FunCall {
-                        callee: related_node(NodeVariant::DottedExpr {
-                            prefix: Box::new(detailed_value_ref),
-                            suffix: Identifier::from_lkql_node(&call.f_name()?, ctx)?,
-                            is_safe: false,
-                        }),
-                        positional_args,
-                        named_args,
-                    }),
-                    r#in: Box::new(Self::lower_lkql_pattern(
-                        ctx,
-                        &pattern_property.f_expected_value()?,
-                        prop_result_id,
-                    )?),
-                }
+                Self::lower_lkql_pattern(
+                    ctx,
+                    &pattern_property.f_expected_value()?,
+                    prop_result_id,
+                )?
+                .with_let(prop_result_id, property_call)
+                .variant
             }
             LkqlNode::NodePatternSelector(pattern_selector) => {
                 // Get the LKQL node of the selector call
-                let selector_call = match pattern_selector.f_call()? {
-                    LkqlNode::SelectorCall(selector_call) => selector_call,
+                let lkql_quantified_selector_call = match pattern_selector.f_call()? {
+                    LkqlNode::SelectorCall(c) => c,
                     _ => unreachable!(),
                 };
 
                 // Create selector call argument vectors
-                let mut positional_args = vec![detailed_value_ref.clone()];
+                let mut positional_args = vec![matched_value_ref.clone()];
                 let mut named_args = Vec::new();
 
                 // The create the selector callee node
-                let callee_lkql_node = selector_call.f_selector_call()?;
-                let callee_variant = match &callee_lkql_node {
-                    LkqlNode::Identifier(id) => {
-                        NodeVariant::ReadSymbol(Identifier::from_lkql_node(&id.as_node(), ctx)?)
-                    }
-                    LkqlNode::FunCall(fun_call) => {
-                        Self::lower_lkql_arguments(
-                            ctx,
-                            &fun_call.f_arguments()?,
-                            &mut positional_args,
-                            &mut named_args,
-                        )?;
-                        Self::lower_lkql_node(ctx, &fun_call.f_name()?)?.variant
-                    }
-                    _ => {
-                        ctx.diagnostics.add(Diagnostic::error_from_template::<&str>(
-                            &origin_location,
-                            &INVALID_SELECTOR_CALL,
-                            &[],
-                        ));
-                        NodeVariant::NilLiteral
-                    }
-                };
-                let callee = Box::new(Node::new(
-                    SourceSection::from_lkql_node(ctx.lowered_source, &callee_lkql_node)?,
-                    callee_variant,
-                ));
+                let lkql_selector_call = lkql_quantified_selector_call.f_selector_call()?;
+                let selector_callee = bn(
+                    loc(ctx, &lkql_selector_call),
+                    match &lkql_selector_call {
+                        LkqlNode::Identifier(i) => NodeVariant::ReadSymbol(id(ctx, &i.as_node())),
+                        LkqlNode::FunCall(fun_call) => {
+                            Self::lower_lkql_arguments(
+                                ctx,
+                                &fun_call.f_arguments()?,
+                                &mut positional_args,
+                                &mut named_args,
+                            )?;
+                            Self::lower_lkql_node(ctx, &fun_call.f_name()?)?.variant
+                        }
+                        _ => {
+                            ctx.diagnostics.add(Diagnostic::error_from_template::<&str>(
+                                &l,
+                                &INVALID_SELECTOR_CALL,
+                                &[],
+                            ));
+                            NodeVariant::NilLiteral
+                        }
+                    },
+                );
 
-                // Create the sub-pattern lambda access
-                let subpattern_lambda = Node::new(
-                    origin_location.clone(),
-                    NodeVariant::LambdaFun(*ctx.child_index_map.get(node).unwrap()),
+                // Create the node calling the selector value
+                let selector_call = n(
+                    loc(ctx, &lkql_selector_call),
+                    NodeVariant::FunCall { callee: selector_callee, positional_args, named_args },
+                )
+                .with_trait_requirement(&traits::iterable::TRAIT);
+
+                // Create a new named value that will contain the resulting
+                // selector list.
+                let selector_list_id = ctx.new_tmp_id();
+                let selector_list_ref = n(l, NodeVariant::Read(selector_list_id));
+
+                // Create the quantifier call node
+                let quantifier_call = n(
+                    l,
+                    NodeVariant::FunCall {
+                        callee: bn(
+                            l,
+                            NodeVariant::DottedExpr {
+                                prefix: Box::new(selector_list_ref.clone()),
+                                suffix: id(ctx, &lkql_quantified_selector_call.f_quantifier()?),
+                            },
+                        ),
+                        positional_args: vec![
+                            selector_list_ref,
+                            n(l, NodeVariant::LambdaFun(*ctx.child_index_map.get(node).unwrap())),
+                        ],
+                        named_args: vec![],
+                    },
                 );
 
                 // Finally, create the quantification call node
-                let selector_list_id = ctx.new_tmp_id();
-                let selector_list_ref =
-                    Node::new(origin_location.clone(), NodeVariant::Read(selector_list_id));
-                NodeVariant::Let {
-                    id: selector_list_id,
-                    value: Box::new(
-                        Node::new(
-                            SourceSection::from_lkql_node(
-                                ctx.lowered_source,
-                                &selector_call.f_selector_call()?,
-                            )?,
-                            NodeVariant::FunCall { callee, positional_args, named_args },
-                        )
-                        .with_trait_requirement(&traits::iterable::TRAIT)?,
-                    ),
-                    r#in: related_node(NodeVariant::FunCall {
-                        callee: related_node(NodeVariant::DottedExpr {
-                            prefix: Box::new(selector_list_ref.clone()),
-                            suffix: Identifier::from_lkql_node(
-                                &selector_call.f_quantifier()?,
-                                ctx,
-                            )?,
-                            is_safe: false,
-                        }),
-                        positional_args: vec![selector_list_ref, subpattern_lambda],
-                        named_args: vec![],
-                    }),
-                }
+                quantifier_call
+                    .with_let(selector_list_id, selector_call)
+                    .variant
             }
             _ => unreachable!(),
         };
 
         // Finally, create the result node
-        Ok(Node::new(origin_location, variant))
+        Ok(n(l, variant))
     }
 
     /// Wrap the current node using the provided wrapper creation function,
@@ -1221,27 +1208,57 @@ impl Node {
     where
         F: FnOnce(Self) -> Result<NodeVariant, Box<Diagnostic>>,
     {
-        Ok(Node::new(self.origin_location.clone(), create_wrapper(self)?))
+        Ok(n(self.origin_location, create_wrapper(self)?))
     }
 
     /// Wrap the node in a type requirement one.
-    fn with_type_requirement(
-        self,
-        required_type: &'static BuiltinType,
-    ) -> Result<Self, Box<Diagnostic>> {
+    fn with_type_requirement(self, required_type: &'static BuiltinType) -> Self {
         self.with_wrapper(|n| {
             Ok(NodeVariant::RequireType { expression: Box::new(n), expected_type: required_type })
         })
+        .unwrap()
     }
 
     /// Wrap the node in a trait requirement one.
-    fn with_trait_requirement(
-        self,
-        required_trait: &'static BuiltinTrait,
-    ) -> Result<Self, Box<Diagnostic>> {
+    fn with_trait_requirement(self, required_trait: &'static BuiltinTrait) -> Self {
         self.with_wrapper(|n| {
             Ok(NodeVariant::RequireTrait { expression: Box::new(n), required_trait })
         })
+        .unwrap()
+    }
+
+    /// Wrap this node in another to introduce a new named value in its
+    /// environment.
+    fn with_let(self, id: usize, value: Self) -> Self {
+        self.with_wrapper(|n| {
+            Ok(NodeVariant::Let { id, value: Box::new(value), r#in: Box::new(n) })
+        })
+        .unwrap()
+    }
+
+    /// Wrap the node inside an equality check dispatching the execution
+    /// according to the result.
+    fn with_equality_check(
+        self,
+        comparing_to: NodeVariant,
+        consequence: Self,
+        alternative: Self,
+    ) -> NodeVariant {
+        NodeVariant::IfExpr {
+            condition: bn(
+                self.origin_location,
+                NodeVariant::CompBinOp {
+                    operator: CompOperator {
+                        origin_location: self.origin_location,
+                        variant: CompOperatorVariant::Equals,
+                    },
+                    right: bn(self.origin_location, comparing_to),
+                    left: Box::new(self),
+                },
+            ),
+            consequence: Box::new(consequence),
+            alternative: Box::new(alternative),
+        }
     }
 }
 
@@ -1251,7 +1268,7 @@ impl ArithOperator {
         ctx: &LoweringContext<LkqlNode>,
     ) -> Result<Self, Box<Diagnostic>> {
         Ok(ArithOperator::new(
-            SourceSection::from_lkql_node(ctx.lowered_source, node)?,
+            loc(ctx, node),
             match node {
                 LkqlNode::OpPlus(_) => ArithOperatorVariant::Plus,
                 LkqlNode::OpMinus(_) => ArithOperatorVariant::Minus,
@@ -1269,7 +1286,7 @@ impl LogicOperator {
         ctx: &LoweringContext<LkqlNode>,
     ) -> Result<Self, Box<Diagnostic>> {
         Ok(LogicOperator::new(
-            SourceSection::from_lkql_node(ctx.lowered_source, node)?,
+            loc(ctx, node),
             match node {
                 LkqlNode::OpAnd(_) => LogicOperatorVariant::And,
                 LkqlNode::OpOr(_) => LogicOperatorVariant::Or,
@@ -1281,12 +1298,9 @@ impl LogicOperator {
 }
 
 impl CompOperator {
-    fn lower_lkql_node(
-        node: &LkqlNode,
-        ctx: &LoweringContext<LkqlNode>,
-    ) -> Result<Self, Box<Diagnostic>> {
-        Ok(CompOperator::new(
-            SourceSection::from_lkql_node(ctx.lowered_source, node)?,
+    fn lower_lkql_node(node: &LkqlNode, ctx: &LoweringContext<LkqlNode>) -> Self {
+        CompOperator::new(
+            loc(ctx, node),
             match node {
                 LkqlNode::OpEq(_) => CompOperatorVariant::Equals,
                 LkqlNode::OpNeq(_) => CompOperatorVariant::NotEquals,
@@ -1296,49 +1310,80 @@ impl CompOperator {
                 LkqlNode::OpGeq(_) => CompOperatorVariant::GreaterOrEquals,
                 _ => unreachable!(),
             },
-        ))
+        )
     }
 }
 
 impl MiscOperator {
-    fn lower_lkql_node(
-        node: &LkqlNode,
-        ctx: &LoweringContext<LkqlNode>,
-    ) -> Result<Self, Box<Diagnostic>> {
-        Ok(MiscOperator::new(
-            SourceSection::from_lkql_node(ctx.lowered_source, node)?,
+    fn lower_lkql_node(node: &LkqlNode, ctx: &LoweringContext<LkqlNode>) -> Self {
+        MiscOperator::new(
+            loc(ctx, node),
             match node {
                 LkqlNode::OpConcat(_) => MiscOperatorVariant::Concat,
                 _ => unreachable!(),
             },
-        ))
+        )
     }
 }
 
-impl Identifier {
-    /// Util function to easily create an identifier from an LKQL node.
-    fn from_lkql_node(
-        node: &LkqlNode,
-        ctx: &LoweringContext<LkqlNode>,
-    ) -> Result<Self, Box<Diagnostic>> {
-        Ok(Self::new(
-            SourceSection::from_lkql_node(ctx.lowered_source, node)?,
-            node.text()?,
-        ))
-    }
+// ----- Lowering helpers -----
+
+/// Shortcut function to create a new source section from an LKQL node.
+fn loc(ctx: &LoweringContext<LkqlNode>, node: &LkqlNode) -> SourceSection {
+    let sloc_range = node.sloc_range().unwrap();
+    SourceSection::new(
+        ctx.lowered_source,
+        Location::from_lkql_location(sloc_range.start),
+        Location::from_lkql_location(sloc_range.end),
+    )
 }
 
-impl SourceSection {
-    /// Create a new section corresponding to the provided node location range
-    /// in the provided source.
-    fn from_lkql_node(source: SourceId, node: &LkqlNode) -> Result<Self, Box<Diagnostic>> {
-        let sloc_range = node.sloc_range()?;
-        Ok(Self::new(
-            source,
-            Location::from_lkql_location(sloc_range.start),
-            Location::from_lkql_location(sloc_range.end),
-        ))
-    }
+/// Shortcut function to create a new identifier from an LKQL node.
+fn id(ctx: &LoweringContext<LkqlNode>, node: &LkqlNode) -> Identifier {
+    Identifier::new(loc(ctx, node), node.text().unwrap())
+}
+
+/// Shortcut function to create an identifier from a string.
+fn id_str(origin_location: SourceSection, text: &str) -> Identifier {
+    Identifier::new(origin_location, String::from(text))
+}
+
+/// Shortcut function to create a new intermediate node.
+fn n(origin_location: SourceSection, variant: NodeVariant) -> Node {
+    Node::new(origin_location, variant)
+}
+
+/// Shortcut function to create a new intermediate node wrapped in a [`Box`].
+fn bn(origin_location: SourceSection, variant: NodeVariant) -> Box<Node> {
+    Box::new(n(origin_location, variant))
+}
+
+fn lower_dot_access(
+    ctx: &LoweringContext<LkqlNode>,
+    origin_location: &SourceSection,
+    prefix_ref: Box<Node>,
+    member: &LkqlNode,
+    is_safe: bool,
+) -> NodeVariant {
+    // Create the node to execute if the prefix in dot
+    // access is null
+    let if_prefix_null = n(
+        *origin_location,
+        if is_safe {
+            NodeVariant::NullLiteral
+        } else {
+            NodeVariant::RuntimeError { error_template: &NULL_DOT_RECEIVER, message_args: vec![] }
+        },
+    );
+
+    // Create the member access node
+    let member_access = n(
+        *origin_location,
+        NodeVariant::DottedExpr { prefix: prefix_ref.clone(), suffix: id(ctx, member) },
+    );
+
+    // Return the dot access wrapped in a null checking node.
+    prefix_ref.with_equality_check(NodeVariant::NullLiteral, if_prefix_null, member_access)
 }
 
 /// Util function to get whether the provided LKQL parsing node introduce a
@@ -1418,14 +1463,14 @@ fn all_local_symbols(
 
     // For each declaration, create an identifier
     for decl in &local_decls {
-        local_symbols.push(Identifier::new(
-            SourceSection::from_lkql_node(ctx.lowered_source, decl)?,
-            match decl {
-                LkqlNode::ValDecl(vd) => vd.f_identifier()?.text()?,
-                LkqlNode::FunDecl(fd) => fd.f_name()?.text()?,
-                LkqlNode::SelectorDecl(sd) => sd.f_name()?.text()?,
-                LkqlNode::Import(i) => i.f_name()?.text()?,
-                LkqlNode::Identifier(id) => id.text()?,
+        local_symbols.push(id(
+            ctx,
+            &match decl {
+                LkqlNode::ValDecl(vd) => vd.f_identifier()?,
+                LkqlNode::FunDecl(fd) => fd.f_name()?,
+                LkqlNode::SelectorDecl(sd) => sd.f_name()?,
+                LkqlNode::Import(i) => i.f_name()?,
+                LkqlNode::Identifier(id) => id.as_node(),
                 _ => unreachable!(),
             },
         ));

@@ -261,6 +261,7 @@ pub const PREVIOUS_SPLAT_PATTERN_HINT: &str = "Previous splat pattern is here";
 // ----- Support types -----
 
 /// This type represents a template for an error message.
+#[derive(Debug)]
 pub struct ErrorTemplate {
     pub id: usize,
     pub title: &'static str,

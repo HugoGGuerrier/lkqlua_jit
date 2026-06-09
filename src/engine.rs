@@ -173,10 +173,9 @@ extern "C" fn handle_error(l: LuaState) -> c_int {
         /// representing.
         fn to_source_section(&self, ctx: &ExecutionContext) -> SourceSection {
             let current_prototype = self.get_prototype(ctx);
-            current_prototype
+            *current_prototype
                 .instructions
                 .get_location_or_default(self.program_counter, &current_prototype.origin_location)
-                .clone()
         }
     }
 

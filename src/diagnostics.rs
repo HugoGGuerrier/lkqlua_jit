@@ -205,7 +205,7 @@ impl Diagnostic {
             kind: DiagnosticKind::Error,
             title: Some(String::from(error_template.title)),
             message: error_template.render_message(message_args),
-            location: Some(location.clone()),
+            location: Some(*location),
             hints: vec![],
             stack_trace: vec![],
         }
@@ -226,7 +226,7 @@ impl Diagnostic {
             kind: DiagnosticKind::Error,
             title: Some(String::from(error_template.title)),
             message: error_template.render_message(message_args),
-            location: Some(location.clone()),
+            location: Some(*location),
             hints,
             stack_trace: vec![],
         }
@@ -247,7 +247,7 @@ impl Diagnostic {
             kind: DiagnosticKind::Error,
             title: Some(String::from(error_template.title)),
             message: error_template.render_message(message_args),
-            location: Some(location.clone()),
+            location: Some(*location),
             hints: vec![],
             stack_trace,
         }

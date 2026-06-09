@@ -233,7 +233,7 @@ impl Source {
 }
 
 /// This structure represents an extract from a source object.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SourceSection {
     pub source: SourceId,
     pub start: Location,

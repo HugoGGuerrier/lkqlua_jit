@@ -106,10 +106,8 @@ impl Frame {
     /// one if any.
     pub fn add_local(&mut self, name: &str, declaration_location: &SourceSection) {
         let local_slot = self.get_slot();
-        self.bindings.insert(
-            String::from(name),
-            BindingData::new(declaration_location.clone(), local_slot),
-        );
+        self.bindings
+            .insert(String::from(name), BindingData::new(*declaration_location, local_slot));
     }
 
     /// Mark a the local value designated by the provided name as initialized.
@@ -162,15 +160,15 @@ impl Frame {
                 ))
             }
             // Then, recursively looks in the parent's up-values
-            else if let Some(parent_up_value) = parent_frame.get_up_value(name) {
-                Some(UpValueData::new(
-                    parent_up_value.declaration_location.clone(),
-                    new_up_value_index,
-                    parent_up_value.is_safe,
-                    UpValueTarget::ParentUpValue(parent_up_value.index),
-                ))
-            } else {
-                None
+            else {
+                parent_frame.get_up_value(name).map(|parent_up_value| {
+                    UpValueData::new(
+                        parent_up_value.declaration_location,
+                        new_up_value_index,
+                        parent_up_value.is_safe,
+                        UpValueTarget::ParentUpValue(parent_up_value.index),
+                    )
+                })
             }
         });
 

@@ -196,7 +196,7 @@ impl ExtendedInstructionBuffer {
     /// Shortcut to add an `ABC` bytecode instruction to this buffer.
     pub fn abc(&mut self, origin_location: &SourceSection, op_code: u8, a: u8, b: u8, c: u8) {
         self.add_instruction(
-            Some(origin_location.clone()),
+            Some(*origin_location),
             ExtendedInstructionVariant::ABC { op_code, a, b, c },
         );
     }
@@ -226,7 +226,7 @@ impl ExtendedInstructionBuffer {
     /// Shortcut to add an `AD` bytecode instruction to this buffer.
     pub fn ad(&mut self, origin_location: &SourceSection, op_code: u8, a: u8, d: u16) {
         self.add_instruction(
-            Some(origin_location.clone()),
+            Some(*origin_location),
             ExtendedInstructionVariant::AD { op_code, a, d },
         );
     }
@@ -551,7 +551,7 @@ mod tests {
             complex_consts: vec![],
             numeric_consts: vec![],
             name: String::from("prototype_1"),
-            origin_location: dummy_loc.clone(),
+            origin_location: dummy_loc,
             variable_data: vec![],
         };
         assert_eq!(
@@ -586,7 +586,7 @@ mod tests {
             complex_consts: vec![ComplexConstant::Integer(11)],
             numeric_consts: vec![NumericConstant::Float(12.0)],
             name: String::from("prototype_2"),
-            origin_location: dummy_loc.clone(),
+            origin_location: dummy_loc,
             variable_data: vec![ExtendedVariableData {
                 name: String::from("local_name"),
                 birth_label: 0,

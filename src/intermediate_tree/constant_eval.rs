@@ -181,45 +181,25 @@ impl Node {
                 }
 
                 // --- Composite expressions
-                NodeVariant::DottedExpr { prefix, suffix, is_safe } => eval_as_constant_variant(
-                    prefix,
-                )
-                .and_then(|prefix_variant: ConstantValueVariant| match prefix_variant {
-                    ConstantValueVariant::Null => {
-                        if *is_safe {
-                            Some(ConstantValueVariant::Null)
-                        } else {
-                            None
-                        }
-                    }
-                    ConstantValueVariant::Object(items) => items
-                        .iter()
-                        .find(|(s, _)| s == &suffix.text)
-                        .map(|(_, constant_result)| constant_result.variant.clone()),
-                    _ => None,
-                }),
-                NodeVariant::IndexExpr { indexed_val, index, is_safe } => {
+                NodeVariant::DottedExpr { prefix, suffix } => eval_as_constant_variant(prefix)
+                    .and_then(|prefix_variant: ConstantValueVariant| match prefix_variant {
+                        ConstantValueVariant::Null => None,
+                        ConstantValueVariant::Object(items) => items
+                            .iter()
+                            .find(|(s, _)| s == &suffix.text)
+                            .map(|(_, constant_result)| constant_result.variant.clone()),
+                        _ => None,
+                    }),
+                NodeVariant::IndexExpr { indexed_val, index } => {
                     eval_as_constant_variant(indexed_val).and_then(|indexed_val_variant| {
                         match indexed_val_variant {
-                            ConstantValueVariant::Null => {
-                                if *is_safe {
-                                    Some(ConstantValueVariant::Null)
-                                } else {
-                                    None
-                                }
-                            }
+                            ConstantValueVariant::Null => None,
                             ConstantValueVariant::Tuple(values)
                             | ConstantValueVariant::List(values) => eval_as_constant_variant(index)
                                 .and_then(|constant_index| match constant_index {
                                     ConstantValueVariant::Int(constant_index) => {
                                         if let Ok(i) = usize::try_from(constant_index) {
-                                            values.get(i - 1).map(|c| c.variant.clone()).or(
-                                                if *is_safe {
-                                                    Some(ConstantValueVariant::Null)
-                                                } else {
-                                                    None
-                                                },
-                                            )
+                                            values.get(i - 1).map(|c| c.variant.clone()).or(None)
                                         } else {
                                             None
                                         }
@@ -275,7 +255,7 @@ impl Node {
         // Get the constant variant from the current node and return the
         // wrapped constant value if some.
         eval_as_constant_variant(self)
-            .map(|variant| ConstantValue { origin_location: self.origin_location.clone(), variant })
+            .map(|variant| ConstantValue { origin_location: self.origin_location, variant })
     }
 }
 
@@ -308,6 +288,49 @@ impl PartialEq for ConstantValue {
 impl Eq for ConstantValue {}
 
 impl ConstantValue {
+    /// Get the string representation of this constant value.
+    pub fn to_string(&self) -> String {
+        fn img(value: &ConstantValue) -> String {
+            match &value.variant {
+                ConstantValueVariant::String(s) => format!("\"{}\"", s),
+                _ => value.to_string(),
+            }
+        }
+        match &self.variant {
+            ConstantValueVariant::Null => String::from("null"),
+            ConstantValueVariant::Unit => String::from("()"),
+            ConstantValueVariant::Bool(b) => b.to_string(),
+            ConstantValueVariant::Int(big_int) => big_int.to_str_radix(10),
+            ConstantValueVariant::String(s) => s.clone(),
+            ConstantValueVariant::Tuple(constant_values)
+            | ConstantValueVariant::List(constant_values) => {
+                let (ls, rs) = match &self.variant {
+                    ConstantValueVariant::Tuple(_) => ('(', ')'),
+                    ConstantValueVariant::List(_) => ('[', ']'),
+                    _ => unreachable!(),
+                };
+                format!(
+                    "{ls}{}{rs}",
+                    constant_values
+                        .iter()
+                        .map(Self::to_string)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            }
+            ConstantValueVariant::Object(items) => {
+                format!(
+                    "{{{}}}",
+                    items
+                        .iter()
+                        .map(|(key, val)| format!("\"{key}\": {}", img(val)))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            }
+        }
+    }
+
     /// Get the complex constant representing this constant value if it one
     /// exists. Otherwise, this function returns [`None`].
     pub fn to_complex_constant(&self) -> Option<ComplexConstant> {
@@ -1189,23 +1212,13 @@ mod tests {
         let mut intermediate_tree = _node(NodeVariant::DottedExpr {
             prefix: Box::new(_node(NodeVariant::ObjectLiteral(vec![(_id("a"), _int_node("42"))]))),
             suffix: _id("a"),
-            is_safe: false,
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(_int_cst("42")));
         intermediate_tree = _node(NodeVariant::DottedExpr {
             prefix: Box::new(_node(NodeVariant::ObjectLiteral(vec![(_id("a"), _int_node("42"))]))),
             suffix: _id("b"),
-            is_safe: false,
         });
         assert_eq!(intermediate_tree.eval_as_constant(), None);
-
-        // Test safe dot access
-        intermediate_tree = _node(NodeVariant::DottedExpr {
-            prefix: Box::new(_node(NodeVariant::NullLiteral)),
-            suffix: _id("a"),
-            is_safe: true,
-        });
-        assert_eq!(intermediate_tree.eval_as_constant(), Some(_null_cst()));
     }
 
     #[test]
@@ -1218,7 +1231,6 @@ mod tests {
                 _int_node("3"),
             ]))),
             index: Box::new(_int_node("2")),
-            is_safe: false,
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(_int_cst("2")));
         intermediate_tree = _node(NodeVariant::IndexExpr {
@@ -1228,7 +1240,6 @@ mod tests {
                 _int_node("3"),
             ]))),
             index: Box::new(_int_node("4")),
-            is_safe: false,
         });
         assert_eq!(intermediate_tree.eval_as_constant(), None);
 
@@ -1240,7 +1251,6 @@ mod tests {
                 _int_node("3"),
             ]))),
             index: Box::new(_int_node("2")),
-            is_safe: false,
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(_int_cst("2")));
         intermediate_tree = _node(NodeVariant::IndexExpr {
@@ -1250,7 +1260,6 @@ mod tests {
                 _int_node("3"),
             ]))),
             index: Box::new(_int_node("4")),
-            is_safe: false,
         });
         assert_eq!(intermediate_tree.eval_as_constant(), None);
 
@@ -1258,7 +1267,6 @@ mod tests {
         intermediate_tree = _node(NodeVariant::IndexExpr {
             indexed_val: Box::new(_str_node("hello")),
             index: Box::new(_int_node("2")),
-            is_safe: false,
         });
         assert_eq!(intermediate_tree.eval_as_constant(), None);
     }

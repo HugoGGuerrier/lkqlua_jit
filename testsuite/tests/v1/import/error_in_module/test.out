@@ -1,10 +1,10 @@
 Error: Symbol declared multiple times
-   ╭─[ <working-dir>/foo.lkql:2:1 ]
+   ╭─[ <working-dir>/foo.lkql:2:5 ]
    │
  1 │ val foo_value = 1
-   │ ────────┬────────  
-   │         ╰────────── Hint: Previously declared here
+   │     ────┬────  
+   │         ╰────── Hint: Previously declared here
  2 │ val foo_value = 1
-   │ ────────┬────────  
-   │         ╰────────── The symbol "foo_value" already exists in the current scope
+   │     ────┬────  
+   │         ╰────── The symbol "foo_value" already exists in the current scope
 ───╯
