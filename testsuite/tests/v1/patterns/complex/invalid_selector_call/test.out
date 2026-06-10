@@ -1,0 +1,7 @@
+Error: Invalid selector call
+   ╭─[ <working-dir>/script.lkql:2:23 ]
+   │
+ 2 │ print(root is FooNode(any "a" is FooNode))
+   │                       ─────────┬────────  
+   │                                ╰────────── It must be either a name or a call expression
+───╯

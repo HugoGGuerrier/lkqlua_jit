@@ -193,7 +193,7 @@ pub const MULTIPLE_SPLAT_PATTERNS: ErrorTemplate = ErrorTemplate {
 pub const INVALID_SELECTOR_CALL: ErrorTemplate = ErrorTemplate {
     id: MULTIPLE_SPLAT_PATTERNS.id + 1,
     title: "Invalid selector call",
-    message_template: "It must be either a name or a call",
+    message_template: "It must be either a name or a call expression",
 };
 
 // --- Misc errors
