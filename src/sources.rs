@@ -1,9 +1,7 @@
 //! # Abstract sources module
 //!
-//! This module contains all components required to create and manipulate
-//! abstract sources.
-//! This module provide a [`SourceRepository`] type to load, retrieve and parse
-//! sources.
+//! This module contains all components required to load and fetch sources. Use
+//! the [`SourceRepository`] as entry point.
 
 use crate::diagnostics::{Diagnostic, DiagnosticCollector};
 use ariadne::Cache;
@@ -18,17 +16,17 @@ use std::{
     time::SystemTime,
 };
 
-/// This structure is the main entry point of abstract source handling, it
-/// holds all created sources, associating each one from its name to its
-/// identifier.
+/// This structure holds all loaded sources.
 #[derive(Debug)]
 pub struct SourceRepository {
     lkql_context: AnalysisContext,
-    sources: Vec<Source>,
 
-    /// Internal field to store all loaded files and link them to their
-    /// corresponding source.
-    file_to_source: HashMap<PathBuf, SourceId>,
+    /// A map going to full file paths to their corresponding source
+    /// identifier.
+    path_to_source_id: HashMap<PathBuf, SourceId>,
+
+    /// All loaded sources, indexed by their identifier.
+    sources: Vec<Source>,
 }
 
 impl Cache<SourceId> for &SourceRepository {
@@ -60,12 +58,13 @@ impl SourceRepository {
     pub fn new() -> Self {
         Self {
             lkql_context: AnalysisContext::create_default().unwrap(),
+            path_to_source_id: HashMap::new(),
             sources: Vec::new(),
-            file_to_source: HashMap::new(),
         }
     }
 
-    /// Read the provided file and store it as a source in this repository.
+    /// Read the provided file and store it as a source in this repository,
+    /// then it returns its identifier and whether the file has been loaded.
     /// This function tries to avoid useless file reload, so before reading
     /// the file, it checks if the latter has been modified since the last
     /// load. If not, the source repository isn't modified, and the second
@@ -88,7 +87,7 @@ impl SourceRepository {
 
         // Then, if this file has already been loaded in this repository,
         // compare the stored modification date with the one from metadata.
-        if let Some(&source_id) = self.file_to_source.get(&canonical_path)
+        if let Some(&source_id) = self.path_to_source_id.get(&canonical_path)
             && let Some(known_last_change) = self.sources[source_id].last_modification()
             && let Some(current_last_change) = last_modification
             && known_last_change == current_last_change
@@ -99,11 +98,11 @@ impl SourceRepository {
         // If we're here, the source must be updated or inserted in the
         // repository.
         let source_id = self
-            .file_to_source
+            .path_to_source_id
             .get(&canonical_path)
             .copied()
             .unwrap_or(self.sources.len());
-        self.file_to_source
+        self.path_to_source_id
             .insert(canonical_path.clone(), source_id);
         let source = Source::File {
             content: ariadne::Source::from(
@@ -118,7 +117,7 @@ impl SourceRepository {
 
     /// Register the provided buffer in the source repository, returning the
     /// identifier of the newly created source. This function store the new
-    /// buffer unconditionally.
+    /// buffer unconditionally, overwriting the existing one if there is.
     pub fn add_source_buffer(&mut self, name: &str, content: &str) -> SourceId {
         let source = Source::Buffer {
             name: String::from(name),
@@ -135,9 +134,10 @@ impl SourceRepository {
         self.sources.get(source_id)
     }
 
-    /// Get the name of a source from its identifier.
-    pub fn get_name_by_id(&self, source_id: SourceId) -> &str {
-        self.sources.get(source_id).unwrap().name()
+    /// Get the name of a source from its identifier. This function assumes
+    /// that the provided identifier is related to an existing source.
+    pub fn get_name_by_id(&self, source_id: SourceId) -> Option<&str> {
+        self.sources.get(source_id).map(Source::name)
     }
 
     /// Get the source identifier corresponding to the provided file path, if
@@ -145,7 +145,7 @@ impl SourceRepository {
     pub fn get_id_by_file(&self, file: &Path) -> Option<SourceId> {
         file.canonicalize()
             .ok()
-            .and_then(|p| self.file_to_source.get(&p).copied())
+            .and_then(|p| self.path_to_source_id.get(&p).copied())
     }
 
     /// Parse the source designated by the provided identifier using the LKQL
@@ -180,10 +180,10 @@ impl SourceRepository {
     }
 }
 
-/// A source identifier is just an unsigned integer.
+/// Identifier of a [`Source`] object inside a [`SourceRepository`].
 pub type SourceId = usize;
 
-/// This type represents an abstract source.
+/// Source with a readable content, abstracting all operations on it.
 #[derive(Debug)]
 pub enum Source {
     File {
@@ -232,7 +232,7 @@ impl Source {
     }
 }
 
-/// This structure represents an extract from a source object.
+/// Section of a source, with a "start" and an "end" positions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SourceSection {
     pub source: SourceId,
@@ -302,8 +302,7 @@ impl SourceSection {
     }
 }
 
-/// This structure represents a location in a source, defined by a line and
-/// a colon.
+/// Location in a document, defined by a line and a column.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Location {
     pub line: u32,
