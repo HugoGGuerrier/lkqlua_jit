@@ -47,7 +47,7 @@ impl Node {
             NodeVariant::TupleLiteral(_) => Some(&tuple::TYPE),
             NodeVariant::ListLiteral(_) => Some(&list::TYPE),
             NodeVariant::ObjectLiteral(_) => Some(&obj::TYPE),
-            NodeVariant::LambdaFun(_) => Some(&function::TYPE),
+            NodeVariant::ReadChildUnit(_) => Some(&function::TYPE),
 
             // --- Default case, no type can be deducted
             _ => None,
@@ -193,7 +193,7 @@ mod test {
         assert_eq!(intermediate_tree.expr_type(), Some(&list::TYPE));
         intermediate_tree = _node(NodeVariant::ObjectLiteral(vec![]));
         assert_eq!(intermediate_tree.expr_type(), Some(&obj::TYPE));
-        intermediate_tree = _node(NodeVariant::LambdaFun(0));
+        intermediate_tree = _node(NodeVariant::ReadChildUnit(0));
         assert_eq!(intermediate_tree.expr_type(), Some(&function::TYPE));
     }
 }

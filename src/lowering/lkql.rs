@@ -641,7 +641,7 @@ impl Node {
             }
             LkqlNode::Identifier(_) => NodeVariant::ReadSymbol(id(ctx, node)),
             LkqlNode::AnonymousFunction(_) => {
-                NodeVariant::LambdaFun(*ctx.child_index_map.get(node).unwrap())
+                NodeVariant::ReadChildUnit(*ctx.child_index_map.get(node).unwrap())
             }
 
             // --- For now, not all node kinds are handled
@@ -1184,7 +1184,10 @@ impl Node {
                         ),
                         positional_args: vec![
                             selector_list_ref,
-                            n(l, NodeVariant::LambdaFun(*ctx.child_index_map.get(node).unwrap())),
+                            n(
+                                l,
+                                NodeVariant::ReadChildUnit(*ctx.child_index_map.get(node).unwrap()),
+                            ),
                         ],
                         named_args: vec![],
                     },

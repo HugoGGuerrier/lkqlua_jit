@@ -266,7 +266,7 @@ pub enum NodeVariant {
 
     // --- Symbol access
     ReadSymbol(Identifier),
-    LambdaFun(u16),
+    ReadChildUnit(u16),
 
     // --- Let expression
     /// This node should be used to introduce an identified value in the tree.
@@ -458,8 +458,8 @@ impl Node {
             NodeVariant::ReadSymbol(symbol) => {
                 ("ReadSymbol", &[("symbol", format!("\"{}\"", symbol.text))])
             }
-            NodeVariant::LambdaFun(child_index) => {
-                ("LambdaFun", &[("child_index", child_index.to_string())])
+            NodeVariant::ReadChildUnit(child_index) => {
+                ("ReadChildUnit", &[("child_index", child_index.to_string())])
             }
             NodeVariant::Let { id, value, r#in } => (
                 "Let",

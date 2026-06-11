@@ -912,7 +912,7 @@ impl Node {
             }
 
             // --- Lambda function access
-            NodeVariant::LambdaFun(child_index) => {
+            NodeVariant::ReadChildUnit(child_index) => {
                 // Add the lambda symbol in the frame locals
                 let lambda_name = &ctx.unit.children_units[*child_index as usize].name;
                 ctx.frame
@@ -1252,7 +1252,7 @@ impl Node {
                 }
             }
 
-            NodeVariant::LambdaFun(child_index) => {
+            NodeVariant::ReadChildUnit(child_index) => {
                 // Add the lambda symbol in the frame locals
                 let lambda_name = &ctx.unit.children_units[*child_index as usize].name;
                 ctx.frame
