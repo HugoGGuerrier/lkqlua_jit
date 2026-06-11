@@ -32,30 +32,25 @@ pub fn create_unit_value(l: LuaState) {
 /// Name of the global value binding to the importation function.
 pub const LKQL_IMPORT_GLOBAL_NAME: &str = "value@lkql_import";
 
-/// This type represents a built-in symbol binding, this symbol is accessible
-/// in all lexical environments.
-pub struct BuiltinBinding {
-    pub name: &'static str,
-    pub value: RuntimeValue,
-}
-
 /// Allocate a new vector and populate it with all LKQL built-in functions,
 /// then return it.
-pub fn get_builtin_bindings() -> Vec<BuiltinBinding> {
-    fn b(name: &'static str, value: RuntimeValue) -> BuiltinBinding {
-        BuiltinBinding { name, value }
-    }
-    vec![
-        b("pattern", RuntimeValue::Function(FunctionValue::CFunction(lkql_pattern))),
-        b("print", RuntimeValue::Function(FunctionValue::CFunction(lkql_print))),
-        b("img", RuntimeValue::Function(FunctionValue::CFunction(lkql_img))),
-        b("units", RuntimeValue::Function(FunctionValue::CFunction(lkql_units))),
-        b(
-            LKQL_IMPORT_GLOBAL_NAME,
-            RuntimeValue::Function(FunctionValue::CFunction(lkql_import)),
-        ),
-        b(UNIT_SINGLETON_GLOBAL_NAME, RuntimeValue::FromBuilder(create_unit_value)),
-    ]
+pub fn get_builtin_bindings() -> HashMap<&'static str, RuntimeValue> {
+    let mut res = HashMap::new();
+    let mut b = |name: &'static str, value: RuntimeValue| res.insert(name, value);
+
+    // Add all builtins
+    b("pattern", RuntimeValue::Function(FunctionValue::CFunction(lkql_pattern)));
+    b("print", RuntimeValue::Function(FunctionValue::CFunction(lkql_print)));
+    b("img", RuntimeValue::Function(FunctionValue::CFunction(lkql_img)));
+    b("units", RuntimeValue::Function(FunctionValue::CFunction(lkql_units)));
+    b(
+        LKQL_IMPORT_GLOBAL_NAME,
+        RuntimeValue::Function(FunctionValue::CFunction(lkql_import)),
+    );
+    b(UNIT_SINGLETON_GLOBAL_NAME, RuntimeValue::FromBuilder(create_unit_value));
+
+    // Then, return the result
+    res
 }
 
 /// Allocate a new vector and populate it with all LKQL built-in types, then

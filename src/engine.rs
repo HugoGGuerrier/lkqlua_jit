@@ -61,9 +61,9 @@ impl Engine {
         }
 
         // Bind all built-in values to their names
-        for builtin_binding in get_builtin_bindings() {
-            builtin_binding.value.push_on_stack(lua_state);
-            set_global(lua_state, builtin_binding.name);
+        for (name, value) in get_builtin_bindings() {
+            value.push_on_stack(lua_state);
+            set_global(lua_state, name);
         }
 
         // Load the analysis library

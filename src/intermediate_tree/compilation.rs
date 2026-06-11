@@ -2507,7 +2507,7 @@ impl<'a> CompilationContext<'a> {
         'b: 'a,
     {
         Self {
-            builtins: get_builtin_bindings().iter().map(|b| b.name).collect(),
+            builtins: get_builtin_bindings().keys().copied().collect(),
             frame: Rc::new(RefCell::new(Frame::new(None))),
             unit,
             unit_data: ExecUnitCompilationData::new(),
