@@ -1,9 +1,7 @@
 //! # Lua Rust API
 //!
-//! This module maps the Lua C API to Rust entry points. This allows to create
-//! Lua contexts, modify them and run Lua code and buffers.
-//! This module is designed to work with the LuaJIT implementation, thus it
-//! offers specialized endpoints to tune the JIT compilation part.
+//! This module maps the Lua C API to Rust entry points, using it you can
+//! create and manipulate Lua context.
 
 use std::{
     any::Any,
@@ -20,20 +18,19 @@ use std::{
 const GLOBAL_INDEX: i32 = -10002;
 
 /// Result count to pass to get all results.
-const MUTRET: i32 = -1;
+const MULTRET: i32 = -1;
 
-/// Size of short source representation in debug data.
+/// Size of short source representations in debug data.
 const SHORT_SRC_SIZE: usize = 60;
 
 // ----- Public types -----
 
-/// This type represents the state object for the LuaJIT engine.
 pub type LuaState = *mut c_void;
 
-/// A C function that is going to be called from the Lua environment.
+/// C function that can be called from any Lua code.
 pub type LuaCFunction = unsafe extern "C" fn(LuaState) -> c_int;
 
-/// This type represents type tags for Lua values.
+/// Type tags for Lua values.
 #[repr(C)]
 #[derive(Debug, PartialEq, Eq)]
 pub enum LuaType {
@@ -49,8 +46,8 @@ pub enum LuaType {
     Thread = 8,
 }
 
-/// This type maps the `Lua_Debug` C type. It contains debugging information
-/// about a frame.
+/// Maps the `Lua_Debug` C type, It contains debugging information about an
+/// execution frame.
 #[repr(C)]
 #[derive(Debug)]
 pub struct LuaDebug {
@@ -340,21 +337,28 @@ pub(crate) fn remove_value(l: LuaState, index: i32) {
     unsafe { lua_remove(l, index) }
 }
 
-/// Considering the stack is filled with `arg_count` arguments followed by
-/// a callable value (in this order): pops all of those and call the executable
-/// value with all arguments. Places the specified number of results on the top
-/// of the stack if any, otherwise this function place them all.
-/// This function propagate any error raised by the callable value.
+/// Considering the stack is filled with `arg_count` arguments with a callable
+/// value on top of it: pops all of those and call the executable value with
+/// all arguments.
+///
+/// Places the specified number of results on the top of the stack, if [`None`]
+/// is provided this function all results.
+///
+/// This function propagate any error raised during the execution of the
+/// callable value.
 pub(crate) fn call(l: LuaState, arg_count: i32, res_count: Option<i32>) {
-    unsafe { lua_call(l, arg_count, res_count.unwrap_or(MUTRET)) }
+    unsafe { lua_call(l, arg_count, res_count.unwrap_or(MULTRET)) }
 }
 
-/// Considering the stack is filled with `arg_count` arguments followed by
-/// a callable value (in this order): pops all of those and call the executable
-/// value with all arguments. Places the specified number of results on the top
-/// of the stack if any, otherwise this function place them all.
+/// Considering the stack is filled with `arg_count` arguments with a callable
+/// value on top of it: pops all of those and call the executable value with
+/// all arguments.
+///
+/// Places the specified number of results on the top of the stack, if [`None`]
+/// is provided this function all results.
+///
 /// This function returns an [`Err`] containing the error message if an error
-/// has been raised during the call.
+/// has been raised during the execution of the callable value.
 pub(crate) fn safe_call(
     l: LuaState,
     arg_count: i32,
@@ -362,7 +366,7 @@ pub(crate) fn safe_call(
     err_func: Option<i32>,
 ) -> Result<(), String> {
     unsafe {
-        let call_res = lua_pcall(l, arg_count, res_count.unwrap_or(MUTRET), err_func.unwrap_or(0));
+        let call_res = lua_pcall(l, arg_count, res_count.unwrap_or(MULTRET), err_func.unwrap_or(0));
         if call_res == 0 {
             Ok(())
         } else {
@@ -371,8 +375,8 @@ pub(crate) fn safe_call(
     }
 }
 
-/// Call the provided meta-method on the object at the given index. If the
-/// provided index is [`None`], the object on the top of the stack is used.
+/// Call the requested `meta_method` on the object at the given `index`.
+///
 /// This function returns whether the call succeeded, and if so, the result
 /// of the call is push on the top of the stack.
 pub(crate) fn call_meta(l: LuaState, index: i32, meta_method: &str) -> bool {
@@ -390,9 +394,9 @@ pub(crate) extern "C" fn raise_error(l: LuaState, message: &str) {
     }
 }
 
-/// Get debug information about the frame at the specified level. This function
-/// returns [`None`] if the specified level is higher that the current stack
-/// depth.
+/// Get debug information about the frame at the specified `level`. This
+/// function returns [`None`] if the specified level is higher that the current
+/// stack depth.
 pub(crate) fn debug_frame(l: LuaState, level: i32) -> Option<LuaDebug> {
     unsafe {
         let mut maybe_res = LuaDebug::new();
@@ -401,19 +405,21 @@ pub(crate) fn debug_frame(l: LuaState, level: i32) -> Option<LuaDebug> {
 }
 
 /// Fill the provided debug data structure with required information in the
-/// `what` parameter. See do of `lua_getinfo` for more information.
-pub(crate) fn debug_info(l: LuaState, ar: &mut LuaDebug, what: &str) -> bool {
+/// `what` parameter.
+///
+/// See the documentation of the `lua_getinfo` C function for more information.
+pub(crate) fn debug_info(l: LuaState, frame: &mut LuaDebug, what: &str) -> bool {
     unsafe {
         let ext_what = CString::from_str(what).unwrap();
-        lua_getinfo(l, ext_what.as_ptr(), ar) != 0
+        lua_getinfo(l, ext_what.as_ptr(), frame) != 0
     }
 }
 
-/// Get the name of the source from which the provided debug frame is coming.
-pub(crate) fn debug_get_source(ar: &LuaDebug) -> Option<String> {
+/// Get the name of the source from which the provided debug `frame` is coming.
+pub(crate) fn debug_get_source(frame: &LuaDebug) -> Option<String> {
     unsafe {
-        if !ar.source.is_null() {
-            let source = CStr::from_ptr(ar.source);
+        if !frame.source.is_null() {
+            let source = CStr::from_ptr(frame.source);
             Some(String::from(source.to_str().unwrap()))
         } else {
             None
@@ -421,16 +427,17 @@ pub(crate) fn debug_get_source(ar: &LuaDebug) -> Option<String> {
     }
 }
 
-/// Get the identifier (index) of the prototype currently being executed and
-/// the program counter inside this prototype.
-/// This function returns [`None`] if such information doesn't exists for the
-/// current frame.
-pub(crate) fn debug_proto_and_pc(l: LuaState, ar: &mut LuaDebug) -> Option<(usize, usize)> {
+/// Get the identifier (index) of the prototype being executed in the provided
+/// `frame` and the program counter inside this prototype.
+///
+/// This function returns [`None`] if such information don't exist for the
+/// provided frame.
+pub(crate) fn debug_proto_and_pc(l: LuaState, frame: &mut LuaDebug) -> Option<(usize, usize)> {
     unsafe {
         let mut ext_pc: c_uint = 0;
         let mut ext_protoid: c_uint = 0;
-        let pc_get_res = lua_getpc(l, ar, &mut ext_pc);
-        let proto_id_get_res = lua_getprotoid(l, ar, &mut ext_protoid);
+        let pc_get_res = lua_getpc(l, frame, &mut ext_pc);
+        let proto_id_get_res = lua_getprotoid(l, frame, &mut ext_protoid);
         if pc_get_res != 0 && ext_pc > 0 && proto_id_get_res != 0 {
             Some((ext_protoid as usize, ext_pc as usize))
         } else {
@@ -439,7 +446,7 @@ pub(crate) fn debug_proto_and_pc(l: LuaState, ar: &mut LuaDebug) -> Option<(usiz
     }
 }
 
-/// Get the prototype identifier of the function at the provided index if
+/// Get the prototype identifier of the function at the provided `index` if
 /// possible, [`None`] otherwise.
 pub(crate) fn debug_get_func_id(l: LuaState, index: i32) -> Option<usize> {
     unsafe {
@@ -452,8 +459,9 @@ pub(crate) fn debug_get_func_id(l: LuaState, index: i32) -> Option<usize> {
     }
 }
 
-/// Get the local value at the provide index in the provided debug frame, push
-/// its value on the current stack if it exists.
+/// Get the local value at the provided `index` in the provided debug frame,
+/// push it on the current stack if it exists.
+///
 /// This function returns the local value name if it has been found, [`None`]
 /// otherwise.
 pub(crate) fn debug_get_local(l: LuaState, ar: &LuaDebug, index: i32) -> Option<&'static str> {
@@ -471,7 +479,8 @@ pub(crate) fn debug_get_local(l: LuaState, ar: &LuaDebug, index: i32) -> Option<
 // ----- Utils -----
 
 /// Helper function to get the absolute path to the file defining the required
-/// module if it exists. This function looks in the defined `LUA_PATH`.
+/// module if it exists. This function looks in the `LUA_PATH` environment
+/// variable.
 pub(crate) fn find_in_lua_path(module_name: &str) -> Option<PathBuf> {
     // Create the list of patterns to use for module search
     let mut searching_patterns: Vec<String> = Vec::new();
@@ -495,10 +504,10 @@ pub(crate) fn find_in_lua_path(module_name: &str) -> Option<PathBuf> {
     })
 }
 
-/// Transform the value in the stack at the provided index as a string and
-/// return it. This function use the `__tostring` Lua meta-method if the
-/// type of the value requires it. If the call to this method fails, the
-/// provided default value is returned.
+/// Transform the value in the stack at the provided `index` as a string and
+/// return it. This function use the `__tostring` Lua meta-method if the type
+/// of the value requires it. If the call to this method fails, the provided
+/// `default` value is returned.
 pub(crate) fn to_string(l: LuaState, index: i32, default: &'static str) -> &'static str {
     let value_type = get_type(l, index);
     match value_type {
