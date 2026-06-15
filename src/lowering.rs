@@ -1,14 +1,14 @@
 //! # Source lowering module
 //!
-//! This module is the base of all the source lowering process. Its purpose is
-//! to hold all common logic used by source lowering passes.
+//! This module is the base of the source lowering process. Its purpose is to
+//! hold all common logics used by source lowering passes.
 
 use crate::{ExecutionContext, diagnostics::DiagnosticCollector, sources::SourceId};
 use std::collections::HashMap;
 
 pub mod lkql;
 
-/// This structure is used to hold the context during a lowering pass.
+/// Context that holds information during a lowering pass.
 struct LoweringContext<'a, T> {
     /// Execution context the lowering takes place in.
     execution_context: &'a ExecutionContext,
@@ -86,7 +86,7 @@ impl<'a, T> LoweringContext<'a, T> {
     }
 }
 
-/// Unescape the provided string following LKQL escaping sequences.
+/// Unescape the provided string.
 fn unescape_string(string: &str) -> String {
     string
         .replace("\\n", "\n")
