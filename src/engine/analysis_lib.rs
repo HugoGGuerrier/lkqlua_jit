@@ -7,7 +7,6 @@
 use crate::{
     Config,
     builtins::{
-        NULL_SINGLETON_GLOBAL_NAME,
         traits::indexable,
         types::{
             BuiltinType, BuiltinTypeRepo, TYPE_NAME_FIELD, TYPE_TAGS_FIELD, TypeField,
@@ -15,19 +14,18 @@ use crate::{
         },
     },
     diagnostics::{Diagnostic, DiagnosticCollector},
-    engine::LuaValue,
     errors::{ANALYSIS_LIBRARY_ERROR, ErrorInstance, ErrorInstanceArg},
     lua::{
         LuaState, copy_value, find_in_lua_path, get_field, get_global, get_index, get_length,
         get_string, load_lua_file, pop, push_bool, push_c_function, push_nil, push_string,
         push_table, safe_call, set_field, set_global, set_index, set_metatable,
     },
+    runtime::{
+        ANALYSIS_CONTEXT_GLOBAL_NAME, ANALYSIS_LIB_GLOBAL_NAME, ANALYSIS_UNITS_GLOBAL_NAME,
+        NULL_SINGLETON_GLOBAL_NAME,
+    },
 };
 use std::{cmp::min, ffi::c_int, path::PathBuf};
-
-pub const ANALYSIS_LIB_GLOBAL_NAME: &str = "value@analysis_lib";
-pub const ANALYSIS_CONTEXT_GLOBAL_NAME: &str = "value@analysis_context";
-pub const ANALYSIS_UNITS_GLOBAL_NAME: &str = "value@analysis_units";
 
 /// This type represents a loaded Langkit Lua analysis library. It offers an
 /// abstraction in the Rust world to access all useful information stored in
@@ -279,7 +277,7 @@ impl AnalysisLibrary {
                     -3
                 }
                 TypeField::Property(function_value) => {
-                    function_value.push_on_stack(l);
+                    function_value.push_on_stack_with_uv(l, 0);
                     -2
                 }
             };
@@ -289,7 +287,7 @@ impl AnalysisLibrary {
 
         // Finally, set type overloads
         for (target, function) in implementation.overloads {
-            function.push_on_stack(l);
+            function.push_on_stack_with_uv(l, 0);
             set_field(l, -2, target.metamethod_name());
         }
 

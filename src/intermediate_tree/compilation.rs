@@ -5,7 +5,6 @@
 
 use crate::{
     builtins::{
-        LKQL_IMPORT_GLOBAL_NAME, NULL_SINGLETON_GLOBAL_NAME, UNIT_SINGLETON_GLOBAL_NAME,
         get_builtin_bindings,
         traits::{BuiltinTrait, iterable::ITERATOR_FIELD},
         types::{
@@ -38,6 +37,7 @@ use crate::{
         },
         constant_eval::{ConstantValue, ConstantValueVariant},
     },
+    runtime::{LKQL_IMPORT_GLOBAL_NAME, NULL_SINGLETON_GLOBAL_NAME, UNIT_SINGLETON_GLOBAL_NAME},
     sources::SourceSection,
 };
 use core::slice;

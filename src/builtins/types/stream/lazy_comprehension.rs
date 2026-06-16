@@ -9,7 +9,7 @@ use crate::{
         traits::iterable::ITERATOR_FIELD,
         types::{TypeField, TypeImplementation, stream::INTERNAL_NEXT_FIELD},
     },
-    engine::{FunctionValue, RuntimeValue},
+    runtime::{Function, RuntimeValue},
 };
 use const_format::formatcp;
 
@@ -17,7 +17,7 @@ pub const SPECIALIZATION: TypeImplementation = TypeImplementation {
     name: "LazyComprehension",
     fields: &[(
         INTERNAL_NEXT_FIELD,
-        TypeField::Value(RuntimeValue::Function(FunctionValue::LuaFunction(LIST_COMP_NEXT_METHOD))),
+        TypeField::Value(RuntimeValue::Callable(Function::LuaFunction(LIST_COMP_NEXT_METHOD))),
     )],
     overloads: &[],
     index_method: None,

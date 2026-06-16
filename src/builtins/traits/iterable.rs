@@ -8,7 +8,7 @@
 
 use crate::{
     builtins::traits::{BuiltinTrait, RequiredField},
-    engine::{FunctionValue, RuntimeValue},
+    runtime::{Function, RuntimeValue},
 };
 use const_format::formatcp;
 
@@ -28,7 +28,7 @@ pub const TRAIT: BuiltinTrait = BuiltinTrait {
 
 /// Default implementation of the "any" method on iterable values.
 pub const DEFAULT_ITERABLE_ANY: RuntimeValue =
-    RuntimeValue::Function(FunctionValue::LuaFunction(formatcp!(
+    RuntimeValue::Callable(Function::LuaFunction(formatcp!(
         "function(_, self, predicate)
             local it = self['{iterator}']
             local next = it()
@@ -45,7 +45,7 @@ pub const DEFAULT_ITERABLE_ANY: RuntimeValue =
 
 /// Default implementation of the "all" method on iterable values.
 pub const DEFAULT_ITERABLE_ALL: RuntimeValue =
-    RuntimeValue::Function(FunctionValue::LuaFunction(formatcp!(
+    RuntimeValue::Callable(Function::LuaFunction(formatcp!(
         "function(_, self, predicate)
             local it = self['{iterator}']
             local next = it()
@@ -62,7 +62,7 @@ pub const DEFAULT_ITERABLE_ALL: RuntimeValue =
 
 /// Default implementation of the "reduce" method on iterable values.
 pub const DEFAULT_ITERABLE_REDUCE: RuntimeValue =
-    RuntimeValue::Function(FunctionValue::LuaFunction(formatcp!(
+    RuntimeValue::Callable(Function::LuaFunction(formatcp!(
         "function(_, self, fn, init)
             local it = self['{iterator}']
             local next = it()

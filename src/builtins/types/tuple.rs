@@ -10,8 +10,8 @@ use crate::{
             img_property, pattern,
         },
     },
-    engine::FunctionValue,
     lua::{LuaState, get_field, get_index, get_length, get_string, push_string, set_top},
+    runtime::Function,
 };
 use std::ffi::c_int;
 
@@ -23,9 +23,9 @@ pub const TYPE: BuiltinType = BuiltinType {
 
 pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
     name: "Tuple",
-    fields: &[("img", TypeField::Property(FunctionValue::CFunction(img_property)))],
+    fields: &[("img", TypeField::Property(Function::CFunction(img_property)))],
     overloads: &[
-        (OverloadTarget::ToString, FunctionValue::CFunction(tuple_tostring)),
+        (OverloadTarget::ToString, Function::CFunction(tuple_tostring)),
         (OverloadTarget::Eq, TUPLE_EQ),
     ],
     index_method: None,
@@ -51,7 +51,7 @@ extern "C" fn tuple_tostring(l: LuaState) -> c_int {
 }
 
 /// Overload of "__eq" for the "Tuple" type
-const TUPLE_EQ: FunctionValue = FunctionValue::LuaFunction(
+const TUPLE_EQ: Function = Function::LuaFunction(
     "function(self, other)
         -- Start by checking types
         if getmetatable(self) ~= getmetatable(other) then

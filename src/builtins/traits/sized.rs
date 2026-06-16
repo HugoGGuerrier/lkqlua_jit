@@ -6,7 +6,7 @@
 
 use crate::{
     builtins::traits::{BuiltinTrait, RequiredField},
-    engine::FunctionValue,
+    runtime::Function,
 };
 
 pub const TRAIT: BuiltinTrait = BuiltinTrait {
@@ -17,5 +17,5 @@ pub const TRAIT: BuiltinTrait = BuiltinTrait {
 
 /// This represents the default "length" property that links directly to the
 /// `#` Lua operator.
-pub const DEFAULT_SIZED_LENGTH: FunctionValue =
-    FunctionValue::LuaFunction("function (self) return #self end");
+pub const DEFAULT_SIZED_LENGTH: Function =
+    Function::LuaFunction("function (self) return #self end");

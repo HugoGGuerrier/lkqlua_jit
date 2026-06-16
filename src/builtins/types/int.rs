@@ -6,8 +6,8 @@ use crate::{
     builtins::types::{
         BuiltinType, TypeField, TypeImplementation, TypeImplementationVariant, bool, img_property,
     },
-    engine::FunctionValue,
     lua::{LuaState, copy_value, push_number, set_metatable},
+    runtime::Function,
 };
 
 pub const TYPE: BuiltinType = BuiltinType {
@@ -18,7 +18,7 @@ pub const TYPE: BuiltinType = BuiltinType {
 
 pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
     name: "Int",
-    fields: &[("img", TypeField::Property(FunctionValue::CFunction(img_property)))],
+    fields: &[("img", TypeField::Property(Function::CFunction(img_property)))],
     overloads: &[],
     index_method: None,
     registering_function: Some(register_metatable),

@@ -19,13 +19,22 @@ use crate::{
             img_property, list,
         },
     },
-    engine::FunctionValue,
     lua::{LuaState, push_string},
+    runtime::Function,
 };
 use const_format::formatcp;
 use std::ffi::c_int;
 
 pub mod lazy_comprehension;
+
+/// Name of the internal method used to get the next element of the stream,
+/// there is no default implementation for this method, specializations must
+/// implement it.
+/// This method must return `nil` if there is no more elements in the stream.
+const INTERNAL_NEXT_FIELD: &str = "field@internal_next";
+
+/// Name of the internal field containing the current size of the stream cache.
+const CACHE_SIZE_FIELD: &str = "field@cache_size";
 
 pub const TYPE: BuiltinType = BuiltinType {
     tag: list::TYPE.tag + 1,
@@ -34,14 +43,14 @@ pub const TYPE: BuiltinType = BuiltinType {
         TypeImplementation {
             name: "Stream",
             fields: &[
-                ("img", TypeField::Property(FunctionValue::CFunction(img_property))),
+                ("img", TypeField::Property(Function::CFunction(img_property))),
                 ("length", TypeField::Property(STREAM_LENGTH)),
                 (ITERATOR_FIELD, TypeField::Property(STREAM_ITERATOR)),
                 ("any", TypeField::Value(DEFAULT_ITERABLE_ANY)),
                 ("all", TypeField::Value(DEFAULT_ITERABLE_ALL)),
                 ("reduce", TypeField::Value(DEFAULT_ITERABLE_REDUCE)),
             ],
-            overloads: &[(OverloadTarget::ToString, FunctionValue::CFunction(stream_tostring))],
+            overloads: &[(OverloadTarget::ToString, Function::CFunction(stream_tostring))],
             index_method: Some(STREAM_INDEX),
             registering_function: None,
         },
@@ -58,7 +67,7 @@ extern "C" fn stream_tostring(l: LuaState) -> c_int {
 }
 
 /// Lua function to get the length of a stream.
-const STREAM_LENGTH: FunctionValue = FunctionValue::LuaFunction(
+const STREAM_LENGTH: Function = Function::LuaFunction(
     "function (self)
     local _ = self[0]
     return #self
@@ -66,7 +75,7 @@ end",
 );
 
 /// Lua function to get an iterator for a stream.
-const STREAM_ITERATOR: FunctionValue = FunctionValue::LuaFunction(
+const STREAM_ITERATOR: Function = Function::LuaFunction(
     "function(self)
     local cursor = 1
     local finished = false
@@ -87,17 +96,8 @@ const STREAM_ITERATOR: FunctionValue = FunctionValue::LuaFunction(
 end",
 );
 
-/// Name of the internal method used to get the next element of the stream,
-/// there is no default implementation for this method, specializations must
-/// implement it.
-/// This method must return `nil` if there is no more elements in the stream.
-const INTERNAL_NEXT_FIELD: &str = "field@internal_next";
-
-/// Name of the internal field containing the current size of the stream cache.
-const CACHE_SIZE_FIELD: &str = "field@cache_size";
-
 /// Lua function used to index inside a stream.
-const STREAM_INDEX: FunctionValue = FunctionValue::LuaFunction(formatcp!(
+const STREAM_INDEX: Function = Function::LuaFunction(formatcp!(
     "function(self, field)
     -- Check if the field is a number, in that case initialize the cache to
     -- this index.

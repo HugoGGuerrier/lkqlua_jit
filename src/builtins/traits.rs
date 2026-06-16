@@ -4,7 +4,7 @@
 
 use crate::{
     builtins::types::{BuiltinType, OverloadTarget, TypeField, TypeImplementationVariant},
-    engine::FunctionValue,
+    runtime::Function,
 };
 
 pub mod indexable;
@@ -37,7 +37,7 @@ impl BuiltinTrait {
         // Check that the type correctly implements required overloads
         fn is_overload_in(
             searched: &OverloadTarget,
-            haystack: &[(OverloadTarget, FunctionValue)],
+            haystack: &[(OverloadTarget, Function)],
         ) -> bool {
             haystack.iter().any(|(target, _)| target == searched)
         }

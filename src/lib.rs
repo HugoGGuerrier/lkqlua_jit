@@ -28,6 +28,7 @@ pub mod errors;
 pub mod intermediate_tree;
 pub mod lowering;
 pub mod lua;
+pub mod runtime;
 pub mod sources;
 
 /// This type holds all required data to run LKQL sources using LuaJIT as a

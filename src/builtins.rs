@@ -8,8 +8,8 @@ use crate::{
         functions::{lkql_img, lkql_import, lkql_pattern, lkql_print, lkql_units},
         types::{BuiltinType, BuiltinTypeRepo},
     },
-    engine::{FunctionValue, RuntimeValue},
     lua::{LuaState, get_global, push_table, set_metatable},
+    runtime::{Function, LKQL_IMPORT_GLOBAL_NAME, RuntimeValue, UNIT_SINGLETON_GLOBAL_NAME},
 };
 use std::collections::HashMap;
 
@@ -18,20 +18,6 @@ pub mod traits;
 pub mod types;
 pub mod utils;
 
-/// Name of the global field where the "null" value is stored.
-pub const NULL_SINGLETON_GLOBAL_NAME: &str = "value@null";
-
-/// Name of the binding leading to the "Unit" singleton.
-pub const UNIT_SINGLETON_GLOBAL_NAME: &str = "value@unit";
-pub fn create_unit_value(l: LuaState) {
-    push_table(l, 0, 0);
-    get_global(l, &types::unit::IMPLEMENTATION.global_field_name());
-    set_metatable(l, -2);
-}
-
-/// Name of the global value binding to the importation function.
-pub const LKQL_IMPORT_GLOBAL_NAME: &str = "value@lkql_import";
-
 /// Allocate a new vector and populate it with all LKQL built-in functions,
 /// then return it.
 pub fn get_builtin_bindings() -> HashMap<&'static str, RuntimeValue> {
@@ -39,13 +25,13 @@ pub fn get_builtin_bindings() -> HashMap<&'static str, RuntimeValue> {
     let mut b = |name: &'static str, value: RuntimeValue| res.insert(name, value);
 
     // Add all builtins
-    b("pattern", RuntimeValue::Function(FunctionValue::CFunction(lkql_pattern)));
-    b("print", RuntimeValue::Function(FunctionValue::CFunction(lkql_print)));
-    b("img", RuntimeValue::Function(FunctionValue::CFunction(lkql_img)));
-    b("units", RuntimeValue::Function(FunctionValue::CFunction(lkql_units)));
+    b("pattern", RuntimeValue::Callable(Function::CFunction(lkql_pattern)));
+    b("print", RuntimeValue::Callable(Function::CFunction(lkql_print)));
+    b("img", RuntimeValue::Callable(Function::CFunction(lkql_img)));
+    b("units", RuntimeValue::Callable(Function::CFunction(lkql_units)));
     b(
         LKQL_IMPORT_GLOBAL_NAME,
-        RuntimeValue::Function(FunctionValue::CFunction(lkql_import)),
+        RuntimeValue::Callable(Function::CFunction(lkql_import)),
     );
     b(UNIT_SINGLETON_GLOBAL_NAME, RuntimeValue::FromBuilder(create_unit_value));
 
@@ -99,4 +85,11 @@ pub fn get_builtin_types() -> BuiltinTypeRepo {
             b(&types::function::TYPE),
         ],
     }
+}
+
+/// Function to place the unit value in the provided Lua state.
+pub fn create_unit_value(l: LuaState) {
+    push_table(l, 0, 0);
+    get_global(l, &types::unit::IMPLEMENTATION.global_field_name());
+    set_metatable(l, -2);
 }

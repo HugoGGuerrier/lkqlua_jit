@@ -8,11 +8,11 @@ use crate::{
         BuiltinType, OverloadTarget, TypeField, TypeImplementation, TypeImplementationVariant,
         img_property, namespace,
     },
-    engine::{CONTEXT_GLOBAL_NAME, FunctionValue},
     lua::{
         LuaState, call, copy_value, debug_get_func_id, get_field, get_global, get_string, get_top,
         get_user_data, load_lua_code, pop, push_string, set_metatable,
     },
+    runtime::{CONTEXT_GLOBAL_NAME, Function},
 };
 use std::ffi::c_int;
 
@@ -24,8 +24,8 @@ pub const TYPE: BuiltinType = BuiltinType {
 
 pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
     name: "Function",
-    fields: &[("img", TypeField::Property(FunctionValue::CFunction(img_property)))],
-    overloads: &[(OverloadTarget::ToString, FunctionValue::CFunction(function_tostring))],
+    fields: &[("img", TypeField::Property(Function::CFunction(img_property)))],
+    overloads: &[(OverloadTarget::ToString, Function::CFunction(function_tostring))],
     index_method: None,
     registering_function: Some(register_metatable),
 };

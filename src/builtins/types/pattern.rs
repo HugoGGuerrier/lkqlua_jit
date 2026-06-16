@@ -8,11 +8,14 @@ use crate::{
         BuiltinType, OverloadTarget, TypeField, TypeImplementation, TypeImplementationVariant,
         img_property, str,
     },
-    engine::FunctionValue,
     lua::{LuaState, get_field, get_user_data, pop, push_string},
+    runtime::Function,
 };
 use regex::Regex;
 use std::ffi::c_int;
+
+/// The field in which the native regex handle is stored.
+pub const NATIVE_HANDLE_FIELD: &str = "field@native_handle";
 
 pub const TYPE: BuiltinType = BuiltinType {
     tag: str::TYPE.tag + 1,
@@ -22,17 +25,14 @@ pub const TYPE: BuiltinType = BuiltinType {
 
 pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
     name: "Pattern",
-    fields: &[("img", TypeField::Property(FunctionValue::CFunction(img_property)))],
+    fields: &[("img", TypeField::Property(Function::CFunction(img_property)))],
     overloads: &[
-        (OverloadTarget::ToString, FunctionValue::CFunction(pattern_tostring)),
-        (OverloadTarget::Gc, FunctionValue::CFunction(pattern_gc)),
+        (OverloadTarget::ToString, Function::CFunction(pattern_tostring)),
+        (OverloadTarget::Gc, Function::CFunction(pattern_gc)),
     ],
     index_method: None,
     registering_function: None,
 };
-
-/// The field in which the native regex handle is stored.
-pub const NATIVE_HANDLE_FIELD: &str = "field@native_handle";
 
 /// Overload of "__tostring" for the "Pattern" type
 #[unsafe(no_mangle)]

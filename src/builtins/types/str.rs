@@ -11,8 +11,8 @@ use crate::{
         },
         utils::{get_int_param, get_string_param, verify_param},
     },
-    engine::{FunctionValue, RuntimeValue},
     lua::{LuaState, copy_value, get_string, get_top, push_bool, push_string, set_metatable},
+    runtime::{Function, RuntimeValue},
 };
 use std::{ffi::c_int, path::PathBuf, str::FromStr};
 
@@ -25,19 +25,19 @@ pub const TYPE: BuiltinType = BuiltinType {
 pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
     name: "Str",
     fields: &[
-        ("img", TypeField::Property(FunctionValue::CFunction(img_property))),
+        ("img", TypeField::Property(Function::CFunction(img_property))),
         ("length", TypeField::Property(DEFAULT_SIZED_LENGTH)),
         (
             "base_name",
-            TypeField::Value(RuntimeValue::Function(FunctionValue::CFunction(str_base_name))),
+            TypeField::Value(RuntimeValue::Callable(Function::CFunction(str_base_name))),
         ),
         (
             "starts_with",
-            TypeField::Value(RuntimeValue::Function(FunctionValue::CFunction(str_starts_with))),
+            TypeField::Value(RuntimeValue::Callable(Function::CFunction(str_starts_with))),
         ),
         (
             "substring",
-            TypeField::Value(RuntimeValue::Function(FunctionValue::CFunction(str_substring))),
+            TypeField::Value(RuntimeValue::Callable(Function::CFunction(str_substring))),
         ),
     ],
     overloads: &[],

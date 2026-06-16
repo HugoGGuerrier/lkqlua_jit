@@ -7,8 +7,8 @@ use crate::{
         BuiltinType, OverloadTarget, TypeField, TypeImplementation, TypeImplementationVariant,
         img_property, stream,
     },
-    engine::FunctionValue,
     lua::{LuaState, get_field, get_next_pair, get_string, pop, push_nil, push_string},
+    runtime::Function,
 };
 use std::ffi::c_int;
 
@@ -20,9 +20,9 @@ pub const TYPE: BuiltinType = BuiltinType {
 
 pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
     name: "Object",
-    fields: &[("img", TypeField::Property(FunctionValue::CFunction(img_property)))],
+    fields: &[("img", TypeField::Property(Function::CFunction(img_property)))],
     overloads: &[
-        (OverloadTarget::ToString, FunctionValue::CFunction(obj_tostring)),
+        (OverloadTarget::ToString, Function::CFunction(obj_tostring)),
         (OverloadTarget::Eq, OBJ_EQ),
     ],
     index_method: None,
@@ -62,7 +62,7 @@ extern "C" fn obj_tostring(l: LuaState) -> c_int {
 }
 
 /// Overload of "__eq" for the "Object" type.
-const OBJ_EQ: FunctionValue = FunctionValue::LuaFunction(
+const OBJ_EQ: Function = Function::LuaFunction(
     "function(self, other)
         -- Start by checking types
         if getmetatable(self) ~= getmetatable(other) then

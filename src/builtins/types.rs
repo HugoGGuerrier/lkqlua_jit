@@ -5,11 +5,11 @@
 
 use crate::{
     builtins::{functions::lkql_img, traits::BuiltinTrait},
-    engine::{FunctionValue, LuaValue, RuntimeValue},
     lua::{
         LuaState, get_top, move_top_value, push_bool, push_nil, push_string, push_table, set_field,
         set_global, set_index, set_top,
     },
+    runtime::{Function, RuntimeValue},
 };
 use std::ffi::c_int;
 
@@ -219,11 +219,11 @@ pub struct TypeImplementation {
     pub fields: &'static [(&'static str, TypeField)],
 
     /// List of built-in behaviors to overload for this implementation.
-    pub overloads: &'static [(OverloadTarget, FunctionValue)],
+    pub overloads: &'static [(OverloadTarget, Function)],
 
     /// Specific indexing meta-method for this implementation. If [`None`], the
     /// [`GENERIC_INDEX`] is going to be used.
-    pub index_method: Option<FunctionValue>,
+    pub index_method: Option<Function>,
 
     /// Function used to store the implementation Lua representation in a given
     /// Lua execution context.
@@ -255,14 +255,14 @@ impl TypeImplementation {
         }
 
         // Then fill tables
-        fn push_field<T: LuaValue>(l: LuaState, table_index: i32, name: &str, value: &T) {
-            value.push_on_stack(l);
-            set_field(l, table_index - 1, name);
-        }
-        fields.iter().for_each(|(n, v)| push_field(l, -2, n, v));
-        properties
-            .iter()
-            .for_each(|(n, v)| push_field(l, -1, n, *v));
+        fields.iter().for_each(|(n, v)| {
+            v.push_on_stack(l);
+            set_field(l, -3, n);
+        });
+        properties.iter().for_each(|(n, v)| {
+            v.push_on_stack_with_uv(l, 0);
+            set_field(l, -2, n);
+        });
     }
 
     /// Push a function on the stack to be used as the `__index` meta-method
@@ -270,7 +270,7 @@ impl TypeImplementation {
     fn create_index_method(&self, l: LuaState) {
         self.index_method
             .as_ref()
-            .unwrap_or(&FunctionValue::LuaFunction(GENERIC_INDEX))
+            .unwrap_or(&Function::LuaFunction(GENERIC_INDEX))
             .push_on_stack_with_uv(l, 2);
     }
 
@@ -278,7 +278,7 @@ impl TypeImplementation {
     /// table at the top of the Lua stack.
     fn push_overloads(&self, l: LuaState) {
         for (target, function) in self.overloads {
-            function.push_on_stack(l);
+            function.push_on_stack_with_uv(l, 0);
             set_field(l, -2, target.metamethod_name());
         }
     }
@@ -292,7 +292,7 @@ pub enum TypeField {
 
     /// When the field is a property, that is a function value that is
     /// implicitly called when accessed.
-    Property(FunctionValue),
+    Property(Function),
 }
 
 /// This type represents the target of an overloading definition.

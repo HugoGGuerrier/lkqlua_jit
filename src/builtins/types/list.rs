@@ -14,8 +14,8 @@ use crate::{
             TypeImplementation, TypeImplementationVariant, img_property, tuple,
         },
     },
-    engine::{FunctionValue, RuntimeValue},
     lua::{LuaState, get_field, get_index, get_length, get_string, push_string, set_top},
+    runtime::{Function, RuntimeValue},
 };
 use const_format::formatcp;
 use std::ffi::c_int;
@@ -31,19 +31,16 @@ pub const TYPE: BuiltinType = BuiltinType {
 pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
     name: "List",
     fields: &[
-        ("img", TypeField::Property(FunctionValue::CFunction(img_property))),
+        ("img", TypeField::Property(Function::CFunction(img_property))),
         ("length", TypeField::Property(DEFAULT_SIZED_LENGTH)),
-        (
-            ITERATOR_FIELD,
-            TypeField::Property(FunctionValue::LuaFunction(LIST_ITERATOR)),
-        ),
+        (ITERATOR_FIELD, TypeField::Property(Function::LuaFunction(LIST_ITERATOR))),
         ("any", TypeField::Value(LIST_ANY)),
         ("all", TypeField::Value(LIST_ALL)),
         ("reduce", TypeField::Value(LIST_REDUCE)),
         ("sublist", TypeField::Value(LIST_SUBLIST)),
     ],
     overloads: &[
-        (OverloadTarget::ToString, FunctionValue::CFunction(list_tostring)),
+        (OverloadTarget::ToString, Function::CFunction(list_tostring)),
         (OverloadTarget::Eq, LIST_EQ),
         (OverloadTarget::Concat, LIST_CONCAT),
     ],
@@ -67,7 +64,7 @@ const LIST_ITERATOR: &str = "function (self)
 end";
 
 /// Implementation of the "any" method on values of the "List" type.
-const LIST_ANY: RuntimeValue = RuntimeValue::Function(FunctionValue::LuaFunction(
+const LIST_ANY: RuntimeValue = RuntimeValue::Callable(Function::LuaFunction(
     "function (_, self, predicate)
         for _, next in ipairs(self) do
             if predicate(nil, next) == true then
@@ -79,7 +76,7 @@ const LIST_ANY: RuntimeValue = RuntimeValue::Function(FunctionValue::LuaFunction
 ));
 
 /// Implementation of the "all" method on values of the "List" type.
-const LIST_ALL: RuntimeValue = RuntimeValue::Function(FunctionValue::LuaFunction(
+const LIST_ALL: RuntimeValue = RuntimeValue::Callable(Function::LuaFunction(
     "function (_, self, predicate)
         for _, next in ipairs(self) do
             if predicate(nil, next) == false then
@@ -91,7 +88,7 @@ const LIST_ALL: RuntimeValue = RuntimeValue::Function(FunctionValue::LuaFunction
 ));
 
 /// Implementation of the "reduce" method on values of the "List" type.
-const LIST_REDUCE: RuntimeValue = RuntimeValue::Function(FunctionValue::LuaFunction(
+const LIST_REDUCE: RuntimeValue = RuntimeValue::Callable(Function::LuaFunction(
     "function (_, self, fn, init)
         local res = init
         for _, next in ipairs(self) do
@@ -102,7 +99,7 @@ const LIST_REDUCE: RuntimeValue = RuntimeValue::Function(FunctionValue::LuaFunct
 ));
 
 /// Implementation of the "sublist" method in value of the "List" type.
-const LIST_SUBLIST: RuntimeValue = RuntimeValue::Function(FunctionValue::LuaFunction(
+const LIST_SUBLIST: RuntimeValue = RuntimeValue::Callable(Function::LuaFunction(
     "function (_, self, low, high)
         local res = setmetatable({}, getmetatable(self))
         for i=low,high,1 do
@@ -131,7 +128,7 @@ extern "C" fn list_tostring(l: LuaState) -> c_int {
 }
 
 /// Overload of "__eq" for the "List" type
-const LIST_EQ: FunctionValue = FunctionValue::LuaFunction(formatcp!(
+const LIST_EQ: Function = Function::LuaFunction(formatcp!(
     "function(self, other)
         -- Start by checking types
         if not other['{tags_field}'][{list_type_tag}] then
@@ -156,7 +153,7 @@ const LIST_EQ: FunctionValue = FunctionValue::LuaFunction(formatcp!(
 ));
 
 /// Overload of "__concat" for the "List" type
-const LIST_CONCAT: FunctionValue = FunctionValue::LuaFunction(formatcp!(
+const LIST_CONCAT: Function = Function::LuaFunction(formatcp!(
     "function(self, other)
         -- Start by checking types
         if not self['{tags_field}'][{list_type_tag}] then

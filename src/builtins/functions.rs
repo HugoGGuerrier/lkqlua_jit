@@ -9,7 +9,6 @@ use crate::{
         types::pattern::{self, NATIVE_HANDLE_FIELD},
         utils::{get_bool_param, get_param, get_string_param},
     },
-    engine::{CONTEXT_GLOBAL_NAME, analysis_lib::ANALYSIS_UNITS_GLOBAL_NAME, register_for_gc},
     errors::{
         DEPENDENCY_CYCLE, ErrorInstance, ErrorInstanceArg, REGEX_SYNTAX_ERROR, REGEX_TOO_BIG,
     },
@@ -17,6 +16,7 @@ use crate::{
         LuaState, get_global, get_string, get_top, get_type, get_user_data, pop, push_string,
         push_table, push_user_data_ptr, raise_error, set_field, set_metatable, to_string,
     },
+    runtime::{ANALYSIS_UNITS_GLOBAL_NAME, CONTEXT_GLOBAL_NAME, register_for_gc},
 };
 use regex::RegexBuilder;
 use std::{ffi::c_int, io::Write, path::Path};
