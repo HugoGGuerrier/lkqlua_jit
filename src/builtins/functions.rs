@@ -1,6 +1,6 @@
 //! # Built-in functions
 //!
-//! This module contains all LKQL built-in functions and utils for them.
+//! This module contains all LKQL built-in functions.
 
 use crate::{
     ExecutionContext,
@@ -20,9 +20,6 @@ use crate::{
 };
 use regex::RegexBuilder;
 use std::{ffi::c_int, io::Write, path::Path};
-
-/// The default image of a value when the latter doesn't define one.
-const DEFAULT_VALUE_IMAGE: &str = "<lkql_value>";
 
 /// The "pattern" function
 #[unsafe(no_mangle)]
@@ -86,11 +83,9 @@ pub extern "C" fn lkql_print(l: LuaState) -> c_int {
 
     // Then display the value on the configured standard output
     if new_line {
-        writeln!(ctx.config.std_out, "{}", to_string(l, to_print_index, DEFAULT_VALUE_IMAGE))
-            .unwrap();
+        writeln!(ctx.config.std_out, "{}", to_string(l, to_print_index)).unwrap();
     } else {
-        write!(ctx.config.std_out, "{}", to_string(l, to_print_index, DEFAULT_VALUE_IMAGE))
-            .unwrap();
+        write!(ctx.config.std_out, "{}", to_string(l, to_print_index)).unwrap();
     }
 
     // Return the LKQL unit value
@@ -107,7 +102,7 @@ pub extern "C" fn lkql_img(l: LuaState) -> c_int {
         crate::lua::LuaType::String => {
             push_string(l, &format!("\"{}\"", get_string(l, value_index).unwrap()))
         }
-        _ => push_string(l, to_string(l, value_index, DEFAULT_VALUE_IMAGE)),
+        _ => push_string(l, to_string(l, value_index)),
     }
     1
 }

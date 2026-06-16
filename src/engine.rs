@@ -205,7 +205,7 @@ extern "C" fn handle_error(l: LuaState) -> c_int {
     // Then fetch the raw error message and start by extracting different parts
     // from it.
     let location_header_matcher = Regex::new(r"^.*:\d+: (.*)$").unwrap();
-    let raw_error_message = to_string(l, get_top(l), "No error message");
+    let raw_error_message = to_string(l, get_top(l));
     let error_message = if let Some(groups) = location_header_matcher.captures(raw_error_message) {
         groups.get(1).unwrap().as_str()
     } else {
@@ -234,7 +234,7 @@ extern "C" fn handle_error(l: LuaState) -> c_int {
                             )
                             .is_some()
                             {
-                                let res = String::from(to_string(l, -1, "<lkql_value>"));
+                                let res = String::from(to_string(l, -1));
                                 pop(l, 1);
                                 res
                             } else {
