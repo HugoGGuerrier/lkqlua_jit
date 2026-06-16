@@ -20,7 +20,7 @@ pub const BUG_KIND_COLOR: Color = Color::Red;
 pub const HINT_COLOR: Color = Color::Fixed(69);
 pub const ADVICE_COLOR: Color = Color::Fixed(147);
 
-/// This type may be used to collect diagnostics and iterate over them to
+/// This type should be used to collect diagnostics and iterate over them to
 /// create a final report.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DiagnosticCollector {
