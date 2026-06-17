@@ -4,31 +4,25 @@
 
 use crate::{
     builtins::types::{
-        BuiltinType, OverloadTarget, TypeField, TypeImplementation, TypeImplementationVariant,
+        BuiltinType, OverloadTarget, TypeField, TypeImplementation, TypeImplementationKind,
         img_property,
     },
-    lua::{LuaState, push_string},
     runtime::Function,
 };
-use std::ffi::c_int;
 
 pub const TYPE: BuiltinType = BuiltinType {
     tag: 0,
     traits: &[],
-    implementation_variant: TypeImplementationVariant::new_mono(IMPLEMENTATION),
+    implementation_variant: TypeImplementationKind::new_mono(IMPLEMENTATION),
 };
 
 pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
     name: "Unit",
     fields: &[("img", TypeField::Property(Function::CFunction(img_property)))],
-    overloads: &[(OverloadTarget::ToString, Function::CFunction(unit_tostring))],
+    overloads: &[(OverloadTarget::ToString, TO_STRING)],
     index_method: None,
     registering_function: None,
 };
 
 /// Overload of "__tostring" for the "Unit" type
-#[unsafe(no_mangle)]
-extern "C" fn unit_tostring(l: LuaState) -> c_int {
-    push_string(l, "()");
-    1
-}
+const TO_STRING: Function = Function::LuaFunction("function (_) return '()' end");

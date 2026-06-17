@@ -49,48 +49,42 @@ const ARGS_FIELD: &str = "field@args";
 /// This function mutates the internal state of the `self` value.
 const LIST_COMP_NEXT_METHOD: &str = formatcp!(
     "function(self)
-    -- First of all check that there are remaining work
-    if self['{finished}'] then
-        return nil
-    end
-
-    -- Ensure iterators and arguments table are initialized
-    if self['{iterators}'] == nil or self['{args}'] == nil then
-        self['{iterators}'] = {{}}
-        self['{args}'] = {{}}
-        for i, coll in ipairs(self['{collections}']) do
-            self['{iterators}'][i] = coll['{iterator}']
-            self['{args}'][i] = self['{iterators}'][i]()
+        -- First of all check that there are remaining work
+        if self['{FINISHED_FIELD}'] then
+            return nil
         end
-    end
 
-    -- Get the next element of the comprehension
-    local res = nil
-    while res == nil and not self['{finished}'] do
-        -- First, call the body with computed arguments
-        res = self['{body}'](unpack(self['{args}']))
-
-        -- Then compute the next argument set
-        for i = #self['{iterators}'], 1, -1 do
-            self['{args}'][i] = self['{iterators}'][i]()
-            if self['{args}'][i] == nil then
-                if i == 1 then
-                    self['{finished}'] = true
-                else
-                    self['{iterators}'][i] = self['{collections}'][i]['{iterator}']
-                    self['{args}'][i] = self['{iterators}'][i]()
-                end
-            else
-                break
+        -- Ensure iterators and arguments table are initialized
+        if self['{ITERATORS_FIELD}'] == nil or self['{ARGS_FIELD}'] == nil then
+            self['{ITERATORS_FIELD}'] = {{}}
+            self['{ARGS_FIELD}'] = {{}}
+            for i, coll in ipairs(self['{COLLECTIONS_FIELD}']) do
+                self['{ITERATORS_FIELD}'][i] = coll['{ITERATOR_FIELD}']
+                self['{ARGS_FIELD}'][i] = self['{ITERATORS_FIELD}'][i]()
             end
         end
-    end
-    return res
-end",
-    finished = FINISHED_FIELD,
-    iterators = ITERATORS_FIELD,
-    collections = COLLECTIONS_FIELD,
-    iterator = ITERATOR_FIELD,
-    args = ARGS_FIELD,
-    body = BODY_FIELD,
+
+        -- Get the next element of the comprehension
+        local res = nil
+        while res == nil and not self['{FINISHED_FIELD}'] do
+            -- First, call the body with computed arguments
+            res = self['{BODY_FIELD}'](unpack(self['{ARGS_FIELD}']))
+
+            -- Then compute the next argument set
+            for i = #self['{ITERATORS_FIELD}'], 1, -1 do
+                self['{ARGS_FIELD}'][i] = self['{ITERATORS_FIELD}'][i]()
+                if self['{ARGS_FIELD}'][i] == nil then
+                    if i == 1 then
+                        self['{FINISHED_FIELD}'] = true
+                    else
+                        self['{ITERATORS_FIELD}'][i] = self['{COLLECTIONS_FIELD}'][i]['{ITERATOR_FIELD}']
+                        self['{ARGS_FIELD}'][i] = self['{ITERATORS_FIELD}'][i]()
+                    end
+                else
+                    break
+                end
+            end
+        end
+        return res
+    end",
 );

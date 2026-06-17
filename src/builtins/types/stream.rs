@@ -15,7 +15,7 @@ use crate::{
             sized,
         },
         types::{
-            BuiltinType, OverloadTarget, TypeField, TypeImplementation, TypeImplementationVariant,
+            BuiltinType, OverloadTarget, TypeField, TypeImplementation, TypeImplementationKind,
             img_property, list,
         },
     },
@@ -39,7 +39,7 @@ const CACHE_SIZE_FIELD: &str = "field@cache_size";
 pub const TYPE: BuiltinType = BuiltinType {
     tag: list::TYPE.tag + 1,
     traits: &[&indexable::TRAIT, &iterable::TRAIT, &sized::TRAIT],
-    implementation_variant: TypeImplementationVariant::new_poly(
+    implementation_variant: TypeImplementationKind::new_poly(
         TypeImplementation {
             name: "Stream",
             fields: &[
@@ -69,69 +69,67 @@ extern "C" fn stream_tostring(l: LuaState) -> c_int {
 /// Lua function to get the length of a stream.
 const STREAM_LENGTH: Function = Function::LuaFunction(
     "function (self)
-    local _ = self[0]
-    return #self
-end",
+        local _ = self[0]
+        return #self
+    end",
 );
 
 /// Lua function to get an iterator for a stream.
 const STREAM_ITERATOR: Function = Function::LuaFunction(
     "function(self)
-    local cursor = 1
-    local finished = false
-    return function()
-        if not finished then
-            local res = self[cursor]
-            if res == nil then
-                finished = true
-                return nil
+        local cursor = 1
+        local finished = false
+        return function()
+            if not finished then
+                local res = self[cursor]
+                if res == nil then
+                    finished = true
+                    return nil
+                else
+                    cursor = cursor + 1
+                    return res
+                end
             else
-                cursor = cursor + 1
-                return res
+                return nil
             end
-        else
-            return nil
         end
-    end
-end",
+    end",
 );
 
 /// Lua function used to index inside a stream.
 const STREAM_INDEX: Function = Function::LuaFunction(formatcp!(
     "function(self, field)
-    -- Check if the field is a number, in that case initialize the cache to
-    -- this index.
-    if type(field) == 'number' then
-        -- Prepare working variables
-        local next_value = nil
-        local cache_size = self['{cache_size_field}'] or 0
+        -- Check if the field is a number, in that case initialize the cache to
+        -- this index.
+        if type(field) == 'number' then
+            -- Prepare working variables
+            local next_value = nil
+            local cache_size = self['{CACHE_SIZE_FIELD}'] or 0
 
-        while cache_size < field or field < 1 do
-            -- Get the next value and ensure it is not nil
-            next_value = self['{next_field}'](self)
-            if next_value == nil then break end
+            while cache_size < field or field < 1 do
+                -- Get the next value and ensure it is not nil
+                next_value = self['{INTERNAL_NEXT_FIELD}'](self)
+                if next_value == nil then break end
 
-            -- Initialize the cache and make it grow
-            cache_size = cache_size + 1
-            self[cache_size] = next_value
+                -- Initialize the cache and make it grow
+                cache_size = cache_size + 1
+                self[cache_size] = next_value
+            end
+
+            -- Finally update the stream state and return the result
+            self['{CACHE_SIZE_FIELD}'] = cache_size
+            return next_value
         end
 
-        -- Finally update the stream state and return the result
-        self['{cache_size_field}'] = cache_size
-        return next_value
-    end
+        -- In other cases, perform the generic indexing process
 
-    -- In other cases, perform the generic indexing process
+        -- Check in type properties
+        res = __uv[2][field]
+        if res ~= nil then
+            return res(self)
+        end
 
-    -- Check in type properties
-    res = __uv[2][field]
-    if res ~= nil then
-        return res(self)
-    end
-
-    -- Then get the result in type fields
-    return __uv[1][field]
-end",
-    cache_size_field = CACHE_SIZE_FIELD,
-    next_field = INTERNAL_NEXT_FIELD,
+        -- Then get the result in type fields
+        return __uv[1][field]
+    end",
 ));

@@ -56,7 +56,7 @@ impl BuiltinTypeRepo {
 pub struct BuiltinType {
     pub tag: i32,
     pub traits: &'static [&'static BuiltinTrait],
-    pub implementation_variant: TypeImplementationVariant,
+    pub implementation_variant: TypeImplementationKind,
 }
 
 impl Eq for BuiltinType {}
@@ -71,8 +71,8 @@ impl BuiltinType {
     /// Get the type name to display to the language users.
     pub fn display_name(&self) -> &'static str {
         match &self.implementation_variant {
-            TypeImplementationVariant::Monomorphic { implementation } => implementation.name,
-            TypeImplementationVariant::Polymorphic { base_implementation, .. } => {
+            TypeImplementationKind::Monomorphic { implementation } => implementation.name,
+            TypeImplementationKind::Polymorphic { base_implementation, .. } => {
                 base_implementation.name
             }
         }
@@ -83,7 +83,7 @@ impl BuiltinType {
     pub fn place_in_lua_context(&self, l: LuaState) {
         let top = get_top(l);
         match &self.implementation_variant {
-            TypeImplementationVariant::Monomorphic { implementation } => {
+            TypeImplementationKind::Monomorphic { implementation } => {
                 // Create a new table that is going to be the type meta-table
                 push_table(l, 0, implementation.overloads.len() as i32 + 1);
 
@@ -105,7 +105,7 @@ impl BuiltinType {
 
                 set_top(l, top);
             }
-            TypeImplementationVariant::Polymorphic { base_implementation, specializations } => {
+            TypeImplementationKind::Polymorphic { base_implementation, specializations } => {
                 for specialization in *specializations {
                     // Create a new table that is going to be the meta-table
                     push_table(l, 0, base_implementation.overloads.len() as i32 + 1);
@@ -174,7 +174,7 @@ impl BuiltinType {
 /// An LKQL type may be either mono or polymorphic. This means that a type can
 /// have multiple implementations, while staying the same type to the user.
 #[derive(Debug)]
-pub enum TypeImplementationVariant {
+pub enum TypeImplementationKind {
     Monomorphic {
         implementation: TypeImplementation,
     },
@@ -191,7 +191,7 @@ pub enum TypeImplementationVariant {
     },
 }
 
-impl TypeImplementationVariant {
+impl TypeImplementationKind {
     /// Create a new monomorphic type implementation object.
     pub const fn new_mono(implementation: TypeImplementation) -> Self {
         Self::Monomorphic { implementation }
@@ -293,6 +293,43 @@ pub enum TypeField {
     /// When the field is a property, that is a function value that is
     /// implicitly called when accessed.
     Property(Function),
+}
+
+/// This types offer a way to reference to a type without referencing its
+/// [`BuiltinType`] implementation. It is useful to avoid dependency cycles in
+/// built-in types definitions.
+#[derive(Debug, Clone)]
+pub enum TypeRef {
+    Unit,
+    Bool,
+    Int,
+    Str,
+    Pattern,
+    Tuple,
+    List,
+    Stream,
+    Obj,
+    Namespace,
+    Function,
+}
+
+impl TypeRef {
+    /// Get the built-in type referenced by this instance.
+    pub(crate) fn as_builtin_type(&self) -> &'static BuiltinType {
+        match self {
+            TypeRef::Unit => &unit::TYPE,
+            TypeRef::Bool => &bool::TYPE,
+            TypeRef::Int => &int::TYPE,
+            TypeRef::Str => &str::TYPE,
+            TypeRef::Pattern => &pattern::TYPE,
+            TypeRef::Tuple => &tuple::TYPE,
+            TypeRef::List => &list::TYPE,
+            TypeRef::Stream => &stream::TYPE,
+            TypeRef::Obj => &obj::TYPE,
+            TypeRef::Namespace => &namespace::TYPE,
+            TypeRef::Function => &function::TYPE,
+        }
+    }
 }
 
 /// This type represents the target of an overloading definition.

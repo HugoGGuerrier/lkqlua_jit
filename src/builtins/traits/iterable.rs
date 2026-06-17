@@ -7,8 +7,11 @@
 //! "next" element in the source iterable.
 
 use crate::{
-    builtins::traits::{BuiltinTrait, RequiredField},
-    runtime::{Function, RuntimeValue},
+    builtins::{
+        traits::{BuiltinTrait, RequiredField},
+        types::TypeRef,
+    },
+    runtime::{Function, LkqlParam, RuntimeValue},
 };
 use const_format::formatcp;
 
@@ -26,52 +29,63 @@ pub const TRAIT: BuiltinTrait = BuiltinTrait {
     ],
 };
 
+/// Define a list of parameters required by "any" and "all" methods that
+/// implementations may reuse.
+pub const ANY_AND_ALL_PARAMS: &[LkqlParam] = &[
+    LkqlParam::new("self"),
+    LkqlParam::with_type("predicate", TypeRef::Function),
+];
+
 /// Default implementation of the "any" method on iterable values.
-pub const DEFAULT_ITERABLE_ANY: RuntimeValue =
-    RuntimeValue::Callable(Function::LuaFunction(formatcp!(
-        "function(_, self, predicate)
-            local it = self['{iterator}']
-            local next = it()
-            while next ~= nil do
-                if predicate(nil, next) then
-                    return true
-                end
-                next = it()
+pub const DEFAULT_ITERABLE_ANY: RuntimeValue = RuntimeValue::Callable(Function::LkqlFunction {
+    params: ANY_AND_ALL_PARAMS,
+    body: formatcp!(
+        "local it = self['{ITERATOR_FIELD}']
+        local next = it()
+        while next ~= nil do
+            if predicate(nil, next) then
+                return true
             end
-            return false
-        end",
-        iterator = ITERATOR_FIELD,
-    )));
+            next = it()
+        end
+        return false",
+    ),
+});
 
 /// Default implementation of the "all" method on iterable values.
-pub const DEFAULT_ITERABLE_ALL: RuntimeValue =
-    RuntimeValue::Callable(Function::LuaFunction(formatcp!(
-        "function(_, self, predicate)
-            local it = self['{iterator}']
-            local next = it()
-            while next ~= nil do
-                if not predicate(nil, next) then
-                    return false
-                end
-                next = it()
+pub const DEFAULT_ITERABLE_ALL: RuntimeValue = RuntimeValue::Callable(Function::LkqlFunction {
+    params: ANY_AND_ALL_PARAMS,
+    body: formatcp!(
+        "local it = self['{ITERATOR_FIELD}']
+        local next = it()
+        while next ~= nil do
+            if not predicate(nil, next) then
+                return false
             end
-            return true
-        end",
-        iterator = ITERATOR_FIELD,
-    )));
+            next = it()
+        end
+        return true",
+    ),
+});
+
+/// List of parameters that the "reduce" method require.
+pub const REDUCE_PARAMS: &[LkqlParam] = &[
+    LkqlParam::new("self"),
+    LkqlParam::with_type("fn", TypeRef::Function),
+    LkqlParam::new("init"),
+];
 
 /// Default implementation of the "reduce" method on iterable values.
-pub const DEFAULT_ITERABLE_REDUCE: RuntimeValue =
-    RuntimeValue::Callable(Function::LuaFunction(formatcp!(
-        "function(_, self, fn, init)
-            local it = self['{iterator}']
-            local next = it()
-            local res = init
-            while next ~= nil do
-                res = fn(nil, res, next)
-                next = it()
-            end
-            return res
-        end",
-        iterator = ITERATOR_FIELD,
-    )));
+pub const DEFAULT_ITERABLE_REDUCE: RuntimeValue = RuntimeValue::Callable(Function::LkqlFunction {
+    params: REDUCE_PARAMS,
+    body: formatcp!(
+        "local it = self['{ITERATOR_FIELD}']
+        local next = it()
+        local res = init
+        while next ~= nil do
+            res = fn(nil, res, next)
+            next = it()
+        end
+        return res",
+    ),
+});

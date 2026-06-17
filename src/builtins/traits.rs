@@ -3,7 +3,7 @@
 //! This module contains all types and working values for built-in traits.
 
 use crate::{
-    builtins::types::{BuiltinType, OverloadTarget, TypeField, TypeImplementationVariant},
+    builtins::types::{BuiltinType, OverloadTarget, TypeField, TypeImplementationKind},
     runtime::Function,
 };
 
@@ -44,10 +44,10 @@ impl BuiltinTrait {
 
         for overload in self.required_overloads {
             let overload_found = match &t.implementation_variant {
-                TypeImplementationVariant::Monomorphic { implementation } => {
+                TypeImplementationKind::Monomorphic { implementation } => {
                     is_overload_in(overload, implementation.overloads)
                 }
-                TypeImplementationVariant::Polymorphic { base_implementation, specializations } => {
+                TypeImplementationKind::Polymorphic { base_implementation, specializations } => {
                     is_overload_in(overload, base_implementation.overloads)
                         || (specializations
                             .iter()
@@ -69,10 +69,10 @@ impl BuiltinTrait {
 
         for field in self.required_fields {
             let field_found = match &t.implementation_variant {
-                TypeImplementationVariant::Monomorphic { implementation } => {
+                TypeImplementationKind::Monomorphic { implementation } => {
                     is_field_in(field, implementation.fields)
                 }
-                TypeImplementationVariant::Polymorphic { base_implementation, specializations } => {
+                TypeImplementationKind::Polymorphic { base_implementation, specializations } => {
                     is_field_in(field, base_implementation.fields)
                         || specializations
                             .iter()

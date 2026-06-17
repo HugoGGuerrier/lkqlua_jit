@@ -4,7 +4,7 @@
 
 use crate::{
     builtins::types::{
-        BuiltinType, TypeField, TypeImplementation, TypeImplementationVariant, bool, img_property,
+        BuiltinType, TypeField, TypeImplementation, TypeImplementationKind, bool, img_property,
     },
     lua::{LuaState, copy_value, push_number, set_metatable},
     runtime::Function,
@@ -13,7 +13,7 @@ use crate::{
 pub const TYPE: BuiltinType = BuiltinType {
     tag: bool::TYPE.tag + 1,
     traits: &[],
-    implementation_variant: TypeImplementationVariant::new_mono(IMPLEMENTATION),
+    implementation_variant: TypeImplementationKind::new_mono(IMPLEMENTATION),
 };
 
 pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {

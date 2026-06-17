@@ -4,7 +4,7 @@
 
 use crate::{
     builtins::types::{
-        BuiltinType, OverloadTarget, TypeField, TypeImplementation, TypeImplementationVariant,
+        BuiltinType, OverloadTarget, TypeField, TypeImplementation, TypeImplementationKind,
         img_property, obj,
     },
     lua::{LuaState, get_next_pair, get_string, pop, push_nil, push_string},
@@ -15,7 +15,7 @@ use std::ffi::c_int;
 pub const TYPE: BuiltinType = BuiltinType {
     tag: obj::TYPE.tag + 1,
     traits: &[],
-    implementation_variant: TypeImplementationVariant::new_mono(IMPLEMENTATION),
+    implementation_variant: TypeImplementationKind::new_mono(IMPLEMENTATION),
 };
 
 pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {

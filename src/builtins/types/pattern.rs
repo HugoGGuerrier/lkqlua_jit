@@ -5,7 +5,7 @@
 
 use crate::{
     builtins::types::{
-        BuiltinType, OverloadTarget, TypeField, TypeImplementation, TypeImplementationVariant,
+        BuiltinType, OverloadTarget, TypeField, TypeImplementation, TypeImplementationKind,
         img_property, str,
     },
     lua::{LuaState, get_field, get_user_data, pop, push_string},
@@ -20,7 +20,7 @@ pub const NATIVE_HANDLE_FIELD: &str = "field@native_handle";
 pub const TYPE: BuiltinType = BuiltinType {
     tag: str::TYPE.tag + 1,
     traits: &[],
-    implementation_variant: TypeImplementationVariant::new_mono(IMPLEMENTATION),
+    implementation_variant: TypeImplementationKind::new_mono(IMPLEMENTATION),
 };
 
 pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
