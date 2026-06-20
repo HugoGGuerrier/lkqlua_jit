@@ -454,6 +454,16 @@ impl Node {
                 // Label the next instruction
                 ctx.instructions.label(next_label);
             }
+            NodeVariant::LengthExpr(value) => {
+                let value_access = value.compile_as_access(ctx, Some(result_slot));
+                ctx.instructions.ad(
+                    &self.origin_location,
+                    LEN,
+                    result_slot,
+                    value_access.slot() as u16,
+                );
+                value_access.release(ctx);
+            }
             NodeVariant::IndexExpr { indexed_val, index } => {
                 // Compile the indexed value and the index
                 let indexed_value_access = indexed_val.compile_as_access(ctx, Some(result_slot));

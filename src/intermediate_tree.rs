@@ -191,6 +191,7 @@ pub enum NodeVariant {
         prefix: Box<Node>,
         suffix: Identifier,
     },
+    LengthExpr(Box<Node>),
     IndexExpr {
         indexed_val: Box<Node>,
         index: Box<Node>,
@@ -346,6 +347,9 @@ impl Node {
                     ("suffix", format!("\"{}\"", suffix.text)),
                 ],
             ),
+            NodeVariant::LengthExpr(value) => {
+                ("LengthExpr", &[("value", value.pretty_print(child_level))])
+            }
             NodeVariant::IndexExpr { indexed_val, index } => (
                 "IndexExpr",
                 &[

@@ -806,11 +806,11 @@ impl Node {
             LkqlNode::ListPattern(list_pattern) => {
                 // Create working variables
                 let mut maybe_splat_pattern = None;
-                let sub_patterns_source = list_pattern.f_patterns()?;
 
                 // Start by lowering all sub-patterns
                 let mut sub_patterns = Vec::new();
-                for (i, sub_pattern_source) in sub_patterns_source
+                for (i, sub_pattern_source) in list_pattern
+                    .f_patterns()?
                     .into_iter()
                     .enumerate()
                     .filter_map(|(i, c)| c.transpose().map(|c| (i, c)))
@@ -887,13 +887,7 @@ impl Node {
                     n(
                         l,
                         NodeVariant::CompBinOp {
-                            left: bn(
-                                l,
-                                NodeVariant::DottedExpr {
-                                    prefix: matched_value_ref.clone(),
-                                    suffix: id_str(l, "length"),
-                                },
-                            ),
+                            left: bn(l, NodeVariant::LengthExpr(matched_value_ref.clone())),
                             operator: CompOperator::new(
                                 l,
                                 if maybe_splat_pattern.is_some() {
@@ -921,21 +915,14 @@ impl Node {
                             suffix: id_str(l, "sublist"),
                         },
                     );
-                    let length_access = n(
-                        l,
-                        NodeVariant::DottedExpr {
-                            prefix: matched_value_ref.clone(),
-                            suffix: id_str(l, "length"),
-                        },
-                    );
                     let sublist_call = bn(
                         l,
                         NodeVariant::FunCall {
                             callee: sublist_access,
                             positional_args: vec![
-                                *matched_value_ref,
+                                *matched_value_ref.clone(),
                                 n(l, NodeVariant::IntLiteral((sub_pattern_count + 1).to_string())),
-                                length_access,
+                                n(l, NodeVariant::LengthExpr(matched_value_ref)),
                             ],
                             named_args: vec![],
                         },
