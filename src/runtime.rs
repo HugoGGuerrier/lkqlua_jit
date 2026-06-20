@@ -133,18 +133,19 @@ impl Function {
                     .iter()
                     .map(|p| {
                         let name = p.name;
-                        let pos_and_named_error = ErrorInstance::new(
-                            POS_AND_NAMED_VALUE_FOR_PARAM.id,
-                            vec![ErrorInstanceArg::Static(String::from(name))],
-                        )
-                        .to_json();
                         format!(
                             "local named_value = __named_args['{name}']
                             if {name} == nil then
                                 {name} = named_value
                             elseif named_value ~= nil then
-                                error('{pos_and_named_error}')
-                            end"
+                                error('{}')
+                            end",
+                            ErrorInstance::new(
+                                POS_AND_NAMED_VALUE_FOR_PARAM.id,
+                                vec![ErrorInstanceArg::Static(String::from(name))],
+                            )
+                            .to_json()
+                            .escape_debug()
                         )
                     })
                     .collect::<Vec<_>>()
@@ -168,6 +169,7 @@ impl Function {
                                     vec![ErrorInstanceArg::Static(String::from(name))],
                                 )
                                 .to_json()
+                                .escape_debug()
                             ));
                         format!("{name} = {name} or {default}")
                     })
@@ -175,52 +177,57 @@ impl Function {
                     .join("\n");
 
                 // Create statements that checks parameter types
-                let param_type_checkers = params.iter().filter_map(|p| {
-                    p.required_type.as_ref().map(|required_type| {
-                        // Create working values
-                        let name = p.name;
-                        let (checking_expr, error_id, expected_name) = match required_type {
-                            ParamType::PreciseType(t) => (
-                                format!("__types[{}]", t.as_builtin_type().tag),
-                                WRONG_PARAM_TYPE.id,
-                                String::from(t.as_builtin_type().display_name()),
-                            ),
-                            ParamType::UnionType(u) => (
-                                u.iter()
-                                    .map(|t| format!("__types[{}]", t.as_builtin_type().tag))
-                                    .collect::<Vec<_>>()
-                                    .join(" or "),
-                                WRONG_PARAM_TYPE.id,
-                                u.iter()
-                                    .map(|t| t.as_builtin_type().display_name())
-                                    .collect::<Vec<_>>()
-                                    .join("\" or a \""),
-                            ),
-                            ParamType::Trait(t) => (
-                                format!("{name}['{}']", t.runtime_field()),
-                                MISSING_PARAM_TRAIT.id,
-                                String::from(t.name),
-                            ),
-                        };
-                        let wrong_type_error = ErrorInstance::new(
-                            error_id,
-                            vec![
-                                ErrorInstanceArg::Static(expected_name),
-                                ErrorInstanceArg::Static(String::from(name)),
-                                ErrorInstanceArg::Static(String::from("%s")),
-                            ],
-                        )
-                        .to_json();
+                let param_type_checkers = params
+                    .iter()
+                    .filter_map(|p| {
+                        p.required_type.as_ref().map(|required_type| {
+                            // Create working values
+                            let name = p.name;
+                            let (checking_expr, error_id, expected_name) = match required_type {
+                                ParamType::PreciseType(t) => (
+                                    format!("__types[{}]", t.as_builtin_type().tag),
+                                    WRONG_PARAM_TYPE.id,
+                                    String::from(t.as_builtin_type().display_name()),
+                                ),
+                                ParamType::UnionType(u) => (
+                                    u.iter()
+                                        .map(|t| format!("__types[{}]", t.as_builtin_type().tag))
+                                        .collect::<Vec<_>>()
+                                        .join(" or "),
+                                    WRONG_PARAM_TYPE.id,
+                                    u.iter()
+                                        .map(|t| t.as_builtin_type().display_name())
+                                        .collect::<Vec<_>>()
+                                        .join("\" or a \""),
+                                ),
+                                ParamType::Trait(t) => (
+                                    format!("{name}['{}']", t.runtime_field()),
+                                    MISSING_PARAM_TRAIT.id,
+                                    String::from(t.name),
+                                ),
+                            };
+                            let wrong_type_error = ErrorInstance::new(
+                                error_id,
+                                vec![
+                                    ErrorInstanceArg::Static(expected_name),
+                                    ErrorInstanceArg::Static(String::from(name)),
+                                    ErrorInstanceArg::Static(String::from("%s")),
+                                ],
+                            )
+                            .to_json();
 
-                        // Then create the statement to check the parameter type
-                        format!(
-                            "local __types = {name}['{TYPE_TAGS_FIELD}']
-                            if not {checking_expr} then
-                                error(string.format('{wrong_type_error}', {name}['{TYPE_NAME_FIELD}']))
-                            end"
-                        )
+                            // Then create the statement to check the parameter type
+                            format!(
+                                "local __types = {name}['{TYPE_TAGS_FIELD}']
+                            if not ({checking_expr}) then
+                                error(string.format('{}', {name}['{TYPE_NAME_FIELD}']))
+                            end",
+                                wrong_type_error.escape_debug()
+                            )
+                        })
                     })
-                }).collect::<Vec<_>>().join("\n");
+                    .collect::<Vec<_>>()
+                    .join("\n");
 
                 // Finally assemble all statements and the function body to
                 // create the Lua value.
@@ -269,6 +276,14 @@ impl LkqlParam {
         Self {
             name,
             required_type: Some(ParamType::PreciseType(required_type)),
+            default_value: None,
+        }
+    }
+
+    pub(crate) const fn with_types(name: &'static str, required_types: &'static [TypeRef]) -> Self {
+        Self {
+            name,
+            required_type: Some(ParamType::UnionType(required_types)),
             default_value: None,
         }
     }
