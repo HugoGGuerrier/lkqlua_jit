@@ -1,0 +1,15 @@
+val int_tuple = (1, 2, 3)
+val tuple_tuple = (int_tuple, int_tuple)
+
+print("=== Should be true")
+print(int_tuple is (1, 2, 3))
+print(int_tuple is (1, 2, _))
+print(int_tuple is (1, 2, last) when last is 3)
+print(tuple_tuple is ((1, 2, 3), other) when other is (1, 2, 3))
+print("")
+
+print("=== Should be false")
+print(int_tuple is (1, 2))
+print(int_tuple is (1, 2, 4))
+print(int_tuple is (1, 2, 3, 4))
+print("not a tuple" is (1, 2, 3))

@@ -802,6 +802,62 @@ impl Node {
                 }
             }
 
+            // --- Tuple pattern
+            LkqlNode::TuplePattern(tuple_pattern) => {
+                // Create a vector to store all sub-patterns
+                let mut sub_patterns = Vec::new();
+
+                // Lower all sub-patterns and add them in the vector
+                for (i, sub_pattern_source) in tuple_pattern
+                    .f_patterns()?
+                    .into_iter()
+                    .enumerate()
+                    .filter_map(|(i, c)| c.transpose().map(|c| (i, c)))
+                {
+                    let elem_id = ctx.new_tmp_id();
+                    let sub_pattern = Self::lower_lkql_pattern(ctx, &sub_pattern_source?, elem_id)?;
+                    let index_access = sub_pattern.related_node(NodeVariant::IndexExpr {
+                        indexed_val: matched_value_ref.clone(),
+                        index: bn(
+                            sub_pattern.origin_location,
+                            NodeVariant::IntLiteral((i + 1).to_string()),
+                        ),
+                    });
+                    sub_patterns.push(sub_pattern.with_let(elem_id, index_access));
+                }
+
+                // Store the count of sub-patterns matching elements of the tuple
+                let sub_pattern_count = sub_patterns.len();
+
+                // Add type checking to sub-patterns
+                sub_patterns.insert(
+                    0,
+                    n(
+                        l,
+                        NodeVariant::InstanceOf {
+                            expression: matched_value_ref.clone(),
+                            expected_type_tag: types::tuple::TYPE.tag,
+                        },
+                    ),
+                );
+
+                // Add the tuple size checking to sub-patterns
+                sub_patterns.insert(
+                    1,
+                    n(
+                        l,
+                        NodeVariant::CompBinOp {
+                            left: bn(l, NodeVariant::LengthExpr(matched_value_ref.clone())),
+                            operator: CompOperator::new(l, CompOperatorVariant::Equals),
+                            right: bn(l, NodeVariant::IntLiteral(sub_pattern_count.to_string())),
+                        },
+                    ),
+                );
+
+                // Finally, combine all sub-patterns in a "and" expression
+                combine_predicates(sub_patterns).variant
+            }
+
             // --- List pattern
             LkqlNode::ListPattern(list_pattern) => {
                 // Create working variables
