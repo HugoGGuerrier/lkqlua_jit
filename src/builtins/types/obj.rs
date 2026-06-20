@@ -2,13 +2,18 @@
 //!
 //! This module defines the LKQL "Object" type.
 
+use const_format::formatcp;
+
 use crate::{
-    builtins::types::{
-        BuiltinType, OverloadTarget, TypeField, TypeImplementation, TypeImplementationKind,
-        img_property, stream,
+    builtins::{
+        traits::iterable::{self, ITERATOR_FIELD},
+        types::{
+            BuiltinType, OverloadTarget, TypeField, TypeImplementation, TypeImplementationKind,
+            img_property, stream,
+        },
     },
     lua::{LuaState, get_field, get_next_pair, get_string, pop, push_nil, push_string},
-    runtime::Function,
+    runtime::{Function, LkqlParam, RuntimeValue},
 };
 use std::ffi::c_int;
 
@@ -20,7 +25,10 @@ pub const TYPE: BuiltinType = BuiltinType {
 
 pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
     name: "Object",
-    fields: &[("img", TypeField::Property(Function::CFunction(img_property)))],
+    fields: &[
+        ("img", TypeField::Property(Function::CFunction(img_property))),
+        ("without_keys", TypeField::Value(WITHOUT_KEYS)),
+    ],
     overloads: &[
         (OverloadTarget::ToString, Function::CFunction(obj_tostring)),
         (OverloadTarget::Eq, OBJ_EQ),
@@ -28,6 +36,36 @@ pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
     index_method: None,
     registering_function: None,
 };
+
+/// Implementation of the "without_keys" method.
+const WITHOUT_KEYS: RuntimeValue = RuntimeValue::Callable(Function::LkqlFunction {
+    params: &[
+        LkqlParam::new("self"),
+        LkqlParam::with_trait("keys", &iterable::TRAIT),
+    ],
+    body: formatcp!(
+        "local res = setmetatable({{}}, getmetatable(self))
+        for k, v in pairs(self) do
+            -- Get whether to include the current element in the result
+            local do_include = true
+            local it = keys['{ITERATOR_FIELD}']
+            local next = it()
+            while next ~= nil do
+                if k == next then
+                    do_include = false
+                    break
+                end
+                next = it()
+            end
+
+            -- Then insert the current element in the result if required
+            if do_include then
+                res[k] = v
+            end
+        end
+        return res"
+    ),
+});
 
 /// Overload of "__tostring" for the "Object" type.
 #[unsafe(no_mangle)]

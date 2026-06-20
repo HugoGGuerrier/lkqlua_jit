@@ -1,0 +1,7 @@
+Error: Both positional and named value
+   ╭─[ <working-dir>/script.lkql:2:7 ]
+   │
+ 2 │ print(obj.without_keys(["a"], keys=["a"]))
+   │       ─────────────────┬─────────────────  
+   │                        ╰─────────────────── The parameter "keys" has been provided a positional and a named value
+───╯

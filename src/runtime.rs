@@ -272,6 +272,17 @@ impl LkqlParam {
             default_value: None,
         }
     }
+
+    pub(crate) const fn with_trait(
+        name: &'static str,
+        required_trait: &'static BuiltinTrait,
+    ) -> Self {
+        Self {
+            name,
+            required_type: Some(ParamType::Trait(required_trait)),
+            default_value: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

@@ -1,0 +1,7 @@
+val obj = {a: 1, b: 2, c: 3, other_key: 42}
+
+print(obj.without_keys(["a", "b"]))
+print(obj.without_keys(keys=["a", "b"]))
+print(obj.without_keys(keys=["a", "not_a_key"]))
+print(obj.without_keys(keys=[s for s in ["a", "other_key"]]))
+print(obj.without_keys(keys=[]))

@@ -1,0 +1,7 @@
+Error: Argument is missing required trait
+   ╭─[ <working-dir>/script.lkql:2:7 ]
+   │
+ 2 │ print(obj.without_keys("Not a list"))
+   │       ───────────────┬──────────────  
+   │                      ╰──────────────── Trait "Iterable" is required for the parameter "keys", the type "Str" isn't implementing it
+───╯
