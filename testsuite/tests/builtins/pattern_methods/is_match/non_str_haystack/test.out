@@ -1,0 +1,7 @@
+Error: Invalid argument type
+   ╭─[ <working-dir>/script.lkql:2:7 ]
+   │
+ 2 │ print(p.is_match(42))
+   │       ───────┬──────  
+   │              ╰──────── Expecting a "Str" for the parameter "haystack", got a "Int"
+───╯

@@ -1,0 +1,8 @@
+val p = pattern("w.rd")
+
+print(p.find("A word in a sentence"))
+print(p.find(haystack="A word in a sentence"))
+print(p.find("word in a sentence"))
+print(p.find("This is a word"))
+print(p.find("Hello world"))
+print(p.find(""))

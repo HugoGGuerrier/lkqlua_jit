@@ -1,0 +1,2 @@
+val p = pattern("w.rd")
+print(p.find())

@@ -1,0 +1,8 @@
+val p = pattern("He.+o")
+
+print(p.is_match("Hello"))
+print(p.is_match(haystack="Hello"))
+print(p.is_match("Helo"))
+print(p.is_match("Heldsldsldlso"))
+print(p.is_match("He"))
+print(p.is_match("Hellllllll"))

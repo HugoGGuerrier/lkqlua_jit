@@ -1,0 +1,7 @@
+Error: No value for parameter
+   ╭─[ <working-dir>/script.lkql:2:7 ]
+   │
+ 2 │ print(p.is_match())
+   │       ──────┬─────  
+   │             ╰─────── Missing value for the "haystack" parameter
+───╯
