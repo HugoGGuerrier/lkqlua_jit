@@ -32,7 +32,7 @@ pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
 
 /// Register the meta-table in the provided Lua state.
 fn register_metatable(l: LuaState, _: &TypeImplementation) {
-    load_lua_code(l, "return function() end", "<empty_function>");
+    load_lua_code(l, "return function () end", "<empty_function>");
     copy_value(l, -2);
     set_metatable(l, -2);
 }
