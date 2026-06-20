@@ -68,8 +68,8 @@ const STARTS_WITH: Function = Function::LkqlFunction {
 const SUBSTRING: Function = Function::LkqlFunction {
     params: &[
         LkqlParam::new("self"),
-        LkqlParam::with_type("from", TypeRef::Int),
-        LkqlParam::with_type("to", TypeRef::Int),
+        LkqlParam::with_type("low", TypeRef::Int),
+        LkqlParam::with_type("high", TypeRef::Int),
     ],
-    body: "return string.sub(self, from, to)",
+    body: "return string.sub(self, low, high)",
 };
