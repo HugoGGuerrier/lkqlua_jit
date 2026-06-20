@@ -866,10 +866,10 @@ impl Node {
                     }
                 }
 
-                // Store the count of subpatterns matching elements of the list
+                // Store the count of sub-patterns matching elements of the list
                 let sub_pattern_count = sub_patterns.len();
 
-                // Add type checking to subpatterns
+                // Add type checking to sub-patterns
                 sub_patterns.insert(
                     0,
                     n(
@@ -881,7 +881,7 @@ impl Node {
                     ),
                 );
 
-                // Add the list size checking to subpatterns
+                // Add the list size checking to sub-patterns
                 sub_patterns.insert(
                     1,
                     n(
@@ -902,7 +902,7 @@ impl Node {
                 );
 
                 // If there is a splat pattern with a binding, add its
-                // corresponding initialization at the end of subpatterns
+                // corresponding initialization at the end of sub-patterns
                 if let Some(LkqlNode::SplatPattern(splat_pattern)) = maybe_splat_pattern
                     && let Some(binding) = splat_pattern.f_binding()?
                 {
@@ -940,7 +940,7 @@ impl Node {
                     ));
                 }
 
-                // Finally, combine all subpatterns in a "and" expression
+                // Finally, combine all sub-patterns in a "and" expression
                 combine_predicates(sub_patterns).variant
             }
 
