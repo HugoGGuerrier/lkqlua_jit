@@ -123,7 +123,7 @@ pub const MISSING_TRAIT: ErrorTemplate = ErrorTemplate {
 pub const MISSING_PARAM_TRAIT: ErrorTemplate = ErrorTemplate {
     id: MISSING_TRAIT.id + 1,
     title: "Argument is missing required trait",
-    message_template: "Trait \"{}\" is required for the parameter \"{}\" parameter, the type \"{}\" isn't implementing it",
+    message_template: "Trait \"{}\" is required for the parameter \"{}\", the type \"{}\" isn't implementing it",
 };
 
 /// Error when encountering an unknown node type name.
