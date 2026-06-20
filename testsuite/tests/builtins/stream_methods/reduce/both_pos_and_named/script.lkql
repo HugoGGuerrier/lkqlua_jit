@@ -1,0 +1,2 @@
+val s = [i for i in [1, 2, 3]]
+print(s.reduce((res, i) => res + i, fn=(res, i) => res + i, init=0))

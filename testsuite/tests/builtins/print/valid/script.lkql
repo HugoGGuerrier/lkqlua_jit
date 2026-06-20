@@ -1,0 +1,4 @@
+print("First line")
+print("Second", false)
+print(" line", true)
+print(to_print="Third line", new_line=true)

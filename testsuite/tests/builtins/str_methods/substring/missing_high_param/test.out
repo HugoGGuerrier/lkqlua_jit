@@ -1,0 +1,7 @@
+Error: No value for parameter
+   ╭─[ <working-dir>/script.lkql:2:7 ]
+   │
+ 2 │ print(s.substring(1))
+   │       ───────┬──────  
+   │              ╰──────── Missing value for the "high" parameter
+───╯

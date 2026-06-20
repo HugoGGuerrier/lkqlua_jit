@@ -1,0 +1,7 @@
+Error: Invalid argument type
+   ╭─[ <working-dir>/script.lkql:2:7 ]
+   │
+ 2 │ print(s.substring("Not an int", 3))
+   │       ──────────────┬─────────────  
+   │                     ╰─────────────── Expecting a "Int" for the parameter "low", got a "Str"
+───╯

@@ -1,0 +1,7 @@
+Error: Both positional and named value
+   ╭─[ <working-dir>/script.lkql:2:7 ]
+   │
+ 2 │ print(l.reduce((res, i) => res + i, fn=(res, i) => res + i, init=0))
+   │       ──────────────────────────────┬──────────────────────────────  
+   │                                     ╰──────────────────────────────── The parameter "fn" has been provided a positional and a named value
+───╯

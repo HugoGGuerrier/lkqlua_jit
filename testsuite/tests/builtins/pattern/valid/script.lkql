@@ -1,0 +1,4 @@
+print(pattern("regex"))
+print(pattern("regex", true))
+print(pattern("regex", false))
+print(pattern(regex="regex", case_sensitive=true))

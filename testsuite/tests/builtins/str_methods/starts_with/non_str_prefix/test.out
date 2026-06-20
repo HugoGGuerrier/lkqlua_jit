@@ -1,0 +1,7 @@
+Error: Invalid argument type
+   ╭─[ <working-dir>/script.lkql:1:7 ]
+   │
+ 1 │ print("Hello World".starts_with(42))
+   │       ──────────────┬──────────────  
+   │                     ╰──────────────── Expecting a "Str" for the parameter "prefix", got a "Int"
+───╯

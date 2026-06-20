@@ -1,0 +1,7 @@
+Error: No value for parameter
+   ╭─[ <working-dir>/script.lkql:1:1 ]
+   │
+ 1 │ img()
+   │ ──┬──  
+   │   ╰──── Missing value for the "value" parameter
+───╯

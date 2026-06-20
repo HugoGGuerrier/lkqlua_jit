@@ -1,0 +1,3 @@
+print("/this/is/an/absolute/filename.txt".base_name)
+print("../relative/filename.txt".base_name)
+print("filename.txt".base_name)

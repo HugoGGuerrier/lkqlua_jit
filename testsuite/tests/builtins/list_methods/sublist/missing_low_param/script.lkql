@@ -1,0 +1,2 @@
+val l = [1, 2, 3, 4]
+print(l.sublist(high=1))

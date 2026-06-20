@@ -1,0 +1,7 @@
+Error: No value for parameter
+   ╭─[ <working-dir>/script.lkql:2:7 ]
+   │
+ 2 │ print(l.reduce(fn=(res, i) => res + i))
+   │       ────────────────┬───────────────  
+   │                       ╰───────────────── Missing value for the "init" parameter
+───╯

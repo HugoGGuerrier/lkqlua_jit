@@ -1,0 +1,2 @@
+val s = "Hello World"
+print(s.substring(1, "Not an int"))

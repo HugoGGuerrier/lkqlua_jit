@@ -1,0 +1,12 @@
+Error: Error from the Lua engine
+   ╭─[ <working-dir>/script.lkql:2:28 ]
+   │
+ 2 │ print(s.reduce((res, i) => res + i, true))
+   │                            ───┬───  
+   │                               ╰───── Attempt to perform arithmetic on local 'res' (a boolean value)
+───╯
+Advice: Called in "script.lkql"
+   ╭─[ <working-dir>/script.lkql:2:7 ]
+   │
+ 2 │ print(s.reduce((res, i) => res + i, true))
+───╯

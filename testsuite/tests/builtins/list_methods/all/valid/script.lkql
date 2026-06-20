@@ -1,0 +1,5 @@
+val l = [1, 2, 3]
+
+print(l.all((i) => i <= 3))
+print(l.all((i) => i == 4))
+print(l.all(predicate=(i) => i <= 3))

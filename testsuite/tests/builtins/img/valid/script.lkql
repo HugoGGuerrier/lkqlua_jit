@@ -1,0 +1,3 @@
+print(img(true))
+print(img(42))
+print(img("Hello World"))

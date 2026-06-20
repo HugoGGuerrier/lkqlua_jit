@@ -1,0 +1,5 @@
+val s = [i for i in [1, 2, 3]]
+
+print(s.all((i) => i <= 3))
+print(s.all((i) => i == 4))
+print(s.all(predicate=(i) => i <= 3))

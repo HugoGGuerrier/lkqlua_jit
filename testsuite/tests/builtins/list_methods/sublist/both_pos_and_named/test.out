@@ -1,0 +1,7 @@
+Error: Both positional and named value
+   ╭─[ <working-dir>/script.lkql:2:7 ]
+   │
+ 2 │ print(l.sublist(1, 2, low=1))
+   │       ───────────┬──────────  
+   │                  ╰──────────── The parameter "low" has been provided a positional and a named value
+───╯

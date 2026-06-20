@@ -1,0 +1,7 @@
+Error: Invalid argument type
+   ╭─[ <working-dir>/script.lkql:1:1 ]
+   │
+ 1 │ print("Value", "Not a bool")
+   │ ──────────────┬─────────────  
+   │               ╰─────────────── Expecting a "Bool" for the parameter "new_line", got a "Str"
+───╯

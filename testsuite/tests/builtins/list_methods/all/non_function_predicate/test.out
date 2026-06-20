@@ -1,0 +1,7 @@
+Error: Invalid argument type
+   ╭─[ <working-dir>/script.lkql:2:7 ]
+   │
+ 2 │ print(l.all("Not a function"))
+   │       ───────────┬───────────  
+   │                  ╰───────────── Expecting a "Function" for the parameter "predicate", got a "Str"
+───╯

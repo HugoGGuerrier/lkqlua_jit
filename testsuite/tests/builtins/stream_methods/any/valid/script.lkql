@@ -1,0 +1,5 @@
+val s = [i for i in [1, 2, 3]]
+
+print(s.any((i) => i == 3))
+print(s.any((i) => i == 4))
+print(s.any(predicate=(i) => i == 3))

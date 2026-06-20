@@ -1,0 +1,5 @@
+val l = [1, 2, 3]
+
+print(l.any((i) => i == 3))
+print(l.any((i) => i == 4))
+print(l.any(predicate=(i) => i == 3))

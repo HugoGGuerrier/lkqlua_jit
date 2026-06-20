@@ -1,0 +1,7 @@
+Error: No value for parameter
+   ╭─[ <working-dir>/script.lkql:1:7 ]
+   │
+ 1 │ print("Hello World".starts_with())
+   │       ─────────────┬─────────────  
+   │                    ╰─────────────── Missing value for the "prefix" parameter
+───╯

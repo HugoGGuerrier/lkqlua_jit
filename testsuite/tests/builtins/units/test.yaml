@@ -1,0 +1,4 @@
+driver: interpreter
+analyzed_files:
+  - foo.foo
+  - bar.foo

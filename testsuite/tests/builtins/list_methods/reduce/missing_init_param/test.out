@@ -1,0 +1,7 @@
+Error: Invalid argument type
+   ╭─[ <working-dir>/script.lkql:2:7 ]
+   │
+ 2 │ print(l.reduce("Not a function", 0))
+   │       ──────────────┬──────────────  
+   │                     ╰──────────────── Expecting a "Function" for the parameter "fn", got a "Str"
+───╯

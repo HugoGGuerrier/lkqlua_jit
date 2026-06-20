@@ -1,0 +1,2 @@
+print([i for i in [1, 2, 3]].length)
+print([i for i in []].length)

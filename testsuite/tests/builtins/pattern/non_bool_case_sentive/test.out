@@ -1,0 +1,7 @@
+Error: Invalid argument type
+   ╭─[ <working-dir>/script.lkql:1:1 ]
+   │
+ 1 │ pattern("regex", "Not a bool")
+   │ ───────────────┬──────────────  
+   │                ╰──────────────── Expecting a "Bool" for the parameter "case_sensitive", got a "Str"
+───╯
