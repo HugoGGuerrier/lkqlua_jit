@@ -1,0 +1,5 @@
+print("Hello World".ends_with("World"))
+print("Hello World".ends_with("Hello World"))
+print("Hello World".ends_with("rld"))
+print("Hello World".ends_with("This is not valid"))
+print("Hello World".ends_with("Hello World 2"))

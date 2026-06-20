@@ -1,0 +1,7 @@
+Error: No value for parameter
+   ╭─[ <working-dir>/script.lkql:1:7 ]
+   │
+ 1 │ print("Hello World".ends_with())
+   │       ────────────┬────────────  
+   │                   ╰────────────── Missing value for the "suffix" parameter
+───╯

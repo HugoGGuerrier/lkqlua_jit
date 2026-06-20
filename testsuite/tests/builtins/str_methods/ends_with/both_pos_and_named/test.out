@@ -1,0 +1,7 @@
+Error: Both positional and named value
+   ╭─[ <working-dir>/script.lkql:1:7 ]
+   │
+ 1 │ print("Hello World".ends_with("rld", suffix="rld"))
+   │       ──────────────────────┬─────────────────────  
+   │                             ╰─────────────────────── The parameter "suffix" has been provided a positional and a named value
+───╯

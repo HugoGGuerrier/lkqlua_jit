@@ -27,6 +27,7 @@ pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
         ("length", TypeField::Property(DEFAULT_SIZED_LENGTH)),
         ("base_name", TypeField::Property(BASE_NAME)),
         ("starts_with", TypeField::Value(RuntimeValue::Callable(STARTS_WITH))),
+        ("ends_with", TypeField::Value(RuntimeValue::Callable(ENDS_WITH))),
         ("substring", TypeField::Value(RuntimeValue::Callable(SUBSTRING))),
     ],
     overloads: &[],
@@ -41,7 +42,7 @@ pub fn register_metatable(l: LuaState, _: &TypeImplementation) {
     set_metatable(l, -2);
 }
 
-/// The "base_name" method for the "Str" type
+/// Implementation of the "base_name" method.
 const BASE_NAME: Function = Function::LuaFunction(
     "function (self)
         local res = self
@@ -55,7 +56,7 @@ const BASE_NAME: Function = Function::LuaFunction(
     end",
 );
 
-/// The "starts_with" method for the "Str" type
+/// Implementation of the "starts_with" method.
 const STARTS_WITH: Function = Function::LkqlFunction {
     params: &[
         LkqlParam::new("self"),
@@ -64,7 +65,16 @@ const STARTS_WITH: Function = Function::LkqlFunction {
     body: "return string.sub(self, 1, #prefix) == prefix",
 };
 
-/// The "substring" function for the "Str" type
+/// Implementation of the "ends_with" method.
+const ENDS_WITH: Function = Function::LkqlFunction {
+    params: &[
+        LkqlParam::new("self"),
+        LkqlParam::with_type("suffix", TypeRef::Str),
+    ],
+    body: "return string.sub(self, #self - #suffix + 1, #self) == suffix",
+};
+
+/// Implementation of the "substring" method.
 const SUBSTRING: Function = Function::LkqlFunction {
     params: &[
         LkqlParam::new("self"),

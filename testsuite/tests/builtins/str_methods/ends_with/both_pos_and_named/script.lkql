@@ -1,0 +1,1 @@
+print("Hello World".ends_with("rld", suffix="rld"))
