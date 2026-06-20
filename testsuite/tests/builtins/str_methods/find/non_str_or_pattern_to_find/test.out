@@ -1,0 +1,7 @@
+Error: Invalid argument type
+   ╭─[ <working-dir>/script.lkql:2:1 ]
+   │
+ 2 │ s.find(42)
+   │ ─────┬────  
+   │      ╰────── Expecting a "Str" or a "Pattern" for the parameter "to_find", got a "Int"
+───╯

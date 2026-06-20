@@ -1,0 +1,14 @@
+val s = "Hello world"
+
+print("=== Should be true")
+print(s.contains("wo"))
+print(s.contains(to_find="wo"))
+print(s.contains("Hello world"))
+print(s.contains(""))
+print(s.contains(pattern("w.*ld")))
+print("")
+
+print("=== Should be false")
+print(s.contains("not"))
+print(s.contains("Hello world 2"))
+print(s.contains(pattern("no.*")))

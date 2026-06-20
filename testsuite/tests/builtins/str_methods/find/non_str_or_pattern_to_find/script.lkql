@@ -1,0 +1,2 @@
+val s = "Hello world"
+s.find(42)

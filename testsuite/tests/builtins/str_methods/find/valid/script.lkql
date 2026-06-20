@@ -1,0 +1,14 @@
+val s = "Hello world"
+
+print("=== Should be positive")
+print(s.find("wo"))
+print(s.find(to_find="wo"))
+print(s.find("Hello world"))
+print(s.find(""))
+print(s.find(pattern("w.*ld")))
+print("")
+
+print("=== Should be -1")
+print(s.find("not"))
+print(s.find("Hello world 2"))
+print(s.find(pattern("no.*")))

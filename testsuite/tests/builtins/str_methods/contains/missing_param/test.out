@@ -1,0 +1,7 @@
+Error: No value for parameter
+   ╭─[ <working-dir>/script.lkql:2:1 ]
+   │
+ 2 │ s.contains()
+   │ ──────┬─────  
+   │       ╰─────── Missing value for the "to_find" parameter
+───╯
