@@ -180,7 +180,7 @@ pub struct Node {
 #[derive(Debug, Clone)]
 pub enum NodeVariant {
     // --- Call expressions
-    FunCall {
+    CallExpr {
         callee: Box<Node>,
         positional_args: Vec<Node>,
         named_args: Vec<(Identifier, Node)>,
@@ -332,8 +332,8 @@ impl Node {
         let child_level = indent_level + 1;
         // Match the node variant to extract information to display
         let pretty_node: (&str, &[(&str, String)]) = match &self.variant {
-            NodeVariant::FunCall { callee, positional_args, named_args } => (
-                "FunCall",
+            NodeVariant::CallExpr { callee, positional_args, named_args } => (
+                "CallExpr",
                 &[
                     ("callee", callee.pretty_print(child_level)),
                     ("positional_args", Self::pretty_print_vec(positional_args, child_level)),

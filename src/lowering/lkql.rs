@@ -357,7 +357,7 @@ impl Node {
                                 ),
                                 consequence: bn(
                                     l,
-                                    NodeVariant::FunCall {
+                                    NodeVariant::CallExpr {
                                         callee: callee.clone(),
                                         positional_args,
                                         named_args: named_args.clone(),
@@ -365,7 +365,7 @@ impl Node {
                                 ),
                                 alternative: bn(
                                     l,
-                                    NodeVariant::FunCall {
+                                    NodeVariant::CallExpr {
                                         callee,
                                         positional_args: method_positional_args,
                                         named_args,
@@ -376,7 +376,7 @@ impl Node {
                         .with_let(prefix_id, Self::lower_lkql_node(ctx, &prefix)?)
                         .variant
                     }
-                    _ => NodeVariant::FunCall {
+                    _ => NodeVariant::CallExpr {
                         callee: Box::new(Self::lower_lkql_node(ctx, &name)?),
                         positional_args,
                         named_args,
@@ -973,7 +973,7 @@ impl Node {
                     );
                     let sublist_call = bn(
                         l,
-                        NodeVariant::FunCall {
+                        NodeVariant::CallExpr {
                             callee: sublist_access,
                             positional_args: vec![
                                 *matched_value_ref.clone(),
@@ -1142,7 +1142,7 @@ impl Node {
                 // Create the node to call the property
                 let property_call = n(
                     l,
-                    NodeVariant::FunCall {
+                    NodeVariant::CallExpr {
                         callee: bn(
                             l,
                             NodeVariant::DottedExpr {
@@ -1205,7 +1205,7 @@ impl Node {
                 // Create the node calling the selector value
                 let selector_call = n(
                     loc(ctx, &lkql_selector_call),
-                    NodeVariant::FunCall { callee: selector_callee, positional_args, named_args },
+                    NodeVariant::CallExpr { callee: selector_callee, positional_args, named_args },
                 )
                 .with_trait_requirement(&traits::iterable::TRAIT);
 
@@ -1217,7 +1217,7 @@ impl Node {
                 // Create the quantifier call node
                 let quantifier_call = n(
                     l,
-                    NodeVariant::FunCall {
+                    NodeVariant::CallExpr {
                         callee: bn(
                             l,
                             NodeVariant::DottedExpr {

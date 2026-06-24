@@ -395,7 +395,7 @@ impl Node {
         // have to compile it manually
         match &self.variant {
             // --- Call expressions
-            NodeVariant::FunCall { callee, positional_args, named_args } => {
+            NodeVariant::CallExpr { callee, positional_args, named_args } => {
                 // Prepare the call by getting working slots
                 let call_slots = Self::prepare_function_call(
                     ctx,
@@ -1220,7 +1220,7 @@ impl Node {
         }
 
         match &self.variant {
-            NodeVariant::FunCall { callee, positional_args, named_args } => {
+            NodeVariant::CallExpr { callee, positional_args, named_args } => {
                 // Prepare the call by getting slots used for it
                 let call_slots = Self::prepare_function_call(
                     ctx,
@@ -1575,7 +1575,7 @@ impl Node {
     fn compile_as_function_body(&self, ctx: &mut CompilationContext) {
         match &self.variant {
             // In the case of a function / method call, we can emit a tail call
-            NodeVariant::FunCall { callee, positional_args, named_args } => {
+            NodeVariant::CallExpr { callee, positional_args, named_args } => {
                 // Prepare the call by getting working slots
                 let call_slots = Self::prepare_function_call(
                     ctx,
