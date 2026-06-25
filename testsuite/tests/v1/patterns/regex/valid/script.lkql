@@ -1,0 +1,12 @@
+val s = "Hello world"
+
+print("=== Should be true")
+print(s is "Hello world")
+print(s is "Hel+o world")
+print(s is ".+")
+print("")
+
+print("=== Should be false")
+print(s is "Not valid")
+print(s is "Hel+o")
+print(42 is "42")

@@ -12,6 +12,7 @@ use crate::{
     sources::SourceSection,
 };
 use num_bigint::BigInt;
+use regex::Regex;
 
 impl Node {
     /// Try to evaluate this node as a constant value, returning it if this is
@@ -30,6 +31,7 @@ impl Node {
                     Some(ConstantValueVariant::Int(i.parse::<BigInt>().unwrap()))
                 }
                 NodeVariant::StringLiteral(s) => Some(ConstantValueVariant::String(s.clone())),
+                NodeVariant::PatternLiteral(r) => Some(ConstantValueVariant::Pattern(r.clone())),
                 NodeVariant::TupleLiteral(nodes) | NodeVariant::ListLiteral(nodes) => {
                     let constants = nodes
                         .iter()
@@ -260,20 +262,21 @@ impl Node {
 }
 
 /// This type represents a constant value evaluated from an intermediate tree.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq)]
 pub struct ConstantValue {
     pub origin_location: SourceSection,
     pub variant: ConstantValueVariant,
 }
 
 /// This enumeration represents the result of a node constant evaluation.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub enum ConstantValueVariant {
     Null,
     Unit,
     Bool(bool),
     Int(BigInt),
     String(String),
+    Pattern(Regex),
     Tuple(Vec<ConstantValue>),
     List(Vec<ConstantValue>),
     Object(Vec<(String, ConstantValue)>),
@@ -285,7 +288,23 @@ impl PartialEq for ConstantValue {
     }
 }
 
-impl Eq for ConstantValue {}
+impl PartialEq for ConstantValueVariant {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Null, Self::Null) | (Self::Unit, Self::Unit) => true,
+            (Self::Bool(l), Self::Bool(r)) => l == r,
+            (Self::Int(l), Self::Int(r)) => l == r,
+            (Self::String(l), Self::String(r)) => l == r,
+            (Self::Pattern(l), Self::Pattern(r)) => l.as_str() == r.as_str(),
+            (Self::Tuple(l), Self::Tuple(r)) => l == r,
+            (Self::List(l), Self::List(r)) => l == r,
+            (Self::Object(l), Self::Object(r)) => l == r,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for ConstantValueVariant {}
 
 impl ConstantValue {
     /// Get the string representation of this constant value.
@@ -302,6 +321,7 @@ impl ConstantValue {
             ConstantValueVariant::Bool(b) => b.to_string(),
             ConstantValueVariant::Int(big_int) => big_int.to_str_radix(10),
             ConstantValueVariant::String(s) => s.clone(),
+            ConstantValueVariant::Pattern(r) => String::from(r.as_str()),
             ConstantValueVariant::Tuple(constant_values)
             | ConstantValueVariant::List(constant_values) => {
                 let (ls, rs) = match &self.variant {
@@ -448,7 +468,9 @@ mod tests {
             traits::{indexable, iterable},
             types::{bool, int, str},
         },
-        intermediate_tree::{ArithOperator, CompOperator, Identifier, LogicOperator, MiscOperator},
+        intermediate_tree::{
+            self, ArithOperator, CompOperator, Identifier, LogicOperator, MiscOperator,
+        },
         sources::{Location, SourceSection},
     };
 
@@ -494,6 +516,10 @@ mod tests {
         _node(NodeVariant::StringLiteral(String::from(value)))
     }
 
+    fn _pattern_node(regex: &str) -> Node {
+        _node(NodeVariant::PatternLiteral(Regex::new(regex).unwrap()))
+    }
+
     fn _read_node(value: &str) -> Node {
         _node(NodeVariant::ReadSymbol(_id(value)))
     }
@@ -523,6 +549,13 @@ mod tests {
         ConstantValue {
             origin_location: _dummy_loc(),
             variant: ConstantValueVariant::String(String::from(value)),
+        }
+    }
+
+    fn _pattern_cst(regex: &str) -> ConstantValue {
+        ConstantValue {
+            origin_location: _dummy_loc(),
+            variant: ConstantValueVariant::Pattern(Regex::new(regex).unwrap()),
         }
     }
 
@@ -578,6 +611,12 @@ mod tests {
         assert_eq!(intermediate_tree.eval_as_constant(), Some(_str_cst("")));
         intermediate_tree = _str_node("Hello!");
         assert_eq!(intermediate_tree.eval_as_constant(), Some(_str_cst("Hello!")));
+
+        // Test pattern literals
+        intermediate_tree = _pattern_node("");
+        assert_eq!(intermediate_tree.eval_as_constant(), Some(_pattern_cst("")));
+        intermediate_tree = _pattern_node("my_regex");
+        assert_eq!(intermediate_tree.eval_as_constant(), Some(_pattern_cst("my_regex")));
 
         // Test tuple literals
         intermediate_tree = _node(NodeVariant::TupleLiteral(vec![

@@ -11,6 +11,7 @@ use crate::{
     errors::ErrorTemplate,
     sources::SourceSection,
 };
+use regex::Regex;
 use std::{
     fmt::{Debug, Display},
     hash::Hash,
@@ -308,6 +309,7 @@ pub enum NodeVariant {
     BoolLiteral(bool),
     IntLiteral(String),
     StringLiteral(String),
+    PatternLiteral(Regex),
     TupleLiteral(Vec<Node>),
     ListLiteral(Vec<Node>),
     ObjectLiteral(Vec<(Identifier, Node)>),
@@ -509,6 +511,9 @@ impl Node {
             NodeVariant::IntLiteral(value) => ("IntLiteral", &[("value", format!("\"{value}\""))]),
             NodeVariant::StringLiteral(value) => {
                 ("StringLiteral", &[("value", format!("{:?}", value))])
+            }
+            NodeVariant::PatternLiteral(value) => {
+                ("PatternLiteral", &[("value", value.as_str().to_string())])
             }
             NodeVariant::TupleLiteral(items) => {
                 ("TupleLiteral", &[("items", Self::pretty_print_vec(items, child_level))])

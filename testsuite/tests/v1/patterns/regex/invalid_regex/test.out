@@ -1,0 +1,7 @@
+Error: Invalid regular expression syntax
+   ╭─[ <working-dir>/script.lkql:2:12 ]
+   │
+ 2 │ print(s is "(not a valid regex")
+   │            ──────────┬─────────  
+   │                      ╰─────────── Syntax error in the "(not a valid regex" regular expression
+───╯

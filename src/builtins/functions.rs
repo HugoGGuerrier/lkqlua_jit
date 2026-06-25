@@ -6,67 +6,16 @@ use crate::{
     ExecutionContext,
     builtins::{
         UNIT_SINGLETON_GLOBAL_NAME,
-        types::pattern::{self, NATIVE_HANDLE_FIELD},
-        utils::{get_bool_param, get_param, get_string_param},
+        utils::{get_bool_param, get_param},
     },
-    errors::{
-        DEPENDENCY_CYCLE, ErrorInstance, ErrorInstanceArg, REGEX_SYNTAX_ERROR, REGEX_TOO_BIG,
-    },
+    errors::{DEPENDENCY_CYCLE, ErrorInstance, ErrorInstanceArg},
     lua::{
         LuaState, get_global, get_string, get_top, get_type, get_user_data, pop, push_string,
-        push_table, push_user_data_ptr, raise_error, set_field, set_metatable, to_string,
+        raise_error, to_string,
     },
-    runtime::{ANALYSIS_UNITS_GLOBAL_NAME, CONTEXT_GLOBAL_NAME, register_for_gc},
+    runtime::{ANALYSIS_UNITS_GLOBAL_NAME, CONTEXT_GLOBAL_NAME},
 };
-use regex::RegexBuilder;
 use std::{ffi::c_int, io::Write, path::Path};
-
-/// The "pattern" function
-#[unsafe(no_mangle)]
-pub extern "C" fn lkql_pattern(l: LuaState) -> c_int {
-    // Get the function parameter values
-    let param_count = get_top(l) - 1;
-    let regex = get_string_param(l, param_count, 1, "regex", None);
-    let case_sensitive = get_bool_param(l, param_count, 2, "case_sensitive", Some(true));
-
-    // Now create the Rust regex object
-    match RegexBuilder::new(regex)
-        .case_insensitive(!case_sensitive)
-        .build()
-    {
-        Ok(compiled_regex) => {
-            // Create a new Lua table
-            push_table(l, 0, 1);
-
-            // Store a pointer to the Rust compiled regex in it
-            push_user_data_ptr(l, Box::into_raw(Box::new(compiled_regex)));
-            set_field(l, -2, NATIVE_HANDLE_FIELD);
-
-            // Then set the metatable of the result
-            get_global(l, &pattern::IMPLEMENTATION.global_field_name());
-            set_metatable(l, -2);
-
-            // Finally, register the pattern Lua value for garbage collection
-            register_for_gc(l, -1);
-            1
-        }
-        Err(error) => {
-            let error_instance = match error {
-                regex::Error::Syntax(_) => ErrorInstance::new(
-                    REGEX_SYNTAX_ERROR.id,
-                    vec![ErrorInstanceArg::Static(String::from(regex))],
-                ),
-                regex::Error::CompiledTooBig(_) => ErrorInstance::new(
-                    REGEX_TOO_BIG.id,
-                    vec![ErrorInstanceArg::Static(String::from(regex))],
-                ),
-                _ => unreachable!(),
-            };
-            raise_error(l, &error_instance.to_json());
-            0
-        }
-    }
-}
 
 /// The "print" function
 #[unsafe(no_mangle)]

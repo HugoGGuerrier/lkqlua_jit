@@ -1,0 +1,2 @@
+val s = "Hello world"
+print(s is "(not a valid regex")

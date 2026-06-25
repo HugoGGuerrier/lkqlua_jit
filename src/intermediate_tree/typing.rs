@@ -5,7 +5,9 @@
 //! useless runtime type checks.
 
 use crate::{
-    builtins::types::{BuiltinType, bool, function, int, list, obj, str, stream, tuple, unit},
+    builtins::types::{
+        BuiltinType, bool, function, int, list, obj, pattern, str, stream, tuple, unit,
+    },
     intermediate_tree::{Node, NodeVariant},
 };
 
@@ -44,6 +46,7 @@ impl Node {
             NodeVariant::BoolLiteral(_) => Some(&bool::TYPE),
             NodeVariant::IntLiteral(_) => Some(&int::TYPE),
             NodeVariant::StringLiteral(_) => Some(&str::TYPE),
+            NodeVariant::PatternLiteral(_) => Some(&pattern::TYPE),
             NodeVariant::TupleLiteral(_) => Some(&tuple::TYPE),
             NodeVariant::ListLiteral(_) => Some(&list::TYPE),
             NodeVariant::ObjectLiteral(_) => Some(&obj::TYPE),

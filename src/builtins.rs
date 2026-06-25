@@ -5,8 +5,11 @@
 
 use crate::{
     builtins::{
-        functions::{lkql_img, lkql_import, lkql_pattern, lkql_print, lkql_units},
-        types::{BuiltinType, BuiltinTypeRepo},
+        functions::{lkql_img, lkql_import, lkql_print, lkql_units},
+        types::{
+            BuiltinType, BuiltinTypeRepo,
+            pattern::{PATTERN_CONSTRUCTOR, pattern_constructor},
+        },
     },
     lua::{LuaState, get_global, push_table, set_metatable},
     runtime::{Function, LKQL_IMPORT_GLOBAL_NAME, RuntimeValue, UNIT_SINGLETON_GLOBAL_NAME},
@@ -25,7 +28,10 @@ pub fn get_builtin_bindings() -> HashMap<&'static str, RuntimeValue> {
     let mut b = |name: &'static str, value: RuntimeValue| res.insert(name, value);
 
     // Add all builtins
-    b("pattern", RuntimeValue::Callable(Function::CFunction(lkql_pattern)));
+    b(
+        PATTERN_CONSTRUCTOR,
+        RuntimeValue::Callable(Function::CFunction(pattern_constructor)),
+    );
     b("print", RuntimeValue::Callable(Function::CFunction(lkql_print)));
     b("img", RuntimeValue::Callable(Function::CFunction(lkql_img)));
     b("units", RuntimeValue::Callable(Function::CFunction(lkql_units)));

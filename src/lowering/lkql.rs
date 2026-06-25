@@ -14,8 +14,8 @@ use crate::{
     errors::{
         AMBIGUOUS_IMPORT, INDEX_OUT_OF_BOUNDS, INVALID_SELECTOR_CALL, MODULE_NOT_FOUND,
         MULTIPLE_SPLAT_PATTERNS, NULL_DOT_RECEIVER, POS_AFTER_NAMED_ARGUMENT,
-        PREVIOUS_NAMED_ARG_HINT, PREVIOUS_SPLAT_PATTERN_HINT, SUBPATTERN_AFTER_SPLAT,
-        UNKNOWN_NODE_TYPE,
+        PREVIOUS_NAMED_ARG_HINT, PREVIOUS_SPLAT_PATTERN_HINT, REGEX_SYNTAX_ERROR, REGEX_TOO_BIG,
+        SUBPATTERN_AFTER_SPLAT, UNKNOWN_NODE_TYPE,
     },
     intermediate_tree::{
         ArithOperator, ArithOperatorVariant, CompOperator, CompOperatorVariant, ExecutionUnit,
@@ -26,6 +26,7 @@ use crate::{
     sources::{Location, SourceId, SourceSection},
 };
 use liblkqllang::{BaseFunction, LkqlNode};
+use regex::Regex;
 use std::{
     env,
     path::{Path, PathBuf},
@@ -799,6 +800,62 @@ impl Node {
                         &[&node_type_name],
                     ));
                     NodeVariant::BoolLiteral(false)
+                }
+            }
+
+            // --- Regex pattern
+            LkqlNode::RegexPattern(regex_pattern) => {
+                // Get the regex source
+                let regex_source = String::from(regex_pattern.text()?.trim_matches('"'));
+
+                // Try to compile the regex
+                match Regex::new(&format!("^{regex_source}$")) {
+                    Ok(regex) => {
+                        // Create a temporary value to reference the pattern value
+                        let pattern_id = ctx.new_tmp_id();
+                        let pattern_ref = bn(l, NodeVariant::Read(pattern_id));
+
+                        // Create the node to check the value type
+                        let type_check = n(
+                            l,
+                            NodeVariant::InstanceOf {
+                                expression: matched_value_ref.clone(),
+                                expected_type_tag: types::str::TYPE.tag,
+                            },
+                        );
+
+                        // Create the node to check if the pattern match the value
+                        let is_match = n(
+                            l,
+                            NodeVariant::CallExpr {
+                                callee: bn(
+                                    l,
+                                    NodeVariant::DottedExpr {
+                                        prefix: pattern_ref.clone(),
+                                        suffix: id_str(l, "is_match"),
+                                    },
+                                ),
+                                positional_args: vec![*pattern_ref, *matched_value_ref],
+                                named_args: vec![],
+                            },
+                        )
+                        .with_let(pattern_id, n(l, NodeVariant::PatternLiteral(regex)));
+
+                        // Then return the checking combination
+                        combine_predicates(vec![type_check, is_match]).variant
+                    }
+                    Err(error) => {
+                        ctx.diagnostics.add(Diagnostic::error_from_template(
+                            &l,
+                            match error {
+                                regex::Error::Syntax(_) => &REGEX_SYNTAX_ERROR,
+                                regex::Error::CompiledTooBig(_) => &REGEX_TOO_BIG,
+                                _ => unreachable!(),
+                            },
+                            &[regex_source],
+                        ));
+                        NodeVariant::BoolLiteral(false)
+                    }
                 }
             }
 

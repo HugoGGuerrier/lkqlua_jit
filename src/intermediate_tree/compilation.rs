@@ -9,7 +9,7 @@ use crate::{
         traits::{BuiltinTrait, iterable::ITERATOR_FIELD},
         types::{
             BuiltinType, TYPE_NAME_FIELD, TYPE_TAGS_FIELD, TypeImplementation, list, namespace,
-            obj, stream::lazy_comprehension, tuple, unit,
+            obj, pattern, stream::lazy_comprehension, tuple, unit,
         },
     },
     bytecode::{
@@ -1109,7 +1109,8 @@ impl Node {
             | NodeVariant::UnitLiteral
             | NodeVariant::BoolLiteral(_)
             | NodeVariant::IntLiteral(_)
-            | NodeVariant::StringLiteral(_) => unreachable!(),
+            | NodeVariant::StringLiteral(_)
+            | NodeVariant::PatternLiteral(_) => unreachable!(),
         }
 
         /// Try compiling the provided arithmetic operation in a constant
@@ -2076,6 +2077,53 @@ impl ConstantValue {
                 let value_cst = ctx.unit_data.constants.get_from_string(value);
                 ctx.instructions
                     .ad(&self.origin_location, KSTR, result_slot, value_cst);
+                true
+            }
+            ConstantValueVariant::Pattern(regex) => {
+                // Create a new table, representing the pattern value
+                emit_new_table(ctx, &self.origin_location, result_slot, 0, 2);
+                emit_set_metatable(
+                    ctx,
+                    Some(&self.origin_location),
+                    result_slot,
+                    &pattern::IMPLEMENTATION,
+                );
+
+                // Create a vector with all bytes of the regex pointer
+                let regex_ptr = Box::into_raw(Box::new(regex.clone()));
+                let regex_addr = regex_ptr.addr();
+                let mut bytes = Vec::new();
+                for i in 0..size_of_val(&regex_addr) {
+                    bytes.push((regex_addr >> (i * 8) & 0xFF) as u8);
+                }
+
+                // Create a integer table, each element being a byte from the
+                // regex pointer.
+                let ptr_table_cst =
+                    ctx.unit_data
+                        .constants
+                        .get_from_complex_constant(ComplexConstant::Table {
+                            array_part: bytes
+                                .into_iter()
+                                .map(|b| TableConstantElement::Integer(b as i32))
+                                .collect(),
+                            hash_part: vec![],
+                        });
+
+                // Load the pointer table and place it in the result
+                let ptr_table_tmp = ctx.frame.borrow_mut().get_slot();
+                ctx.instructions
+                    .ad(&self.origin_location, TDUP, ptr_table_tmp, ptr_table_cst);
+                emit_table_member_write(
+                    ctx,
+                    Some(&self.origin_location),
+                    ptr_table_tmp,
+                    result_slot,
+                    pattern::NATIVE_HANDLE_TABLE_FIELD,
+                );
+                ctx.frame.borrow_mut().release_slot(ptr_table_tmp);
+
+                // Then return the success
                 true
             }
 
