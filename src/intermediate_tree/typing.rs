@@ -36,6 +36,7 @@ impl Node {
 
             // --- Recursive nodes
             NodeVariant::InLexicalScope { expr, .. } => expr.expr_type(),
+            NodeVariant::OutsideLexicalScope(expr) => expr.expr_type(),
             NodeVariant::Let { r#in, .. } => r#in.expr_type(),
 
             // --- Type checking
@@ -168,6 +169,12 @@ mod test {
         assert_eq!(intermediate_tree.expr_type(), Some(&int::TYPE));
         intermediate_tree =
             _node(NodeVariant::InLexicalScope { local_symbols: vec![], expr: _read_node() });
+        assert_eq!(intermediate_tree.expr_type(), None);
+        intermediate_tree = _node(NodeVariant::OutsideLexicalScope(_bool_node()));
+        assert_eq!(intermediate_tree.expr_type(), Some(&bool::TYPE));
+        intermediate_tree = _node(NodeVariant::OutsideLexicalScope(_int_node()));
+        assert_eq!(intermediate_tree.expr_type(), Some(&int::TYPE));
+        intermediate_tree = _node(NodeVariant::OutsideLexicalScope(_read_node()));
         assert_eq!(intermediate_tree.expr_type(), None);
         intermediate_tree = _node(NodeVariant::Let { id: 0, value: _dummy(), r#in: _bool_node() });
         assert_eq!(intermediate_tree.expr_type(), Some(&bool::TYPE));

@@ -770,6 +770,20 @@ impl Node {
                 expr.compile_as_value(ctx, result_slot);
                 ctx.close_lexical_frame();
             }
+            NodeVariant::OutsideLexicalScope(expr) => {
+                // Ensure the current frame is a lexical one
+                assert!(matches!(ctx.frame.borrow().variant, FrameVariant::Lexical));
+
+                // Pop the current lexical frame and set its parent as the new current
+                let current_frame = ctx.frame.clone();
+                ctx.frame = current_frame.borrow().parent_frame.clone().unwrap();
+
+                // Compile the expression
+                Self::compile_as_value(expr, ctx, result_slot);
+
+                // Push the lexical frame again
+                ctx.frame = current_frame
+            }
 
             // --- Symbol introduction
             NodeVariant::InitLocal { symbol, val } => {
@@ -2576,7 +2590,7 @@ impl<'a> CompilationContext<'a> {
         // Open a new lexical frame that will contains all symbols
         // declared in the block.
         let parent_frame = self.frame.clone();
-        let current_frame = Rc::new(RefCell::new(Frame::new_lexical(parent_frame.clone())));
+        let current_frame = Rc::new(RefCell::new(Frame::new_lexical(parent_frame)));
         self.frame = current_frame;
 
         // Insert all locals in the frame

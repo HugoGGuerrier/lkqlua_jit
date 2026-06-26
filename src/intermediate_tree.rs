@@ -249,11 +249,12 @@ pub enum NodeVariant {
         operand: Box<Node>,
     },
 
-    // --- Lexical scope introduction
+    // --- Lexical scope introduction / escaping
     InLexicalScope {
         local_symbols: Vec<Identifier>,
         expr: Box<Node>,
     },
+    OutsideLexicalScope(Box<Node>),
 
     // --- Symbol introduction
     InitLocal {
@@ -444,6 +445,9 @@ impl Node {
                     ("expr", expr.pretty_print(child_level)),
                 ],
             ),
+            NodeVariant::OutsideLexicalScope(expr) => {
+                ("OutsideLexicalScope", &[("expr", expr.pretty_print(child_level))])
+            }
             NodeVariant::InitLocal { symbol, val } => (
                 "InitLocal",
                 &[
