@@ -929,23 +929,18 @@ impl Node {
             NodeVariant::Let { id, value, r#in } => {
                 // Get an access to the value and set it as a temporary
                 let value_access = value.compile_as_access(ctx, None);
-                ctx.frame
-                    .borrow_mut()
-                    .let_values
-                    .insert(*id, value_access.slot());
+                ctx.let_bindings.insert(*id, value_access.slot());
 
                 // Compile the body
                 r#in.compile_as_value(ctx, result_slot);
 
                 // Release access the the value and remove it from temporaries table
-                ctx.frame.borrow_mut().let_values.remove(id);
+                ctx.let_bindings.remove(id);
                 value_access.release(ctx);
             }
             NodeVariant::Read(id) => {
                 let tmp_slot = *ctx
-                    .frame
-                    .borrow()
-                    .let_values
+                    .let_bindings
                     .get(id)
                     .expect("Unknown temporary identifier");
                 ctx.instructions
@@ -1258,16 +1253,13 @@ impl Node {
             NodeVariant::Let { id, value, r#in: body } => {
                 // Get an access to the value and set it as a temporary
                 let value_access = value.compile_as_access(ctx, None);
-                ctx.frame
-                    .borrow_mut()
-                    .let_values
-                    .insert(*id, value_access.slot());
+                ctx.let_bindings.insert(*id, value_access.slot());
 
                 // Compile the body
                 let res = body.compile_as_access(ctx, already_reserved_slot);
 
                 // Release access the the value and remove it from temporaries table
-                ctx.frame.borrow_mut().let_values.remove(id);
+                ctx.let_bindings.remove(id);
                 value_access.release(ctx);
 
                 // Finally return the result on the body result
@@ -1276,9 +1268,7 @@ impl Node {
 
             NodeVariant::Read(id) => {
                 let tmp_slot = *ctx
-                    .frame
-                    .borrow()
-                    .let_values
+                    .let_bindings
                     .get(id)
                     .expect("Unknown temporary identifier");
                 ValueAccess::BorrowedTmp(tmp_slot)
@@ -2525,6 +2515,10 @@ struct CompilationContext<'a> {
     /// slots.
     frame: Rc<RefCell<Frame>>,
 
+    /// Mapping identifiers introduced by "let-in" expression to their storing
+    /// slot.
+    let_bindings: HashMap<usize, u8>,
+
     /// Execution unit that is currently being compiled.
     unit: &'a ExecutionUnit,
 
@@ -2552,6 +2546,7 @@ impl<'a> CompilationContext<'a> {
         Self {
             builtins: get_builtin_bindings().keys().copied().collect(),
             frame: Rc::new(RefCell::new(Frame::new(None))),
+            let_bindings: HashMap::new(),
             unit,
             unit_data: ExecUnitCompilationData::new(),
             prototypes: Vec::new(),

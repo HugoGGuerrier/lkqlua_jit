@@ -23,9 +23,6 @@ pub struct Frame {
     /// related to its data.
     pub bindings: HashMap<String, BindingData>,
 
-    /// A map storing value stored by "let-in" nodes.
-    pub let_values: HashMap<usize, u8>,
-
     /// Variant part of the frame, containing additional information.
     pub variant: FrameVariant,
 }
@@ -61,7 +58,6 @@ impl Frame {
         Self {
             parent_frame,
             bindings: HashMap::new(),
-            let_values: HashMap::new(),
             variant: FrameVariant::Semantic {
                 occupied_slots: Box::new([false; u8::MAX as usize]),
                 maximum_size: 0,
@@ -76,7 +72,6 @@ impl Frame {
         Self {
             parent_frame: Some(parent_frame),
             bindings: HashMap::new(),
-            let_values: HashMap::new(),
             variant: FrameVariant::Lexical,
         }
     }
