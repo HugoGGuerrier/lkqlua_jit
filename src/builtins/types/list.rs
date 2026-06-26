@@ -22,6 +22,9 @@ use std::ffi::c_int;
 
 const TYPE_TAG: i32 = tuple::TYPE.tag + 1;
 
+/// Name of the method to get a sublist from a list.
+pub const SUBLIST_NAME: &str = "sublist";
+
 pub const TYPE: BuiltinType = BuiltinType {
     tag: TYPE_TAG,
     traits: &[&indexable::TRAIT, &iterable::TRAIT, &sized::TRAIT],
@@ -33,11 +36,11 @@ pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
     fields: &[
         ("img", TypeField::Property(Function::CFunction(img_property))),
         ("length", TypeField::Property(DEFAULT_SIZED_LENGTH)),
-        (ITERATOR_FIELD, TypeField::Property(LIST_ITERATOR)),
-        ("any", TypeField::Value(LIST_ANY)),
-        ("all", TypeField::Value(LIST_ALL)),
-        ("reduce", TypeField::Value(LIST_REDUCE)),
-        ("sublist", TypeField::Value(LIST_SUBLIST)),
+        (ITERATOR_FIELD, TypeField::Property(ITERATOR)),
+        ("any", TypeField::Value(ANY)),
+        ("all", TypeField::Value(ALL)),
+        ("reduce", TypeField::Value(REDUCE)),
+        (SUBLIST_NAME, TypeField::Value(SUBLIST)),
     ],
     overloads: &[
         (OverloadTarget::ToString, Function::CFunction(list_tostring)),
@@ -50,7 +53,7 @@ pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
 
 /// Lua source that represents the "field@iterator" property on the "List"
 /// type.
-const LIST_ITERATOR: Function = Function::LuaFunction(
+const ITERATOR: Function = Function::LuaFunction(
     "function (self)
         local size = #self
         local cursor = 0
@@ -66,7 +69,7 @@ const LIST_ITERATOR: Function = Function::LuaFunction(
 );
 
 /// Implementation of the "any" method on values of the "List" type.
-const LIST_ANY: RuntimeValue = RuntimeValue::Callable(Function::LkqlFunction {
+const ANY: RuntimeValue = RuntimeValue::Callable(Function::LkqlFunction {
     params: ANY_AND_ALL_PARAMS,
     body: "
         for _, next in ipairs(self) do
@@ -78,7 +81,7 @@ const LIST_ANY: RuntimeValue = RuntimeValue::Callable(Function::LkqlFunction {
 });
 
 /// Implementation of the "all" method on values of the "List" type.
-const LIST_ALL: RuntimeValue = RuntimeValue::Callable(Function::LkqlFunction {
+const ALL: RuntimeValue = RuntimeValue::Callable(Function::LkqlFunction {
     params: ANY_AND_ALL_PARAMS,
     body: "
         for _, next in ipairs(self) do
@@ -90,7 +93,7 @@ const LIST_ALL: RuntimeValue = RuntimeValue::Callable(Function::LkqlFunction {
 });
 
 /// Implementation of the "reduce" method on values of the "List" type.
-const LIST_REDUCE: RuntimeValue = RuntimeValue::Callable(Function::LkqlFunction {
+const REDUCE: RuntimeValue = RuntimeValue::Callable(Function::LkqlFunction {
     params: REDUCE_PARAMS,
     body: "
         local res = init
@@ -101,7 +104,7 @@ const LIST_REDUCE: RuntimeValue = RuntimeValue::Callable(Function::LkqlFunction 
 });
 
 /// Implementation of the "sublist" method in value of the "List" type.
-const LIST_SUBLIST: RuntimeValue = RuntimeValue::Callable(Function::LkqlFunction {
+const SUBLIST: RuntimeValue = RuntimeValue::Callable(Function::LkqlFunction {
     params: &[
         LkqlParam::new("self"),
         LkqlParam::with_type("low", TypeRef::Int),

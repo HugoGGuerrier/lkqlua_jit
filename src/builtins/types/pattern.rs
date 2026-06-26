@@ -25,6 +25,9 @@ use std::{ffi::c_int, ptr};
 /// Name of the function to construct a new pattern.
 pub const PATTERN_CONSTRUCTOR: &str = "pattern";
 
+/// Name of the function to check if a string match the pattern.
+pub const IS_MATCH_NAME: &str = "is_match";
+
 /// The field in which the native regex handle is stored.
 pub const NATIVE_HANDLE_FIELD: &str = "field@native_handle";
 
@@ -46,7 +49,7 @@ pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
         ),
         ("img", TypeField::Property(Function::CFunction(img_property))),
         (
-            "is_match",
+            IS_MATCH_NAME,
             TypeField::Value(RuntimeValue::Callable(Function::CFunction(pattern_is_match))),
         ),
         (

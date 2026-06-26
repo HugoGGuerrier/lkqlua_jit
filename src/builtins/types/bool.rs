@@ -16,7 +16,7 @@ pub const TYPE: BuiltinType = BuiltinType {
     implementation_variant: TypeImplementationKind::new_mono(IMPLEMENTATION),
 };
 
-pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
+const IMPLEMENTATION: TypeImplementation = TypeImplementation {
     name: "Bool",
     fields: &[("img", TypeField::Property(Function::CFunction(img_property)))],
     overloads: &[],
@@ -25,7 +25,7 @@ pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
 };
 
 /// Register the meta-table in the provided Lua state.
-pub fn register_metatable(l: LuaState, _: &TypeImplementation) {
+fn register_metatable(l: LuaState, _: &TypeImplementation) {
     push_bool(l, false);
     copy_value(l, -2);
     set_metatable(l, -2);

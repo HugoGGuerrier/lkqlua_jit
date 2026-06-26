@@ -22,7 +22,7 @@ pub const TYPE: BuiltinType = BuiltinType {
     implementation_variant: TypeImplementationKind::new_mono(IMPLEMENTATION),
 };
 
-pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
+const IMPLEMENTATION: TypeImplementation = TypeImplementation {
     name: "Function",
     fields: &[("img", TypeField::Property(Function::CFunction(img_property)))],
     overloads: &[(OverloadTarget::ToString, Function::CFunction(function_tostring))],

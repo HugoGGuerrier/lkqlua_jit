@@ -15,10 +15,7 @@ use const_format::formatcp;
 
 pub const SPECIALIZATION: TypeImplementation = TypeImplementation {
     name: "LazyComprehension",
-    fields: &[(
-        INTERNAL_NEXT_FIELD,
-        TypeField::Value(RuntimeValue::Callable(Function::LuaFunction(LIST_COMP_NEXT_METHOD))),
-    )],
+    fields: &[(INTERNAL_NEXT_FIELD, TypeField::Value(NEXT))],
     overloads: &[],
     index_method: None,
     registering_function: None,
@@ -47,7 +44,8 @@ const ARGS_FIELD: &str = "field@args";
 
 /// Lua function called when fetching the next element of the comprehension.
 /// This function mutates the internal state of the `self` value.
-const LIST_COMP_NEXT_METHOD: &str = formatcp!(
+const NEXT: RuntimeValue = RuntimeValue::Callable(Function::LuaFunction(
+    formatcp!(
     "function(self)
         -- First of all check that there are remaining work
         if self['{FINISHED_FIELD}'] then
@@ -87,4 +85,5 @@ const LIST_COMP_NEXT_METHOD: &str = formatcp!(
         end
         return res
     end",
-);
+)
+));

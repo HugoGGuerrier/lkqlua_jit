@@ -907,7 +907,7 @@ impl Node {
                                     l,
                                     NodeVariant::DottedExpr {
                                         prefix: pattern_ref.clone(),
-                                        suffix: id_str(l, "is_match"),
+                                        suffix: id_str(l, types::pattern::IS_MATCH_NAME),
                                     },
                                 ),
                                 positional_args: vec![*pattern_ref, *matched_value_ref],
@@ -1101,7 +1101,7 @@ impl Node {
                         l,
                         NodeVariant::DottedExpr {
                             prefix: matched_value_ref.clone(),
-                            suffix: id_str(l, "sublist"),
+                            suffix: id_str(l, types::list::SUBLIST_NAME),
                         },
                     );
                     let sublist_call = bn(
@@ -1212,7 +1212,7 @@ impl Node {
                     l,
                     NodeVariant::DottedExpr {
                         prefix: matched_value_ref.clone(),
-                        suffix: id_str(l, "without_keys"),
+                        suffix: id_str(l, types::obj::WITHOUT_KEYS_NAME),
                     },
                 );
                 let without_keys_call = bn(

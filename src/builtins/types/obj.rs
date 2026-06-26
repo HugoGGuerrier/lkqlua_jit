@@ -17,6 +17,9 @@ use crate::{
 };
 use std::ffi::c_int;
 
+/// Name of the method to get a subobject without provided keys.
+pub const WITHOUT_KEYS_NAME: &str = "without_keys";
+
 pub const TYPE: BuiltinType = BuiltinType {
     tag: stream::TYPE.tag + 1,
     traits: &[],
@@ -27,11 +30,11 @@ pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
     name: "Object",
     fields: &[
         ("img", TypeField::Property(Function::CFunction(img_property))),
-        ("without_keys", TypeField::Value(WITHOUT_KEYS)),
+        (WITHOUT_KEYS_NAME, TypeField::Value(WITHOUT_KEYS)),
     ],
     overloads: &[
         (OverloadTarget::ToString, Function::CFunction(obj_tostring)),
-        (OverloadTarget::Eq, OBJ_EQ),
+        (OverloadTarget::Eq, EQ),
     ],
     index_method: None,
     registering_function: None,
@@ -100,7 +103,7 @@ extern "C" fn obj_tostring(l: LuaState) -> c_int {
 }
 
 /// Overload of "__eq" for the "Object" type.
-const OBJ_EQ: Function = Function::LuaFunction(
+const EQ: Function = Function::LuaFunction(
     "function(self, other)
         -- Start by checking types
         if getmetatable(self) ~= getmetatable(other) then
