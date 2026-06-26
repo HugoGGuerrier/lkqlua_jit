@@ -238,9 +238,9 @@ impl Frame {
     /// Release all slots in the provided range, making them free to use.
     pub fn release_slots(&mut self, slots: SlotRange) {
         match &mut self.variant {
-            FrameVariant::Semantic { occupied_slots: available_slots, .. } => {
+            FrameVariant::Semantic { occupied_slots, .. } => {
                 for slot in slots.as_range() {
-                    available_slots[slot as usize] = false;
+                    occupied_slots[slot as usize] = false;
                 }
             }
             FrameVariant::Lexical => self.parent_frame_mut().unwrap().release_slots(slots),
@@ -293,7 +293,7 @@ impl Frame {
             FrameVariant::Lexical => self
                 .parent_frame_mut()
                 .unwrap()
-                .reserve_contiguous_slots(count),
+                .get_slots(count, update_frame),
         }
     }
 }
