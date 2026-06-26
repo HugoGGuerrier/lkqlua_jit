@@ -36,10 +36,11 @@ print("")
 
 # Test selector detail
 print("=== Testing selector detail")
-print(root is FooNode(any local_children is Example))
-print(root is FooNode(any local_children is Ident))
-print(root is FooNode(all local_children is FooNode))
-print(root is FooNode(all local_children is Example))
+print(root is FooNode(any local_children: Example))
+print(root is FooNode(any local_children: Ident))
+print(root is FooNode(any local_children: e when e is Example))
+print(root is FooNode(all local_children: FooNode))
+print(root is FooNode(all local_children: Example))
 print("")
 
 # Test with a binding introduction and a predicate

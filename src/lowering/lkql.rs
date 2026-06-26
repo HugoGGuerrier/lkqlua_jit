@@ -194,16 +194,26 @@ impl ExecutionUnit {
                 let self_param_name = id_str(l, "self");
                 let self_param_id = ctx.new_tmp_id();
 
+                // Get the pattern source
+                let pattern_source = selector_pattern.f_pattern()?;
+
                 // Then, lower the selector pattern matching logic as a
                 // function.
                 ExecutionUnitVariant::Function {
                     params: vec![(self_param_name.clone(), None)],
-                    body: Node::lower_lkql_pattern(
-                        ctx,
-                        &selector_pattern.f_pattern()?,
-                        self_param_id,
-                    )?
-                    .with_let(self_param_id, n(l, NodeVariant::ReadSymbol(self_param_name))),
+                    body: n(
+                        loc(ctx, &pattern_source),
+                        NodeVariant::InLexicalScope {
+                            local_symbols: all_local_symbols(&pattern_source, ctx)?,
+                            expr: Box::new(
+                                Node::lower_lkql_pattern(ctx, &pattern_source, self_param_id)?
+                                    .with_let(
+                                        self_param_id,
+                                        n(l, NodeVariant::ReadSymbol(self_param_name)),
+                                    ),
+                            ),
+                        },
+                    ),
                 }
             }
             _ => unreachable!(),
@@ -1791,17 +1801,16 @@ fn all_local_decls(node: &LkqlNode, output: &mut Vec<LkqlNode>) -> Result<(), Bo
                 LkqlNode::FunDecl(_) => output.push(child),
                 LkqlNode::SelectorDecl(_) => output.push(child),
                 LkqlNode::Import(_) => output.push(child),
-                LkqlNode::ComplexPattern(pattern) => {
-                    if let Some(binding) = pattern.f_binding()? {
-                        output.push(binding);
-                    }
-                    all_local_decls(&child, output)?;
-                }
-                LkqlNode::SplatPattern(pattern) => {
-                    if let Some(binding) = pattern.f_binding()? {
-                        output.push(binding);
-                    }
-                    all_local_decls(&child, output)?;
+                LkqlNode::Identifier(_) => {
+                    match child.parent()? {
+                        Some(LkqlNode::ComplexPattern(complex_pattern)) => {
+                            if complex_pattern.f_binding()?.as_ref() == Some(&child) {
+                                output.push(child);
+                            }
+                        }
+                        Some(LkqlNode::SplatPattern(_)) => output.push(child),
+                        _ => (),
+                    };
                 }
 
                 // Recursion bounds
