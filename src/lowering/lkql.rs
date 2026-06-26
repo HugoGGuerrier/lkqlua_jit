@@ -15,7 +15,7 @@ use crate::{
         AMBIGUOUS_IMPORT, INDEX_OUT_OF_BOUNDS, INVALID_SELECTOR_CALL, MODULE_NOT_FOUND,
         MULTIPLE_SPLAT_PATTERNS, NULL_DOT_RECEIVER, POS_AFTER_NAMED_ARGUMENT,
         PREVIOUS_NAMED_ARG_HINT, PREVIOUS_SPLAT_PATTERN_HINT, REGEX_SYNTAX_ERROR, REGEX_TOO_BIG,
-        SUBPATTERN_AFTER_SPLAT, UNKNOWN_NODE_TYPE,
+        SUBPATTERN_AFTER_SPLAT, UNKNOWN_MEMBER, UNKNOWN_NODE_TYPE,
     },
     intermediate_tree::{
         ArithOperator, ArithOperatorVariant, CompOperator, CompOperatorVariant, ExecutionUnit,
@@ -330,7 +330,7 @@ impl Node {
                         // temporary value created before.
                         let callee = bn(
                             loc(ctx, &name),
-                            lower_dot_access(
+                            lower_member_access_with_prefix_check(
                                 ctx,
                                 &loc(ctx, &name),
                                 prefix_ref.clone(),
@@ -403,9 +403,18 @@ impl Node {
                 let prefix_ref = bn(loc(ctx, &lkql_prefix), NodeVariant::Read(prefix_id));
 
                 // Then, return the new node
-                n(l, lower_dot_access(ctx, &l, prefix_ref, &lkql_member, is_safe))
-                    .with_let(prefix_id, Node::lower_lkql_node(ctx, &lkql_prefix)?)
-                    .variant
+                n(
+                    l,
+                    lower_member_access_with_prefix_check(
+                        ctx,
+                        &l,
+                        prefix_ref,
+                        &lkql_member,
+                        is_safe,
+                    ),
+                )
+                .with_let(prefix_id, Node::lower_lkql_node(ctx, &lkql_prefix)?)
+                .variant
             }
 
             // --- Index expression
@@ -456,17 +465,16 @@ impl Node {
                 let result_ref = n(l, NodeVariant::Read(result_id));
 
                 // Then, return the indexing node
-                n(
-                    l,
-                    result_ref.clone().with_equality_check(
+                result_ref
+                    .clone()
+                    .with_equality_check(
                         NodeVariant::NilLiteral,
                         if_index_out_of_bounds,
                         result_ref,
-                    ),
-                )
-                .with_let(result_id, indexing)
-                .with_let(index_id, index)
-                .variant
+                    )
+                    .with_let(result_id, indexing)
+                    .with_let(index_id, index)
+                    .variant
             }
 
             // --- In clause
@@ -1168,10 +1176,12 @@ impl Node {
                         field_id,
                         n(
                             l,
-                            NodeVariant::DottedExpr {
-                                prefix: Box::new(matched_value_ref),
-                                suffix: id(ctx, &pattern_field.f_identifier()?),
-                            },
+                            lower_member_with_access_check(
+                                ctx,
+                                &l,
+                                Box::new(matched_value_ref),
+                                &pattern_field.f_identifier()?,
+                            ),
                         ),
                     )
                     .variant
@@ -1202,10 +1212,12 @@ impl Node {
                     NodeVariant::CallExpr {
                         callee: bn(
                             l,
-                            NodeVariant::DottedExpr {
-                                prefix: Box::new(matched_value_ref),
-                                suffix: id(ctx, &call.f_name()?),
-                            },
+                            lower_member_with_access_check(
+                                ctx,
+                                &l,
+                                Box::new(matched_value_ref),
+                                &call.f_name()?,
+                            ),
                         ),
                         positional_args,
                         named_args,
@@ -1346,22 +1358,25 @@ impl Node {
         comparing_to: NodeVariant,
         consequence: Self,
         alternative: Self,
-    ) -> NodeVariant {
-        NodeVariant::IfExpr {
-            condition: bn(
-                self.origin_location,
-                NodeVariant::CompBinOp {
-                    operator: CompOperator {
-                        origin_location: self.origin_location,
-                        variant: CompOperatorVariant::Equals,
+    ) -> Node {
+        n(
+            self.origin_location,
+            NodeVariant::IfExpr {
+                condition: bn(
+                    self.origin_location,
+                    NodeVariant::CompBinOp {
+                        operator: CompOperator {
+                            origin_location: self.origin_location,
+                            variant: CompOperatorVariant::Equals,
+                        },
+                        right: bn(self.origin_location, comparing_to),
+                        left: Box::new(self),
                     },
-                    right: bn(self.origin_location, comparing_to),
-                    left: Box::new(self),
-                },
-            ),
-            consequence: Box::new(consequence),
-            alternative: Box::new(alternative),
-        }
+                ),
+                consequence: Box::new(consequence),
+                alternative: Box::new(alternative),
+            },
+        )
     }
 }
 
@@ -1461,17 +1476,61 @@ fn bn(origin_location: SourceSection, variant: NodeVariant) -> Box<Node> {
     Box::new(n(origin_location, variant))
 }
 
-fn lower_dot_access(
-    ctx: &LoweringContext<LkqlNode>,
+/// Lower access to `member` on `prefix` and wrap the result in a runtime check
+/// to ensure the access succeeded.
+fn lower_member_with_access_check(
+    ctx: &mut LoweringContext<LkqlNode>,
+    origin_location: &SourceSection,
+    prefix: Box<Node>,
+    member: &LkqlNode,
+) -> NodeVariant {
+    // Make a alias to the origin location
+    let l = *origin_location;
+
+    // Get the suffix and create an identifier from it
+    let suffix = id(ctx, member);
+    let suffix_loc = suffix.origin_location;
+    let suffix_text = suffix.text.clone();
+
+    // Create the member access node with a check to ensure it succeeded
+    let result_id = ctx.new_tmp_id();
+    let result_ref = n(l, NodeVariant::Read(result_id));
+    NodeVariant::Let {
+        id: result_id,
+        value: bn(l, NodeVariant::DottedExpr { prefix, suffix }),
+        r#in: Box::new(result_ref.clone().with_equality_check(
+            NodeVariant::NilLiteral,
+            n(
+                suffix_loc,
+                NodeVariant::RuntimeError {
+                    error_template: &UNKNOWN_MEMBER,
+                    message_args: vec![n(l, NodeVariant::StringLiteral(suffix_text))],
+                },
+            ),
+            result_ref,
+        )),
+    }
+}
+
+/// Lower access of `member` on the `prefix_ref` node with a wrapper that
+/// checks whether the prefix is null.
+///
+/// According to `is_safe`, raise an error if the prefix is null, or return
+/// null.
+fn lower_member_access_with_prefix_check(
+    ctx: &mut LoweringContext<LkqlNode>,
     origin_location: &SourceSection,
     prefix_ref: Box<Node>,
     member: &LkqlNode,
     is_safe: bool,
 ) -> NodeVariant {
+    // Make a alias to the origin location
+    let l = *origin_location;
+
     // Create the node to execute if the prefix in dot
     // access is null
     let if_prefix_null = n(
-        *origin_location,
+        l,
         if is_safe {
             NodeVariant::NullLiteral
         } else {
@@ -1479,14 +1538,15 @@ fn lower_dot_access(
         },
     );
 
-    // Create the member access node
-    let member_access = n(
-        *origin_location,
-        NodeVariant::DottedExpr { prefix: prefix_ref.clone(), suffix: id(ctx, member) },
-    );
-
     // Return the dot access wrapped in a null checking node.
-    prefix_ref.with_equality_check(NodeVariant::NullLiteral, if_prefix_null, member_access)
+    prefix_ref
+        .clone()
+        .with_equality_check(
+            NodeVariant::NullLiteral,
+            if_prefix_null,
+            n(l, lower_member_with_access_check(ctx, &l, prefix_ref, member)),
+        )
+        .variant
 }
 
 /// Util function to get whether the provided LKQL parsing node introduce a

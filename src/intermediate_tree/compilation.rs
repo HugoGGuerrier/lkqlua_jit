@@ -25,8 +25,8 @@ use crate::{
     errors::{
         DIV_BY_ZERO, DUPLICATED_KEY, DUPLICATED_SYMBOL, ErrorInstance, ErrorInstanceArg,
         ErrorTemplate, MISSING_TRAIT, NO_VALUE_FOR_PARAM, NOT_UNIT_BLOCK_ELEM,
-        POS_AND_NAMED_VALUE_FOR_PARAM, PREVIOUS_SYMBOL_HINT, UNINITIALIZED_SYMBOL, UNKNOWN_MEMBER,
-        UNKNOWN_SYMBOL, WRONG_TYPE,
+        POS_AND_NAMED_VALUE_FOR_PARAM, PREVIOUS_SYMBOL_HINT, UNINITIALIZED_SYMBOL, UNKNOWN_SYMBOL,
+        WRONG_TYPE,
     },
     intermediate_tree::{
         ArithOperator, ArithOperatorVariant, CompOperator, CompOperatorVariant, ExecutionUnit,
@@ -424,9 +424,6 @@ impl Node {
 
             // --- Composite expressions
             NodeVariant::DottedExpr { prefix, suffix } => {
-                // Prepare working labels
-                let next_label = ctx.instructions.new_label();
-
                 // Compile the prefix node
                 let prefix_access = prefix.compile_as_access(ctx, Some(result_slot));
 
@@ -439,20 +436,6 @@ impl Node {
                     &suffix.text,
                 );
                 prefix_access.release(ctx);
-
-                // Emit post access check
-                ctx.instructions
-                    .ad(&self.origin_location, ISNEP, result_slot, PRIM_NIL);
-                ctx.goto(next_label);
-                emit_runtime_error(
-                    ctx,
-                    Some(&suffix.origin_location),
-                    &UNKNOWN_MEMBER,
-                    &[ErrorInstanceArg::Static(suffix.text.clone())],
-                );
-
-                // Label the next instruction
-                ctx.instructions.label(next_label);
             }
             NodeVariant::LengthExpr(value) => {
                 let value_access = value.compile_as_access(ctx, Some(result_slot));
