@@ -1,0 +1,15 @@
+val obj = {i: 1, b: true, l: [1, 2, 3], o: {a: 1, b: 2}}
+
+print("=== Should be true")
+print(obj is {i: 1, b: true, l: [1, 2, 3], o: {a: 1, b: 2}})
+print(obj is {i: 1, ...})
+print(obj is {b: true, remains@...} when remains is {i: 1, l: [1, 2, 3], o: {a: 1, b: 2}})
+print(obj is {i: 1, remains@...} when remains is {o: {a: 1, ...}, ...})
+print("")
+
+print("=== Should be false")
+print(obj is {i: 1, b: true, l: [1, 2, 3]})
+print(obj is {i: 1, b: false, l: [1, 2, 3], o: {a: 1, b: 2}})
+print(obj is {i: 1, b: true, l: [1, 2, 3], o: {a: 1, b: 2}, not_a_field: _})
+print(obj is {i: 1, b: true, l: [1, 2, 3], o: {a: 1, b: 2}, not_a_field: _, ...})
+print("not a list" is [1, 2, 3])

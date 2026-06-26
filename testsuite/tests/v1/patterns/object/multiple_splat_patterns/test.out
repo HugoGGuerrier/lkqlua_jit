@@ -1,0 +1,9 @@
+Error: Multiple splat patterns
+   ╭─[ <working-dir>/script.lkql:2:26 ]
+   │
+ 2 │ print(obj is {a: 1, ..., ...})
+   │                     ─┬─  ─┬─  
+   │                      │    ╰─── Multiple splat patterns aren't allowed
+   │                      │        
+   │                      ╰──────── Hint: Previous splat pattern is here
+───╯

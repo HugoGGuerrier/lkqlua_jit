@@ -28,6 +28,7 @@ use crate::{
 use liblkqllang::{BaseFunction, LkqlNode};
 use regex::Regex;
 use std::{
+    collections::HashSet,
     env,
     path::{Path, PathBuf},
 };
@@ -925,7 +926,8 @@ impl Node {
 
             // --- List pattern
             LkqlNode::ListPattern(list_pattern) => {
-                // Create working variables
+                // Create a variable to store the splat pattern if there is one
+                // in the list pattern.
                 let mut maybe_splat_pattern = None;
 
                 // Start by lowering all sub-patterns
@@ -1065,6 +1067,144 @@ impl Node {
                 combine_predicates(sub_patterns).variant
             }
 
+            // --- Object pattern
+            LkqlNode::ObjectPattern(object_pattern) => {
+                // Create working variables
+                let mut maybe_splat_pattern = None;
+                let mut matched_fields = HashSet::new();
+
+                // Start by lowering all sub-patterns
+                let mut sub_patterns = Vec::new();
+                for sub_pattern_source in object_pattern
+                    .f_patterns()?
+                    .into_iter()
+                    .filter_map(Result::transpose)
+                {
+                    match sub_pattern_source? {
+                        splat_pattern @ LkqlNode::SplatPattern(_) => {
+                            // Emit an error if a splat pattern has already
+                            // been stored.
+                            if let Some(ref previous_splat_pattern) = maybe_splat_pattern {
+                                ctx.diagnostics
+                                    .add(Diagnostic::from_error_template_with_hints::<&str>(
+                                        &loc(ctx, &splat_pattern),
+                                        &MULTIPLE_SPLAT_PATTERNS,
+                                        &[],
+                                        vec![Hint::new(
+                                            String::from(PREVIOUS_SPLAT_PATTERN_HINT),
+                                            loc(ctx, previous_splat_pattern),
+                                        )],
+                                    ));
+                            }
+
+                            // Store the splat pattern node to handle it later
+                            maybe_splat_pattern = Some(splat_pattern);
+                        }
+                        assoc_source => match &assoc_source {
+                            LkqlNode::ObjectPatternAssoc(opa) => {
+                                // Get the name of the matched field
+                                let field_name = opa.f_name()?;
+
+                                // Create the identifier to access the field
+                                // value and the sub-tree to initialize it.
+                                let elem_id = ctx.new_tmp_id();
+                                let dot_access = n(
+                                    loc(ctx, &assoc_source),
+                                    NodeVariant::DottedExpr {
+                                        prefix: matched_value_ref.clone(),
+                                        suffix: id(ctx, &field_name),
+                                    },
+                                );
+
+                                // Add the field match in sub-patterns and
+                                // store the matched fields name.
+                                sub_patterns.push(
+                                    Self::lower_lkql_pattern(ctx, &opa.f_pattern()?, elem_id)?
+                                        .with_let(elem_id, dot_access),
+                                );
+                                matched_fields.insert(field_name.text()?);
+                            }
+                            _ => unreachable!(),
+                        },
+                    }
+                }
+
+                // Add type checking to sub-patterns
+                sub_patterns.insert(
+                    0,
+                    n(
+                        l,
+                        NodeVariant::InstanceOf {
+                            expression: matched_value_ref.clone(),
+                            expected_type_tag: types::obj::TYPE.tag,
+                        },
+                    ),
+                );
+
+                // Create the node to access the new object without matched keys
+                let without_keys_access = bn(
+                    l,
+                    NodeVariant::DottedExpr {
+                        prefix: matched_value_ref.clone(),
+                        suffix: id_str(l, "without_keys"),
+                    },
+                );
+                let without_keys_call = bn(
+                    l,
+                    NodeVariant::CallExpr {
+                        callee: without_keys_access,
+                        positional_args: vec![
+                            *matched_value_ref.clone(),
+                            n(
+                                l,
+                                NodeVariant::ListLiteral(
+                                    matched_fields
+                                        .into_iter()
+                                        .map(|f| n(l, NodeVariant::StringLiteral(f)))
+                                        .collect(),
+                                ),
+                            ),
+                        ],
+                        named_args: vec![],
+                    },
+                );
+
+                // If there is a splat pattern with a bindings, assign the
+                // remaining object to it.
+                if let Some(LkqlNode::SplatPattern(splat_pattern)) = maybe_splat_pattern.as_ref()
+                    && let Some(binding) = splat_pattern.f_binding()?
+                {
+                    let l = loc(ctx, &splat_pattern.as_node());
+                    sub_patterns.push(n(
+                        l,
+                        NodeVariant::BlockExpr {
+                            body: vec![n(
+                                l,
+                                NodeVariant::InitLocal {
+                                    symbol: id(ctx, &binding),
+                                    val: without_keys_call,
+                                },
+                            )],
+                            val: bn(l, NodeVariant::BoolLiteral(true)),
+                        },
+                    ));
+                }
+                // Otherwise, check that all keys have been matched
+                else if maybe_splat_pattern.is_none() {
+                    sub_patterns.push(n(
+                        l,
+                        NodeVariant::CompBinOp {
+                            left: without_keys_call,
+                            operator: CompOperator::new(l, CompOperatorVariant::Equals),
+                            right: bn(l, NodeVariant::ObjectLiteral(vec![])),
+                        },
+                    ));
+                }
+
+                // Finally, combine all sub-patterns in a "and" expression
+                combine_predicates(sub_patterns).variant
+            }
+
             // --- Not pattern
             LkqlNode::NotPattern(not_pattern) => NodeVariant::LogicUnOp {
                 operator: LogicOperator::new(l, LogicOperatorVariant::Not),
@@ -1098,7 +1238,10 @@ impl Node {
                     .map(|b| {
                         Ok::<_, Box<Diagnostic>>(Self::new(
                             loc(ctx, &b),
-                            NodeVariant::InitLocal { symbol: id(ctx, &b), val: matched_value_ref },
+                            NodeVariant::InitLocal {
+                                symbol: id(ctx, &b),
+                                val: matched_value_ref.clone(),
+                            },
                         ))
                     })
                     .transpose()?
@@ -1108,9 +1251,19 @@ impl Node {
                 // Collect all checks in a vector
                 let mut matching_elems = Vec::new();
 
-                // Lower the value pattern
+                // Lower the value pattern if there is on, otherwise check that
+                // the value exists.
                 if let Some(pattern) = complex_pattern.f_pattern()? {
                     matching_elems.push(Self::lower_lkql_pattern(ctx, &pattern, matched_value_id)?)
+                } else {
+                    matching_elems.push(n(
+                        l,
+                        NodeVariant::CompBinOp {
+                            left: matched_value_ref,
+                            operator: CompOperator::new(l, CompOperatorVariant::NotEquals),
+                            right: bn(l, NodeVariant::NilLiteral),
+                        },
+                    ));
                 }
 
                 // Lower pattern details

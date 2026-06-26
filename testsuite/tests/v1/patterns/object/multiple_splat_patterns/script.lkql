@@ -1,0 +1,2 @@
+val obj = {a: 1}
+print(obj is {a: 1, ..., ...})
