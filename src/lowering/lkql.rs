@@ -509,6 +509,62 @@ impl Node {
                     .map_or(bn(loc(ctx, node), NodeVariant::BoolLiteral(true)), Box::new),
             },
 
+            // --- Match expression
+            LkqlNode::Match(match_expr) => {
+                // Create an identifier for the matched value and lower it
+                let matched_value_id = ctx.new_tmp_id();
+                let matched_value = Self::lower_lkql_node(ctx, &match_expr.f_matched_val()?)?;
+
+                // Lower all match arms
+                let mut match_arm_sources = Vec::new();
+                for arm_source in &match_expr.f_arms()? {
+                    match arm_source?.unwrap() {
+                        LkqlNode::MatchArm(arm) => match_arm_sources.push(arm),
+                        _ => unreachable!(),
+                    }
+                }
+                let mut match_arms = Vec::new();
+                for match_arm_source in match_arm_sources {
+                    match_arms.push((
+                        all_local_symbols(&match_arm_source.as_node(), ctx)?,
+                        Self::lower_lkql_pattern(
+                            ctx,
+                            &match_arm_source.f_pattern()?,
+                            matched_value_id,
+                        )?,
+                        Self::lower_lkql_node(ctx, &match_arm_source.f_expr()?)?,
+                    ));
+                }
+
+                // Combine all match arms in a conditional expressions
+                match_arms
+                    .into_iter()
+                    .rev()
+                    .fold(n(l, NodeVariant::UnitLiteral), |alt, (local_symbols, pattern, expr)| {
+                        let l =
+                            SourceSection::range(&pattern.origin_location, &expr.origin_location);
+                        n(
+                            l,
+                            NodeVariant::InLexicalScope {
+                                local_symbols,
+                                expr: bn(
+                                    l,
+                                    NodeVariant::IfExpr {
+                                        condition: Box::new(pattern),
+                                        consequence: Box::new(expr),
+                                        alternative: bn(
+                                            alt.origin_location,
+                                            NodeVariant::OutsideLexicalScope(Box::new(alt)),
+                                        ),
+                                    },
+                                ),
+                            },
+                        )
+                    })
+                    .with_let(matched_value_id, matched_value)
+                    .variant
+            }
+
             // --- Block expression
             LkqlNode::BlockExpr(block_expr) => {
                 let lkql_body = block_expr.f_body()?;
@@ -1711,9 +1767,9 @@ fn has_lexical_scope(node: &LkqlNode) -> bool {
 /// Util function to find all local declarations from the provided node.
 /// Is defined as "declaration" all nodes that introduce a new symbol in the
 /// lexical environment.
-/// A declaration is defined as "local" if it isn't contained in a
-/// function-like tree that is strictly lower than the provided node.
-/// Are defined as "function-like" the following LKQL nodes:
+/// A declaration is defined as "local" if it isn't contained in the same
+/// scope as the current node.
+/// Are defined as "scope introducing" the following LKQL nodes:
 ///   * [`LkqlNode::TopLevelList`]
 ///   * [`LkqlNode::FunDecl`]
 ///   * [`LkqlNode::SelectorDecl`]
@@ -1721,6 +1777,7 @@ fn has_lexical_scope(node: &LkqlNode) -> bool {
 ///   * [`LkqlNode::ListComprehension`]
 ///   * [`LkqlNode::BlockExpr`]
 ///   * [`LkqlNode::IsClause`]
+///   * [`LkqlNode::MatchArm`]
 ///   * [`LkqlNode::NodePatternSelector`]
 fn all_local_decls(node: &LkqlNode, output: &mut Vec<LkqlNode>) -> Result<(), Box<Diagnostic>> {
     for maybe_child in node {
@@ -1753,6 +1810,7 @@ fn all_local_decls(node: &LkqlNode, output: &mut Vec<LkqlNode>) -> Result<(), Bo
                 | LkqlNode::ListComprehension(_)
                 | LkqlNode::BlockExpr(_)
                 | LkqlNode::IsClause(_)
+                | LkqlNode::MatchArm(_)
                 | LkqlNode::NodePatternSelector(_) => (),
 
                 // Default case, explore all children

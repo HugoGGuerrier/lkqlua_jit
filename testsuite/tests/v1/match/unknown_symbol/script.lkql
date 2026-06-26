@@ -1,0 +1,5 @@
+val i = 42
+
+match i
+| a when a == 43 => ()
+| b when a == 42 => print(a)

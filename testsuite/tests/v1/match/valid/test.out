@@ -1,0 +1,6 @@
+i matched 42
+i == 42
+s matched "Hello"
+s == "Hello"
+l matched [...]
+()

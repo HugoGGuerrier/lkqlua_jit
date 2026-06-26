@@ -1,0 +1,14 @@
+Error: Unknown symbol
+   ╭─[ <working-dir>/script.lkql:5:10 ]
+   │
+ 5 │ | b when a == 42 => print(a)
+   │          ┬  
+   │          ╰── The symbol "a" cannot be resolved in the current scope
+───╯
+Error: Unknown symbol
+   ╭─[ <working-dir>/script.lkql:5:27 ]
+   │
+ 5 │ | b when a == 42 => print(a)
+   │                           ┬  
+   │                           ╰── The symbol "a" cannot be resolved in the current scope
+───╯

@@ -1,0 +1,33 @@
+val i = 42
+val s = "Hello"
+val l = [1, 2, 3]
+
+val e = "ERROR: This shouldn't appear in the test baseline"
+
+match i
+| "42" => print(e)
+| 42   => print("i matched 42")
+| *    => print(e)
+
+match i
+| i when i == 43 => print(e)
+| i when i == 42 => print("i == 42")
+| *              => print(e)
+
+match s
+| "He"    => print(e)
+| "Hello" => print("s matched \"Hello\"")
+| *       => print(e)
+
+match s
+| i when i == "Hello" => print("s == \"Hello\"")
+| *                   => print(e)
+
+match l
+| [...] => print("l matched [...]")
+| [1, 2, 3] => print(e)
+
+print(
+    match i
+    | 43 => print(e)
+)
