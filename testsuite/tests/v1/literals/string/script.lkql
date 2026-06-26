@@ -1,4 +1,4 @@
 print("hello")
 print("world")
 print("")
-print("String with\nescaped chars")
+print("\"String with\nescaped chars\"")

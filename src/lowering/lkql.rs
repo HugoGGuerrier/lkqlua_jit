@@ -602,15 +602,14 @@ impl Node {
             LkqlNode::BoolLiteralTrue(_) => NodeVariant::BoolLiteral(true),
             LkqlNode::IntegerLiteral(_) => NodeVariant::IntLiteral(node.text()?),
             LkqlNode::StringLiteral(_) => {
-                NodeVariant::StringLiteral(unescape_string(node.text()?.trim_matches('"')))
+                let raw_str = node.text()?;
+                NodeVariant::StringLiteral(unescape_string(&raw_str[1..raw_str.len() - 1]))
             }
             LkqlNode::BlockStringLiteral(block_string) => {
                 let mut builder = String::new();
                 for maybe_str_part in &block_string.f_docs()? {
                     if let Some(str_part) = maybe_str_part? {
-                        builder.push_str(&unescape_string(
-                            str_part.text()?.trim_start_matches("|\"").trim_start(),
-                        ));
+                        builder.push_str(&unescape_string(&str_part.text()?[3..]));
                         builder.push('\n');
                     }
                 }
@@ -815,7 +814,8 @@ impl Node {
             // --- Regex pattern
             LkqlNode::RegexPattern(regex_pattern) => {
                 // Get the regex source
-                let regex_source = String::from(regex_pattern.text()?.trim_matches('"'));
+                let raw_str = regex_pattern.text()?;
+                let regex_source = String::from(&raw_str[1..raw_str.len() - 1]);
 
                 // Try to compile the regex
                 match Regex::new(&format!("^{regex_source}$")) {
