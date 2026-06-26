@@ -24,6 +24,7 @@ impl Node {
         fn eval_as_constant_variant(node: &Node) -> Option<ConstantValueVariant> {
             match &node.variant {
                 // --- Literals
+                NodeVariant::NilLiteral => Some(ConstantValueVariant::Nil),
                 NodeVariant::NullLiteral => Some(ConstantValueVariant::Null),
                 NodeVariant::UnitLiteral => Some(ConstantValueVariant::Unit),
                 NodeVariant::BoolLiteral(b) => Some(ConstantValueVariant::Bool(*b)),
@@ -271,6 +272,7 @@ pub struct ConstantValue {
 /// This enumeration represents the result of a node constant evaluation.
 #[derive(Debug, Clone)]
 pub enum ConstantValueVariant {
+    Nil,
     Null,
     Unit,
     Bool(bool),
@@ -291,7 +293,7 @@ impl PartialEq for ConstantValue {
 impl PartialEq for ConstantValueVariant {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::Null, Self::Null) | (Self::Unit, Self::Unit) => true,
+            (Self::Nil, Self::Nil) | (Self::Null, Self::Null) | (Self::Unit, Self::Unit) => true,
             (Self::Bool(l), Self::Bool(r)) => l == r,
             (Self::Int(l), Self::Int(r)) => l == r,
             (Self::String(l), Self::String(r)) => l == r,
@@ -316,6 +318,7 @@ impl ConstantValue {
             }
         }
         match &self.variant {
+            ConstantValueVariant::Nil => String::from("nil"),
             ConstantValueVariant::Null => String::from("null"),
             ConstantValueVariant::Unit => String::from("()"),
             ConstantValueVariant::Bool(b) => b.to_string(),
@@ -526,6 +529,10 @@ mod tests {
 
     // --- Constant creation helpers
 
+    fn _nil_cst() -> ConstantValue {
+        ConstantValue { origin_location: _dummy_loc(), variant: ConstantValueVariant::Nil }
+    }
+
     fn _null_cst() -> ConstantValue {
         ConstantValue { origin_location: _dummy_loc(), variant: ConstantValueVariant::Null }
     }
@@ -576,8 +583,12 @@ mod tests {
 
     #[test]
     fn test_literals_constant_evaluation() {
+        // Test nil literal
+        let mut intermediate_tree = _node(NodeVariant::NilLiteral);
+        assert_eq!(intermediate_tree.eval_as_constant(), Some(_nil_cst()));
+
         // Test null literal
-        let mut intermediate_tree = _node(NodeVariant::NullLiteral);
+        intermediate_tree = _node(NodeVariant::NullLiteral);
         assert_eq!(intermediate_tree.eval_as_constant(), Some(_null_cst()));
 
         // Test unit literal

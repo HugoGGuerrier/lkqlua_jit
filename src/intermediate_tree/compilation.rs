@@ -1098,14 +1098,9 @@ impl Node {
                 );
             }
 
-            // --- Nil literal needs a special compilation process
-            NodeVariant::NilLiteral => {
-                ctx.instructions
-                    .ad(&self.origin_location, KPRI, result_slot, PRIM_NIL);
-            }
-
             // --- All trivial literal nodes should've been compiled by now
-            NodeVariant::NullLiteral
+            NodeVariant::NilLiteral
+            | NodeVariant::NullLiteral
             | NodeVariant::UnitLiteral
             | NodeVariant::BoolLiteral(_)
             | NodeVariant::IntLiteral(_)
@@ -1360,6 +1355,7 @@ impl Node {
                         (CompOperatorVariant::Equals, BranchingKind::IfFalse)
                         | (CompOperatorVariant::NotEquals, BranchingKind::IfTrue) => {
                             match &constant_operand.variant {
+                                ConstantValueVariant::Nil => Some((ISNEP, PRIM_NIL)),
                                 ConstantValueVariant::Bool(constant_bool) => Some((
                                     ISNEP,
                                     if *constant_bool { PRIM_TRUE } else { PRIM_FALSE },
@@ -1375,6 +1371,7 @@ impl Node {
                         (CompOperatorVariant::NotEquals, BranchingKind::IfFalse)
                         | (CompOperatorVariant::Equals, BranchingKind::IfTrue) => {
                             match &constant_operand.variant {
+                                ConstantValueVariant::Nil => Some((ISEQP, PRIM_NIL)),
                                 ConstantValueVariant::Bool(constant_bool) => Some((
                                     ISEQP,
                                     if *constant_bool { PRIM_TRUE } else { PRIM_FALSE },
@@ -2012,6 +2009,11 @@ impl ConstantValue {
     /// (see https://github.com/HugoGGuerrier/lkqlua_jit/issues/3).
     fn try_to_compile(&self, ctx: &mut CompilationContext, result_slot: u8) -> bool {
         match &self.variant {
+            ConstantValueVariant::Nil => {
+                ctx.instructions
+                    .ad(&self.origin_location, KPRI, result_slot, PRIM_NIL);
+                true
+            }
             ConstantValueVariant::Null => {
                 emit_global_read(
                     ctx,
