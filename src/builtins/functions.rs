@@ -6,7 +6,7 @@ use crate::{
     ExecutionContext,
     builtins::{
         UNIT_SINGLETON_GLOBAL_NAME,
-        utils::{get_bool_param, get_param},
+        utils::{get_bool_param, get_param, get_string_param},
     },
     errors::{DEPENDENCY_CYCLE, ErrorInstance, ErrorInstanceArg},
     lua::{
@@ -17,7 +17,7 @@ use crate::{
 };
 use std::{ffi::c_int, io::Write, path::Path};
 
-/// The "print" function
+/// The "print" function.
 #[unsafe(no_mangle)]
 pub extern "C" fn lkql_print(l: LuaState) -> c_int {
     // Get the function parameter values
@@ -42,7 +42,7 @@ pub extern "C" fn lkql_print(l: LuaState) -> c_int {
     1
 }
 
-/// The "img" function
+/// The "img" function.
 #[unsafe(no_mangle)]
 pub extern "C" fn lkql_img(l: LuaState) -> c_int {
     let param_count = get_top(l) - 1;
@@ -56,18 +56,19 @@ pub extern "C" fn lkql_img(l: LuaState) -> c_int {
     1
 }
 
-/// The "units" function
+/// The "units" function.
 #[unsafe(no_mangle)]
 pub extern "C" fn lkql_units(l: LuaState) -> c_int {
     get_global(l, ANALYSIS_UNITS_GLOBAL_NAME);
     1
 }
 
-/// The importation function, this is not intended to be called by the user.
+/// The importation internal function.
 #[unsafe(no_mangle)]
 pub extern "C" fn lkql_import(l: LuaState) -> c_int {
     // Get the name of the file to import
-    let module_file = Path::new(get_string(l, 1).unwrap());
+    let param_count = get_top(l) - 1;
+    let module_file = Path::new(get_string_param(l, param_count, 1, "module_file", None));
 
     // Get the current execution context
     get_global(l, CONTEXT_GLOBAL_NAME);

@@ -37,7 +37,7 @@ use crate::{
         },
         constant_eval::{ConstantValue, ConstantValueVariant},
     },
-    runtime::{LKQL_IMPORT_GLOBAL_NAME, NULL_SINGLETON_GLOBAL_NAME, UNIT_SINGLETON_GLOBAL_NAME},
+    runtime::{NULL_SINGLETON_GLOBAL_NAME, UNIT_SINGLETON_GLOBAL_NAME},
     sources::SourceSection,
 };
 use core::slice;
@@ -819,45 +819,6 @@ impl Node {
                     result_slot,
                     UNIT_SINGLETON_GLOBAL_NAME,
                 );
-            }
-            NodeVariant::ImportModule { name, file } => {
-                // Create the birth label of the local variable
-                let birth_label = ctx.instructions.new_label();
-
-                // Then compile the call to the importation function and place
-                // its result in the bindings slot
-                let binding_slot = ctx.frame.borrow().get_local(&name.text).unwrap();
-                let call_slots = ctx.frame.borrow_mut().reserve_contiguous_slots(3);
-                emit_global_read(
-                    ctx,
-                    Some(&self.origin_location),
-                    call_slots.first,
-                    LKQL_IMPORT_GLOBAL_NAME,
-                );
-                let module_file_cst = ctx
-                    .unit_data
-                    .constants
-                    .get_from_string(&file.to_string_lossy());
-                ctx.instructions
-                    .ad(&self.origin_location, KSTR, call_slots.last, module_file_cst);
-                ctx.instructions
-                    .abc(&self.origin_location, CALL, call_slots.first, 2, 2);
-
-                // Move the result in the binding slot
-                ctx.instructions.ad(
-                    &self.origin_location,
-                    MOV,
-                    binding_slot.slot,
-                    call_slots.first as u16,
-                );
-
-                // Release call slots
-                ctx.frame.borrow_mut().release_slots(call_slots);
-
-                // Then label the next instruction as the birthing one and flag
-                // the slot as initialized in the current frame.
-                ctx.instructions.label(birth_label);
-                ctx.frame.borrow_mut().init_local(&name.text, birth_label);
             }
 
             // --- Symbol accesses

@@ -15,7 +15,6 @@ use regex::Regex;
 use std::{
     fmt::{Debug, Display},
     hash::Hash,
-    path::PathBuf,
 };
 
 pub mod compilation;
@@ -262,10 +261,6 @@ pub enum NodeVariant {
         val: Box<Node>,
     },
     InitLocalFun(u16),
-    ImportModule {
-        name: Identifier,
-        file: PathBuf,
-    },
 
     // --- Symbol access
     ReadSymbol(Identifier),
@@ -458,13 +453,6 @@ impl Node {
             NodeVariant::InitLocalFun(child_index) => {
                 ("InitLocalFun", &[("child_index", child_index.to_string())])
             }
-            NodeVariant::ImportModule { name, file } => (
-                "ImportModule",
-                &[
-                    ("name", format!("\"{}\"", name.text)),
-                    ("file", format!("\"{}\"", file.as_os_str().to_string_lossy())),
-                ],
-            ),
             NodeVariant::ReadSymbol(symbol) => {
                 ("ReadSymbol", &[("symbol", format!("\"{}\"", symbol.text))])
             }

@@ -23,6 +23,7 @@ use crate::{
         MiscOperatorVariant, Node, NodeVariant,
     },
     lowering::{LoweringContext, unescape_string},
+    runtime::LKQL_IMPORT_GLOBAL_NAME,
     sources::{Location, SourceId, SourceSection},
 };
 use liblkqllang::{BaseFunction, LkqlNode};
@@ -277,16 +278,26 @@ impl Node {
                     })
                     .collect::<Vec<_>>();
 
-                // Check that there is exactly one matching file
-                let module_file = if module_files.len() == 1 {
-                    module_files.remove(0)
+                // Create the node that will represents the value to initialize
+                // the module local name.
+                let module_value = if module_files.len() == 1 {
+                    NodeVariant::CallExpr {
+                        callee: bn(l, NodeVariant::ReadSymbol(id_str(l, LKQL_IMPORT_GLOBAL_NAME))),
+                        positional_args: vec![n(
+                            module_name.origin_location,
+                            NodeVariant::StringLiteral(String::from(
+                                module_files.remove(0).to_string_lossy(),
+                            )),
+                        )],
+                        named_args: vec![],
+                    }
                 } else if module_files.is_empty() {
                     ctx.diagnostics.add(Diagnostic::error_from_template(
                         &l,
                         &MODULE_NOT_FOUND,
                         &[&module_name.text],
                     ));
-                    PathBuf::new()
+                    NodeVariant::UnitLiteral
                 } else {
                     ctx.diagnostics.add(Diagnostic::error_from_template(
                         &l,
@@ -297,11 +308,12 @@ impl Node {
                             .collect::<Vec<_>>()
                             .join(" & ")],
                     ));
-                    PathBuf::new()
+                    NodeVariant::UnitLiteral
                 };
 
-                // Finally return the created node variant
-                NodeVariant::ImportModule { name: module_name, file: module_file }
+                // Check that there is exactly one matching file, and create
+                // the importation function call.
+                NodeVariant::InitLocal { symbol: module_name, val: bn(l, module_value) }
             }
 
             // --- Function call
