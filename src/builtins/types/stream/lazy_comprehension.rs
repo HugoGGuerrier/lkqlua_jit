@@ -1,4 +1,4 @@
-//! # Lazy comprehension Stream implementation
+//! # Lazy comprehension stream implementation
 //!
 //! This module defines the "lazy comprehension" implementation of the "Stream"
 //! LKQL type. This implementation generates a new stream by processing other
@@ -12,14 +12,6 @@ use crate::{
     runtime::{Function, RuntimeValue},
 };
 use const_format::formatcp;
-
-pub const SPECIALIZATION: TypeImplementation = TypeImplementation {
-    name: "LazyComprehension",
-    fields: &[(INTERNAL_NEXT_FIELD, TypeField::Value(NEXT))],
-    overloads: &[],
-    index_method: None,
-    registering_function: None,
-};
 
 /// Name of the field where the body of the comprehension is stored. This body
 /// is a functional value that is going to be called with elements of source
@@ -42,11 +34,19 @@ const ITERATORS_FIELD: &str = "field@iterators";
 /// comprehension body.
 const ARGS_FIELD: &str = "field@args";
 
+pub const SPECIALIZATION: TypeImplementation = TypeImplementation {
+    name: "LazyComprehension",
+    fields: &[(INTERNAL_NEXT_FIELD, TypeField::Value(NEXT))],
+    overloads: &[],
+    index_method: None,
+    registering_function: None,
+};
+
 /// Lua function called when fetching the next element of the comprehension.
 /// This function mutates the internal state of the `self` value.
 const NEXT: RuntimeValue = RuntimeValue::Callable(Function::LuaFunction(
     formatcp!(
-    "function(self)
+    "function (self)
         -- First of all check that there are remaining work
         if self['{FINISHED_FIELD}'] then
             return nil
