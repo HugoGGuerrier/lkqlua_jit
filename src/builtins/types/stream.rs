@@ -104,12 +104,13 @@ const STREAM_INDEX: Function = Function::LuaFunction(formatcp!(
         -- this index.
         if type(field) == 'number' then
             -- Prepare working variables
+            local next_fn = self['{INTERNAL_NEXT_FIELD}']
             local next_value = nil
             local cache_size = self['{CACHE_SIZE_FIELD}'] or 0
 
             while cache_size < field or field < 1 do
                 -- Get the next value and ensure it is not nil
-                next_value = self['{INTERNAL_NEXT_FIELD}'](self)
+                next_value = next_fn(self)
                 if next_value == nil then break end
 
                 -- Initialize the cache and make it grow
