@@ -1,0 +1,4 @@
+selector ints
+| n => rec(n+1)
+
+print(ints(0, min_depth="Not an int"))

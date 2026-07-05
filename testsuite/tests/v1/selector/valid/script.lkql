@@ -1,0 +1,27 @@
+selector ints
+| n => rec(n+1)
+
+selector children
+| n@FooNode => rec(*n.children)
+| * => ()
+
+
+print("=== Simple tests of index accessing")
+val all_ints = ints(0)
+print(all_ints)
+print(all_ints[10])
+print(all_ints[42])
+print(all_ints[100])
+print("")
+
+print("=== Test with depth limiting")
+print(ints(0, min_depth=4)[1])
+print(ints(0, depth=15).to_list)
+print(ints(0, max_depth=15).to_list)
+print(ints(0, min_depth=6, max_depth=15).to_list)
+print(ints(0, depth=15, min_depth=6, max_depth=15).to_list)
+print("")
+
+print("=== Test with a children iteration selector")
+val root = units()[1].root
+print(children(root).to_list)

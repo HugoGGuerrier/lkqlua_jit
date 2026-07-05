@@ -1,0 +1,4 @@
+selector ints
+| n => n+1
+
+print(ints(0)[1])

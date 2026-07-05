@@ -1,0 +1,7 @@
+Error: Error from the Lua engine
+   ╭─[ <working-dir>/script.lkql:4:7 ]
+   │
+ 4 │ print(ints(0)[1])
+   │       ─────┬────  
+   │            ╰────── Unexpected selector result: 1
+───╯

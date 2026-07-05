@@ -1,0 +1,12 @@
+Error: Invalid expression type
+   ╭─[ <working-dir>/script.lkql:1:10 ]
+   │
+ 1 │ selector ints
+   │          ──┬─  
+   │            ╰─── Expecting a "Int", got a "Str"
+───╯
+Advice: Called in "script.lkql"
+   ╭─[ <working-dir>/script.lkql:4:7 ]
+   │
+ 4 │ print(ints(0, max_depth="Not an int"))
+───╯

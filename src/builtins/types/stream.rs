@@ -26,6 +26,7 @@ use const_format::formatcp;
 use std::ffi::c_int;
 
 pub mod lazy_comprehension;
+pub mod selector_list;
 
 /// Name of the internal method used to get the next element of the stream,
 /// there is no default implementation for this method, specializations must
@@ -55,7 +56,10 @@ pub const TYPE: BuiltinType = BuiltinType {
             index_method: Some(STREAM_INDEX),
             registering_function: None,
         },
-        &[lazy_comprehension::SPECIALIZATION],
+        &[
+            lazy_comprehension::SPECIALIZATION,
+            selector_list::SPECIALIZATION,
+        ],
     ),
 };
 

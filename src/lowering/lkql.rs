@@ -8,7 +8,13 @@ use crate::{
     ExecutionContext,
     builtins::{
         traits::{self, BuiltinTrait},
-        types::{self, BuiltinType},
+        types::{
+            self, BuiltinType,
+            stream::selector_list::{
+                REC_RECURSE_FIELD, REC_RECURSE_UNPACK_FIELD, REC_RESULT_FIELD,
+                REC_RESULT_UNPACK_FIELD,
+            },
+        },
     },
     diagnostics::{Diagnostic, DiagnosticCollector, Hint},
     errors::{
@@ -81,6 +87,15 @@ impl ExecutionUnit {
                 unit_path.file_name().unwrap().to_string_lossy().to_string()
             }
             LkqlNode::FunDecl(fun_decl) => fun_decl.f_name()?.text()?,
+            LkqlNode::SelectorDecl(selector_decl) => selector_decl.f_name()?.text()?,
+            LkqlNode::SelectorArmList(selector_arm_list) => {
+                match selector_arm_list.parent()?.unwrap() {
+                    LkqlNode::SelectorDecl(selector_decl) => {
+                        format!("{}#body", selector_decl.f_name()?.text()?)
+                    }
+                    _ => unreachable!(),
+                }
+            }
             LkqlNode::AnonymousFunction(_) => ctx.next_lambda_name(),
             LkqlNode::ListComprehension(_) => ctx.next_lazy_comprehension_name(),
             LkqlNode::NodePatternSelector(_) => ctx.next_selector_pattern_name(),
@@ -152,6 +167,52 @@ impl ExecutionUnit {
                 ExecutionUnitVariant::Function {
                     params,
                     body: Node::lower_lkql_node(ctx, &lkql_body)?,
+                }
+            }
+            LkqlNode::SelectorDecl(selector_decl) => {
+                /// Create a symbol reading node wrapped in a type checking one.
+                fn read_int(id: Identifier) -> Box<Node> {
+                    Box::new(
+                        n(id.origin_location, NodeVariant::ReadSymbol(id))
+                            .with_type_requirement(&types::int::TYPE),
+                    )
+                }
+
+                let name_location = loc(ctx, &selector_decl.f_name()?);
+                let root_id = id_str(name_location, "root");
+                let depth_id = id_str(name_location, "depth");
+                let min_depth_id = id_str(name_location, "min_depth");
+                let max_depth_id = id_str(name_location, "max_depth");
+                let default_val =
+                    Some(n(name_location, NodeVariant::IntLiteral(String::from("-1"))));
+                ExecutionUnitVariant::Function {
+                    params: vec![
+                        (root_id.clone(), None),
+                        (depth_id.clone(), default_val.clone()),
+                        (min_depth_id.clone(), default_val.clone()),
+                        (max_depth_id.clone(), default_val),
+                    ],
+                    body: n(
+                        l,
+                        NodeVariant::SelectorInstantiation {
+                            root: bn(name_location, NodeVariant::ReadSymbol(root_id)),
+                            depth: read_int(depth_id),
+                            min_depth: read_int(min_depth_id),
+                            max_depth: read_int(max_depth_id),
+                            body_index: *ctx.child_index_map.get(&selector_decl.f_arms()?).unwrap(),
+                        },
+                    ),
+                }
+            }
+            LkqlNode::SelectorArmList(_) => {
+                let this_identifier = id_str(l, "this");
+                ExecutionUnitVariant::RawCallable {
+                    params: vec![this_identifier.clone()],
+                    body: lower_matching_arms(
+                        ctx,
+                        n(l, NodeVariant::ReadSymbol(this_identifier)),
+                        node,
+                    )?,
                 }
             }
             LkqlNode::ListComprehension(list_comp) => {
@@ -533,58 +594,8 @@ impl Node {
 
             // --- Match expression
             LkqlNode::Match(match_expr) => {
-                // Create an identifier for the matched value and lower it
-                let matched_value_id = ctx.new_tmp_id();
                 let matched_value = Self::lower_lkql_node(ctx, &match_expr.f_matched_val()?)?;
-
-                // Lower all match arms
-                let mut match_arm_sources = Vec::new();
-                for arm_source in &match_expr.f_arms()? {
-                    match arm_source?.unwrap() {
-                        LkqlNode::MatchArm(arm) => match_arm_sources.push(arm),
-                        _ => unreachable!(),
-                    }
-                }
-                let mut match_arms = Vec::new();
-                for match_arm_source in match_arm_sources {
-                    match_arms.push((
-                        all_local_symbols(&match_arm_source.as_node(), ctx)?,
-                        Self::lower_lkql_pattern(
-                            ctx,
-                            &match_arm_source.f_pattern()?,
-                            matched_value_id,
-                        )?,
-                        Self::lower_lkql_node(ctx, &match_arm_source.f_expr()?)?,
-                    ));
-                }
-
-                // Combine all match arms in a conditional expressions
-                match_arms
-                    .into_iter()
-                    .rev()
-                    .fold(n(l, NodeVariant::UnitLiteral), |alt, (local_symbols, pattern, expr)| {
-                        let l =
-                            SourceSection::range(&pattern.origin_location, &expr.origin_location);
-                        n(
-                            l,
-                            NodeVariant::InLexicalScope {
-                                local_symbols,
-                                expr: bn(
-                                    l,
-                                    NodeVariant::IfExpr {
-                                        condition: Box::new(pattern),
-                                        consequence: Box::new(expr),
-                                        alternative: bn(
-                                            alt.origin_location,
-                                            NodeVariant::OutsideLexicalScope(Box::new(alt)),
-                                        ),
-                                    },
-                                ),
-                            },
-                        )
-                    })
-                    .with_let(matched_value_id, matched_value)
-                    .variant
+                lower_matching_arms(ctx, matched_value, &match_expr.f_arms()?)?.variant
             }
 
             // --- Block expression
@@ -606,6 +617,58 @@ impl Node {
             }
             LkqlNode::BlockBodyExpr(body_expr) => {
                 return Self::lower_lkql_node(ctx, &body_expr.f_expr()?);
+            }
+
+            // --- Rec expression
+            LkqlNode::RecExpr(rec_expr) => {
+                /// Create a boolean literal from an unpack LKQL node.
+                fn to_boolean_literal(
+                    ctx: &mut LoweringContext<LkqlNode>,
+                    unpack_node: &LkqlNode,
+                ) -> Node {
+                    n(
+                        loc(ctx, unpack_node),
+                        NodeVariant::BoolLiteral(matches!(unpack_node, LkqlNode::UnpackPresent(_))),
+                    )
+                }
+
+                // Get sources for the recurse and result expression
+                let recurse_expr_source = rec_expr.f_recurse_expr()?;
+                let recurse_unpack_source = rec_expr.f_recurse_unpack()?;
+                let result_unpack_source = rec_expr.f_result_unpack()?;
+                let recurse_unpack_loc = loc(ctx, &recurse_unpack_source);
+                let result_unpack_loc = loc(ctx, &result_unpack_source);
+
+                // Create a vector that will contains the object fields and
+                // place the lowered recurse expression.
+                let mut object_fields = vec![
+                    (
+                        id_str(loc(ctx, &recurse_expr_source), REC_RECURSE_FIELD),
+                        Self::lower_lkql_node(ctx, &recurse_expr_source)?,
+                    ),
+                    (
+                        id_str(recurse_unpack_loc, REC_RECURSE_UNPACK_FIELD),
+                        to_boolean_literal(ctx, &recurse_unpack_source),
+                    ),
+                ];
+
+                // If there is a result expression, add it to the object fields
+                if let Some(result_expr_source) = rec_expr.f_result_expr()? {
+                    object_fields.append(&mut vec![
+                        (
+                            id_str(loc(ctx, &result_expr_source), REC_RESULT_FIELD),
+                            Self::lower_lkql_node(ctx, &result_expr_source)?,
+                        ),
+                        (
+                            id_str(result_unpack_loc, REC_RESULT_UNPACK_FIELD),
+                            to_boolean_literal(ctx, &result_unpack_source),
+                        ),
+                    ]);
+                }
+
+                // Then return the object literal representing the "rec"
+                // expression.
+                NodeVariant::ObjectLiteral(object_fields)
             }
 
             // --- List comprehension
@@ -1780,6 +1843,74 @@ fn lower_member_access_with_prefix_check(
         .variant
 }
 
+/// Lower the provided arm list as an conditional expression matching the
+/// provided `matched_value` and returning the value of the arm that succeeds
+/// to match.
+fn lower_matching_arms(
+    ctx: &mut LoweringContext<LkqlNode>,
+    matched_value: Node,
+    arm_list: &LkqlNode,
+) -> Result<Node, Box<Diagnostic>> {
+    // Create an identifier for the value to match
+    let matched_value_id = ctx.new_tmp_id();
+
+    // Create a vector with all arm information structured in tuples:
+    // - The first element is the list of symbols in the arm
+    // - The second element is the pattern to match
+    // - The third one is the resulting expression
+    let mut arm_sources = Vec::new();
+    for arm_source in arm_list {
+        match &arm_source?.unwrap() {
+            a @ LkqlNode::MatchArm(arm) => {
+                arm_sources.push((all_local_symbols(a, ctx)?, arm.f_pattern()?, arm.f_expr()?))
+            }
+            a @ LkqlNode::SelectorArm(arm) => {
+                arm_sources.push((all_local_symbols(a, ctx)?, arm.f_pattern()?, arm.f_expr()?))
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    // Now lower arm sources and collect the result in a vector
+    let mut arms = Vec::new();
+    for (locals, pattern, expr) in arm_sources {
+        arms.push((
+            locals,
+            Node::lower_lkql_pattern(ctx, &pattern, matched_value_id)?,
+            Node::lower_lkql_node(ctx, &expr)?,
+        ));
+    }
+
+    // Combine all match arms in a conditional expression
+    Ok(arms
+        .into_iter()
+        .rev()
+        .fold(
+            n(loc(ctx, arm_list), NodeVariant::UnitLiteral),
+            |alt, (local_symbols, pattern, expr)| {
+                let l = SourceSection::range(&pattern.origin_location, &expr.origin_location);
+                n(
+                    l,
+                    NodeVariant::InLexicalScope {
+                        local_symbols,
+                        expr: bn(
+                            l,
+                            NodeVariant::IfExpr {
+                                condition: Box::new(pattern),
+                                consequence: Box::new(expr),
+                                alternative: bn(
+                                    alt.origin_location,
+                                    NodeVariant::OutsideLexicalScope(Box::new(alt)),
+                                ),
+                            },
+                        ),
+                    },
+                )
+            },
+        )
+        .with_let(matched_value_id, matched_value))
+}
+
 /// Util function to get whether the provided LKQL parsing node introduce a
 /// new lexical scope.
 fn has_lexical_scope(node: &LkqlNode) -> bool {
@@ -1795,6 +1926,7 @@ fn has_lexical_scope(node: &LkqlNode) -> bool {
 ///   * [`LkqlNode::TopLevelList`]
 ///   * [`LkqlNode::FunDecl`]
 ///   * [`LkqlNode::SelectorDecl`]
+///   * [`LkqlNode::SelectorArmList`]
 ///   * [`LkqlNode::AnonymousFunction`]
 ///   * [`LkqlNode::ListComprehension`]
 ///   * [`LkqlNode::BlockExpr`]
@@ -1827,6 +1959,7 @@ fn all_local_decls(node: &LkqlNode, output: &mut Vec<LkqlNode>) -> Result<(), Bo
 
                 // Recursion bounds
                 LkqlNode::TopLevelList(_)
+                | LkqlNode::SelectorArmList(_)
                 | LkqlNode::AnonymousFunction(_)
                 | LkqlNode::ListComprehension(_)
                 | LkqlNode::BlockExpr(_)
@@ -1893,6 +2026,7 @@ fn all_local_execution_units(
                 LkqlNode::TopLevelList(_)
                 | LkqlNode::FunDecl(_)
                 | LkqlNode::SelectorDecl(_)
+                | LkqlNode::SelectorArmList(_)
                 | LkqlNode::AnonymousFunction(_)
                 | LkqlNode::ListComprehension(_)
                 | LkqlNode::NodePatternSelector(_) => output.push(child),

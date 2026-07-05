@@ -210,12 +210,6 @@ pub enum NodeVariant {
         val: Box<Node>,
     },
 
-    // --- List comprehension
-    LazyComprehension {
-        source_iterables: Vec<Node>,
-        body_index: u16,
-    },
-
     // --- Binary operations
     ArithBinOp {
         left: Box<Node>,
@@ -246,6 +240,19 @@ pub enum NodeVariant {
     LogicUnOp {
         operator: LogicOperator,
         operand: Box<Node>,
+    },
+
+    // --- Lazy values
+    LazyComprehension {
+        source_iterables: Vec<Node>,
+        body_index: u16,
+    },
+    SelectorInstantiation {
+        root: Box<Node>,
+        depth: Box<Node>,
+        min_depth: Box<Node>,
+        max_depth: Box<Node>,
+        body_index: u16,
     },
 
     // --- Lexical scope introduction / escaping
@@ -377,13 +384,6 @@ impl Node {
                     ("val", val.pretty_print(child_level)),
                 ],
             ),
-            NodeVariant::LazyComprehension { source_iterables, body_index } => (
-                "LazyComprehension",
-                &[
-                    ("source_iterables", Self::pretty_print_vec(source_iterables, child_level)),
-                    ("body_index", body_index.to_string()),
-                ],
-            ),
             NodeVariant::ArithBinOp { left, operator, right } => (
                 "ArithBinOp",
                 &[
@@ -428,6 +428,29 @@ impl Node {
                 &[
                     ("operator", operator.to_string()),
                     ("operand", operand.pretty_print(child_level)),
+                ],
+            ),
+            NodeVariant::LazyComprehension { source_iterables, body_index } => (
+                "LazyComprehension",
+                &[
+                    ("source_iterables", Self::pretty_print_vec(source_iterables, child_level)),
+                    ("body_index", body_index.to_string()),
+                ],
+            ),
+            NodeVariant::SelectorInstantiation {
+                root,
+                depth,
+                min_depth,
+                max_depth,
+                body_index,
+            } => (
+                "SelectorInstantiation",
+                &[
+                    ("root", root.pretty_print(child_level)),
+                    ("depth", depth.pretty_print(child_level)),
+                    ("min_depth", min_depth.pretty_print(child_level)),
+                    ("max_depth", max_depth.pretty_print(child_level)),
+                    ("body_index", body_index.to_string()),
                 ],
             ),
             NodeVariant::InLexicalScope { local_symbols, expr } => (

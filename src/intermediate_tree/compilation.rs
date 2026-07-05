@@ -9,7 +9,9 @@ use crate::{
         traits::{BuiltinTrait, iterable::ITERATOR_FIELD},
         types::{
             BuiltinType, TYPE_NAME_FIELD, TYPE_TAGS_FIELD, TypeImplementation, list, namespace,
-            obj, pattern, stream::lazy_comprehension, tuple, unit,
+            obj, pattern,
+            stream::{lazy_comprehension, selector_list},
+            tuple, unit,
         },
     },
     bytecode::{
@@ -549,69 +551,6 @@ impl Node {
                 val.compile_as_value(ctx, result_slot);
             }
 
-            // --- Lazy comprehension
-            NodeVariant::LazyComprehension { source_iterables, body_index } => {
-                // First load the empty table that is going to be the result
-                emit_new_table(ctx, &self.origin_location, result_slot, 0, 7);
-
-                // Then compile all source iterables, placing them in a table
-                // in the same order.
-                let collections_table_slot = ctx.frame.borrow_mut().get_slot();
-                emit_new_table(
-                    ctx,
-                    &self.origin_location,
-                    collections_table_slot,
-                    source_iterables.len() as u16,
-                    0,
-                );
-                for (i, collection) in source_iterables.iter().enumerate() {
-                    let collection_access = collection.compile_as_access(ctx, None);
-                    emit_table_index_write(
-                        ctx,
-                        Some(&self.origin_location),
-                        collection_access.slot(),
-                        collections_table_slot,
-                        i + 1,
-                    );
-                    collection_access.release(ctx);
-                }
-
-                // Place the table with all source collections in the resulting
-                // value.
-                emit_table_member_write(
-                    ctx,
-                    Some(&self.origin_location),
-                    collections_table_slot,
-                    result_slot,
-                    lazy_comprehension::COLLECTIONS_FIELD,
-                );
-                ctx.frame.borrow_mut().release_slot(collections_table_slot);
-
-                // Get the child execution unit representing the comprehension
-                // body and place it in the result.
-                let body_name = &ctx.unit.children_units[*body_index as usize].name;
-                ctx.frame
-                    .borrow_mut()
-                    .add_local(body_name, &self.origin_location);
-                Self::compile_child_unit(ctx, &self.origin_location, *body_index as usize);
-                let body_binding = ctx.frame.borrow().get_local(body_name).unwrap();
-                emit_table_member_write(
-                    ctx,
-                    Some(&self.origin_location),
-                    body_binding.slot,
-                    result_slot,
-                    lazy_comprehension::BODY_FIELD,
-                );
-
-                // Finally set the meta-table of the resulting value
-                emit_set_metatable(
-                    ctx,
-                    Some(&self.origin_location),
-                    result_slot,
-                    &lazy_comprehension::SPECIALIZATION,
-                );
-            }
-
             // --- Binary operations
             NodeVariant::ArithBinOp { left, operator, right } => {
                 // Try to compile the operation with a constant-operand shape
@@ -764,6 +703,120 @@ impl Node {
                 operand_access.release(ctx);
             }
 
+            // --- Lazy values
+            NodeVariant::LazyComprehension { source_iterables, body_index } => {
+                // First load the empty table that is going to be the result
+                emit_new_table(ctx, &self.origin_location, result_slot, 0, 5);
+
+                // Then compile all source iterables, placing them in a table
+                // in the same order.
+                let collections_table_slot = ctx.frame.borrow_mut().get_slot();
+                emit_new_table(
+                    ctx,
+                    &self.origin_location,
+                    collections_table_slot,
+                    source_iterables.len() as u16,
+                    0,
+                );
+                for (i, collection) in source_iterables.iter().enumerate() {
+                    let collection_access = collection.compile_as_access(ctx, None);
+                    emit_table_index_write(
+                        ctx,
+                        Some(&self.origin_location),
+                        collection_access.slot(),
+                        collections_table_slot,
+                        i + 1,
+                    );
+                    collection_access.release(ctx);
+                }
+
+                // Place the table with all source collections in the resulting
+                // value.
+                emit_table_member_write(
+                    ctx,
+                    Some(&self.origin_location),
+                    collections_table_slot,
+                    result_slot,
+                    lazy_comprehension::COLLECTIONS_FIELD,
+                );
+                ctx.frame.borrow_mut().release_slot(collections_table_slot);
+
+                // Get the child execution unit representing the comprehension
+                // body and place it in the result.
+                let body_name = &ctx.unit.children_units[*body_index as usize].name;
+                ctx.frame
+                    .borrow_mut()
+                    .add_local(body_name, &self.origin_location);
+                Self::compile_child_unit(ctx, &self.origin_location, *body_index as usize);
+                let body_binding = ctx.frame.borrow().get_local(body_name).unwrap();
+                emit_table_member_write(
+                    ctx,
+                    Some(&self.origin_location),
+                    body_binding.slot,
+                    result_slot,
+                    lazy_comprehension::BODY_FIELD,
+                );
+
+                // Finally, set the meta-table of the resulting value
+                emit_set_metatable(
+                    ctx,
+                    Some(&self.origin_location),
+                    result_slot,
+                    &lazy_comprehension::SPECIALIZATION,
+                );
+            }
+            NodeVariant::SelectorInstantiation {
+                root,
+                depth,
+                min_depth,
+                max_depth,
+                body_index,
+            } => {
+                // First load the empty table that is going to be the result
+                emit_new_table(ctx, &self.origin_location, result_slot, 0, 7);
+
+                // Get the body index and emit code to place it in the result
+                let body_name = &ctx.unit.children_units[*body_index as usize].name;
+                ctx.frame
+                    .borrow_mut()
+                    .add_local(body_name, &self.origin_location);
+                Self::compile_child_unit(ctx, &self.origin_location, *body_index as usize);
+                let body_binding = ctx.frame.borrow().get_local(body_name).unwrap();
+                emit_table_member_write(
+                    ctx,
+                    Some(&self.origin_location),
+                    body_binding.slot,
+                    result_slot,
+                    selector_list::BODY_FIELD,
+                );
+
+                // Compile depths, min_depth and max_depth and emit code to
+                // place them in the result.
+                for (field_name, node) in &[
+                    (selector_list::ROOT_FIELD, root),
+                    (selector_list::DEPTH_FIELD, depth),
+                    (selector_list::MIN_DEPTH_FIELD, min_depth),
+                    (selector_list::MAX_DEPTH_FIELD, max_depth),
+                ] {
+                    let field_access = node.compile_as_access(ctx, None);
+                    emit_table_member_write(
+                        ctx,
+                        Some(&node.origin_location),
+                        field_access.slot(),
+                        result_slot,
+                        field_name,
+                    );
+                }
+
+                // Finally, set the meta-table of the result
+                emit_set_metatable(
+                    ctx,
+                    Some(&self.origin_location),
+                    result_slot,
+                    &selector_list::SPECIALIZATION,
+                );
+            }
+
             // --- Lexical scope introduction
             NodeVariant::InLexicalScope { local_symbols, expr } => {
                 ctx.open_lexical_frame(local_symbols);
@@ -879,7 +932,7 @@ impl Node {
                 }
             }
 
-            // --- Lambda function access
+            // --- Child execution unit access
             NodeVariant::ReadChildUnit(child_index) => {
                 // Add the lambda symbol in the frame locals
                 let lambda_name = &ctx.unit.children_units[*child_index as usize].name;
