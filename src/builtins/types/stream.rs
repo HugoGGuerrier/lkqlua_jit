@@ -10,7 +10,7 @@ use crate::{
             indexable,
             iterable::{
                 self, DEFAULT_ITERABLE_ALL, DEFAULT_ITERABLE_ANY, DEFAULT_ITERABLE_REDUCE,
-                ITERATOR_FIELD,
+                DEFAULT_ITERABLE_TO_LIST, ITERATOR_FIELD,
             },
             sized,
         },
@@ -49,6 +49,7 @@ pub const TYPE: BuiltinType = BuiltinType {
                 ("any", TypeField::Value(DEFAULT_ITERABLE_ANY)),
                 ("all", TypeField::Value(DEFAULT_ITERABLE_ALL)),
                 ("reduce", TypeField::Value(DEFAULT_ITERABLE_REDUCE)),
+                ("to_list", TypeField::Property(DEFAULT_ITERABLE_TO_LIST)),
             ],
             overloads: &[(OverloadTarget::ToString, Function::CFunction(stream_tostring))],
             index_method: Some(STREAM_INDEX),

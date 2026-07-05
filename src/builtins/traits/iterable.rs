@@ -9,7 +9,8 @@
 use crate::{
     builtins::{
         traits::{BuiltinTrait, RequiredField},
-        types::TypeRef,
+        types::TYPE_GLOBAL_FIELD_PREFIX,
+        types::{TypeRef, list},
     },
     runtime::{Function, LkqlParam, RuntimeValue},
 };
@@ -26,6 +27,7 @@ pub const TRAIT: BuiltinTrait = BuiltinTrait {
         RequiredField::Value("any"),
         RequiredField::Value("all"),
         RequiredField::Value("reduce"),
+        RequiredField::Property("to_list"),
     ],
 };
 
@@ -89,3 +91,17 @@ pub const DEFAULT_ITERABLE_REDUCE: RuntimeValue = RuntimeValue::Callable(Functio
         return res",
     ),
 });
+
+pub const DEFAULT_ITERABLE_TO_LIST: Function = Function::LuaFunction(formatcp!(
+    "function (self)
+            local it = self['{ITERATOR_FIELD}']
+            local next = it()
+            local res = setmetatable({{}}, _G['{LIST_TYPE}'])
+            while next ~= nil do
+                table.insert(res, next)
+                next = it()
+            end
+            return res
+        end",
+    LIST_TYPE = formatcp!("{TYPE_GLOBAL_FIELD_PREFIX}{}", list::IMPLEMENTATION.name)
+));

@@ -25,6 +25,10 @@ pub mod stream;
 pub mod tuple;
 pub mod unit;
 
+/// Prefix to add to a type name in order to obtain the name of the global
+/// variable containing the metatable of the type.
+pub const TYPE_GLOBAL_FIELD_PREFIX: &str = "type@";
+
 /// Pseudo-field to use to get the name of the type of a value.
 pub const TYPE_NAME_FIELD: &str = "field@type_name";
 
@@ -235,7 +239,7 @@ pub struct TypeImplementation {
 impl TypeImplementation {
     /// Get the
     pub fn global_field_name(&self) -> String {
-        format!("type@{}", self.name)
+        format!("{TYPE_GLOBAL_FIELD_PREFIX}{}", self.name)
     }
 
     /// Fill tables containing fields of this type implementation. This

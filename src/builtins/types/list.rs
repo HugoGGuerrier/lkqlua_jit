@@ -40,6 +40,7 @@ pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
         ("any", TypeField::Value(ANY)),
         ("all", TypeField::Value(ALL)),
         ("reduce", TypeField::Value(REDUCE)),
+        ("to_list", TypeField::Property(TO_LIST)),
         (SUBLIST_NAME, TypeField::Value(SUBLIST)),
     ],
     overloads: &[
@@ -102,6 +103,9 @@ const REDUCE: RuntimeValue = RuntimeValue::Callable(Function::LkqlFunction {
         end
         return res",
 });
+
+/// Implementation of the "to_list" method on values of the "List" type.
+const TO_LIST: Function = Function::LuaFunction("function (self) return self end");
 
 /// Implementation of the "sublist" method in value of the "List" type.
 const SUBLIST: RuntimeValue = RuntimeValue::Callable(Function::LkqlFunction {
