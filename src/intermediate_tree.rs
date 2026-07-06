@@ -516,7 +516,7 @@ impl Node {
                 "RuntimeError",
                 &[
                     ("error_template", format!("\"{}\"", error_template.title)),
-                    ("message_args", format!("{:?}", message_args)),
+                    ("message_args", Self::pretty_print_vec(message_args, child_level)),
                 ],
             ),
             NodeVariant::NilLiteral => ("NilLiteral", &[]),
