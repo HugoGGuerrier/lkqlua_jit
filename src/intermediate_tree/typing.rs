@@ -10,53 +10,74 @@ use crate::{
     },
     intermediate_tree::{Node, NodeVariant},
 };
+use std::collections::HashMap;
 
 impl Node {
     /// Try to deduct the type of the expression represented by the node.
     /// Returns [`None`] if this isn't possible to determine it.
     pub fn expr_type(&self) -> Option<&BuiltinType> {
-        match &self.variant {
-            // --- Composite expression
-            NodeVariant::InClause { .. } => Some(&bool::TYPE),
-            NodeVariant::BlockExpr { val, .. } => val.expr_type(),
-            NodeVariant::LazyComprehension { .. } => Some(&stream::TYPE),
+        /// Inner typing function to carry a typing context.
+        fn inner_expr_type(ctx: &mut TypingContext, node: &Node) -> Option<&'static BuiltinType> {
+            match &node.variant {
+                // --- Composite expression
+                NodeVariant::InClause { .. } => Some(&bool::TYPE),
+                NodeVariant::BlockExpr { val, .. } => inner_expr_type(ctx, val),
+                NodeVariant::LazyComprehension { .. } => Some(&stream::TYPE),
 
-            // --- Binary operations
-            NodeVariant::LogicBinOp { .. } => Some(&bool::TYPE),
-            NodeVariant::ArithBinOp { .. } => Some(&int::TYPE),
-            NodeVariant::CompBinOp { .. } => Some(&bool::TYPE),
+                // --- Binary operations
+                NodeVariant::LogicBinOp { .. } => Some(&bool::TYPE),
+                NodeVariant::ArithBinOp { .. } => Some(&int::TYPE),
+                NodeVariant::CompBinOp { .. } => Some(&bool::TYPE),
 
-            // --- Unary operations
-            NodeVariant::LogicUnOp { .. } => Some(&bool::TYPE),
-            NodeVariant::ArithUnOp { .. } => Some(&int::TYPE),
+                // --- Unary operations
+                NodeVariant::LogicUnOp { .. } => Some(&bool::TYPE),
+                NodeVariant::ArithUnOp { .. } => Some(&int::TYPE),
 
-            // --- Symbol introductions
-            NodeVariant::InitLocal { .. } => Some(&unit::TYPE),
-            NodeVariant::InitLocalFun { .. } => Some(&unit::TYPE),
+                // --- Symbol introductions
+                NodeVariant::InitLocal { .. } => Some(&unit::TYPE),
+                NodeVariant::InitLocalFun { .. } => Some(&unit::TYPE),
 
-            // --- Recursive nodes
-            NodeVariant::InLexicalScope { expr, .. } => expr.expr_type(),
-            NodeVariant::OutsideLexicalScope(expr) => expr.expr_type(),
-            NodeVariant::Let { r#in, .. } => r#in.expr_type(),
+                // --- Recursive nodes
+                NodeVariant::InLexicalScope { expr, .. } => inner_expr_type(ctx, expr),
+                NodeVariant::OutsideLexicalScope(expr) => inner_expr_type(ctx, expr),
 
-            // --- Type checking
-            NodeVariant::InstanceOf { .. } => Some(&bool::TYPE),
+                // --- Let-in
+                NodeVariant::Let { id, value, r#in } => {
+                    if let Some(value_type) = inner_expr_type(ctx, value) {
+                        ctx.let_bindings.insert(*id, value_type);
+                    }
+                    inner_expr_type(ctx, r#in)
+                }
+                NodeVariant::Read(id) => ctx.let_bindings.get(id).copied(),
 
-            // --- Literals
-            NodeVariant::UnitLiteral => Some(&unit::TYPE),
-            NodeVariant::BoolLiteral(_) => Some(&bool::TYPE),
-            NodeVariant::IntLiteral(_) => Some(&int::TYPE),
-            NodeVariant::StringLiteral(_) => Some(&str::TYPE),
-            NodeVariant::PatternLiteral(_) => Some(&pattern::TYPE),
-            NodeVariant::TupleLiteral(_) => Some(&tuple::TYPE),
-            NodeVariant::ListLiteral(_) => Some(&list::TYPE),
-            NodeVariant::ObjectLiteral(_) => Some(&obj::TYPE),
-            NodeVariant::ReadChildUnit(_) => Some(&function::TYPE),
+                // --- Type checking
+                NodeVariant::InstanceOf { .. } => Some(&bool::TYPE),
 
-            // --- Default case, no type can be deducted
-            _ => None,
+                // --- Literals
+                NodeVariant::UnitLiteral => Some(&unit::TYPE),
+                NodeVariant::BoolLiteral(_) => Some(&bool::TYPE),
+                NodeVariant::IntLiteral(_) => Some(&int::TYPE),
+                NodeVariant::StringLiteral(_) => Some(&str::TYPE),
+                NodeVariant::PatternLiteral(_) => Some(&pattern::TYPE),
+                NodeVariant::TupleLiteral(_) => Some(&tuple::TYPE),
+                NodeVariant::ListLiteral(_) => Some(&list::TYPE),
+                NodeVariant::ObjectLiteral(_) => Some(&obj::TYPE),
+                NodeVariant::ReadChildUnit(_) => Some(&function::TYPE),
+
+                // --- Default case, no type can be deducted
+                _ => None,
+            }
         }
+
+        // Create a typing context and call the inner function
+        let mut typing_context = TypingContext { let_bindings: HashMap::new() };
+        inner_expr_type(&mut typing_context, self)
     }
+}
+
+/// Context used to type an expression.
+struct TypingContext {
+    let_bindings: HashMap<usize, &'static BuiltinType>,
 }
 
 #[allow(unused_imports)]
@@ -88,8 +109,12 @@ mod test {
         Box::new(_node(NodeVariant::IntLiteral(String::from("42"))))
     }
 
-    fn _read_node() -> Box<Node> {
+    fn _read_symbol_node() -> Box<Node> {
         Box::new(_node(NodeVariant::ReadSymbol(_id())))
+    }
+
+    fn _read_node(id: usize) -> Box<Node> {
+        Box::new(_node(NodeVariant::Read(id)))
     }
 
     fn _id() -> Identifier {
@@ -114,7 +139,8 @@ mod test {
         assert_eq!(intermediate_tree.expr_type(), Some(&bool::TYPE));
         intermediate_tree = _node(NodeVariant::BlockExpr { body: vec![], val: _int_node() });
         assert_eq!(intermediate_tree.expr_type(), Some(&int::TYPE));
-        intermediate_tree = _node(NodeVariant::BlockExpr { body: vec![], val: _read_node() });
+        intermediate_tree =
+            _node(NodeVariant::BlockExpr { body: vec![], val: _read_symbol_node() });
         assert_eq!(intermediate_tree.expr_type(), None);
 
         // Lazy comprehension
@@ -168,19 +194,44 @@ mod test {
             _node(NodeVariant::InLexicalScope { local_symbols: vec![], expr: _int_node() });
         assert_eq!(intermediate_tree.expr_type(), Some(&int::TYPE));
         intermediate_tree =
-            _node(NodeVariant::InLexicalScope { local_symbols: vec![], expr: _read_node() });
+            _node(NodeVariant::InLexicalScope { local_symbols: vec![], expr: _read_symbol_node() });
         assert_eq!(intermediate_tree.expr_type(), None);
         intermediate_tree = _node(NodeVariant::OutsideLexicalScope(_bool_node()));
         assert_eq!(intermediate_tree.expr_type(), Some(&bool::TYPE));
         intermediate_tree = _node(NodeVariant::OutsideLexicalScope(_int_node()));
         assert_eq!(intermediate_tree.expr_type(), Some(&int::TYPE));
-        intermediate_tree = _node(NodeVariant::OutsideLexicalScope(_read_node()));
+        intermediate_tree = _node(NodeVariant::OutsideLexicalScope(_read_symbol_node()));
         assert_eq!(intermediate_tree.expr_type(), None);
+
+        // Let-in
         intermediate_tree = _node(NodeVariant::Let { id: 0, value: _dummy(), r#in: _bool_node() });
         assert_eq!(intermediate_tree.expr_type(), Some(&bool::TYPE));
         intermediate_tree = _node(NodeVariant::Let { id: 0, value: _dummy(), r#in: _int_node() });
         assert_eq!(intermediate_tree.expr_type(), Some(&int::TYPE));
-        intermediate_tree = _node(NodeVariant::Let { id: 0, value: _dummy(), r#in: _read_node() });
+        intermediate_tree =
+            _node(NodeVariant::Let { id: 0, value: _dummy(), r#in: _read_symbol_node() });
+        assert_eq!(intermediate_tree.expr_type(), None);
+        intermediate_tree =
+            _node(NodeVariant::Let { id: 0, value: _bool_node(), r#in: _read_node(0) });
+        assert_eq!(intermediate_tree.expr_type(), Some(&bool::TYPE));
+        intermediate_tree =
+            _node(NodeVariant::Let { id: 0, value: _int_node(), r#in: _read_node(0) });
+        assert_eq!(intermediate_tree.expr_type(), Some(&int::TYPE));
+        intermediate_tree = _node(NodeVariant::Let {
+            id: 42,
+            value: _int_node(),
+            r#in: Box::new(_node(NodeVariant::Let {
+                id: 1,
+                value: _bool_node(),
+                r#in: _read_node(42),
+            })),
+        });
+        assert_eq!(intermediate_tree.expr_type(), Some(&int::TYPE));
+        intermediate_tree =
+            _node(NodeVariant::Let { id: 0, value: _int_node(), r#in: _read_node(1) });
+        assert_eq!(intermediate_tree.expr_type(), None);
+        intermediate_tree =
+            _node(NodeVariant::Let { id: 0, value: _read_symbol_node(), r#in: _read_node(0) });
         assert_eq!(intermediate_tree.expr_type(), None);
 
         // Type checking
