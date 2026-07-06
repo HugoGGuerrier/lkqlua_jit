@@ -4,6 +4,7 @@
 //! constant value.
 
 use crate::{
+    builtins::types::{BuiltinType, bool, int, list, obj, pattern, str, tuple, unit},
     bytecode::{ComplexConstant, NumericConstant, TableConstantElement},
     intermediate_tree::{
         ArithOperatorVariant, CompOperatorVariant, LogicOperatorVariant, MiscOperatorVariant, Node,
@@ -13,6 +14,7 @@ use crate::{
 };
 use num_bigint::BigInt;
 use regex::Regex;
+use std::collections::HashMap;
 
 impl Node {
     /// Try to evaluate this node as a constant value, returning it if this is
@@ -21,7 +23,10 @@ impl Node {
         /// Internal recursive function to evaluate a node as a constant
         /// variant. This is used to avoid useless wrapping during constant
         /// evaluation.
-        fn eval_as_constant_variant(node: &Node) -> Option<ConstantValueVariant> {
+        fn eval_as_constant_variant(
+            ctx: &mut EvaluationContext,
+            node: &Node,
+        ) -> Option<ConstantValueVariant> {
             match &node.variant {
                 // --- Literals
                 NodeVariant::NilLiteral => Some(ConstantValueVariant::Nil),
@@ -36,7 +41,7 @@ impl Node {
                 NodeVariant::TupleLiteral(nodes) | NodeVariant::ListLiteral(nodes) => {
                     let constants = nodes
                         .iter()
-                        .filter_map(|n| n.eval_as_constant())
+                        .filter_map(|n| inner_eval_as_constant(ctx, n))
                         .collect::<Vec<_>>();
                     if constants.len() != nodes.len() {
                         None
@@ -51,7 +56,9 @@ impl Node {
                 NodeVariant::ObjectLiteral(items) => {
                     let constant_items = items
                         .iter()
-                        .filter_map(|(n, v)| v.eval_as_constant().map(|c| (n.text.clone(), c)))
+                        .filter_map(|(n, v)| {
+                            inner_eval_as_constant(ctx, v).map(|c| (n.text.clone(), c))
+                        })
                         .collect::<Vec<_>>();
                     if constant_items.len() != items.len() {
                         None
@@ -62,7 +69,10 @@ impl Node {
 
                 // --- Binary operations
                 NodeVariant::ArithBinOp { left, operator, right } => {
-                    match (eval_as_constant_variant(left), eval_as_constant_variant(right)) {
+                    match (
+                        eval_as_constant_variant(ctx, left),
+                        eval_as_constant_variant(ctx, right),
+                    ) {
                         (
                             Some(ConstantValueVariant::Int(ref li)),
                             Some(ConstantValueVariant::Int(ref ri)),
@@ -82,7 +92,10 @@ impl Node {
                     }
                 }
                 NodeVariant::LogicBinOp { left, operator, right } => {
-                    match (eval_as_constant_variant(left), eval_as_constant_variant(right)) {
+                    match (
+                        eval_as_constant_variant(ctx, left),
+                        eval_as_constant_variant(ctx, right),
+                    ) {
                         (
                             Some(ConstantValueVariant::Bool(lb)),
                             Some(ConstantValueVariant::Bool(rb)),
@@ -95,7 +108,10 @@ impl Node {
                     }
                 }
                 NodeVariant::CompBinOp { left, operator, right } => {
-                    match (eval_as_constant_variant(left), eval_as_constant_variant(right)) {
+                    match (
+                        eval_as_constant_variant(ctx, left),
+                        eval_as_constant_variant(ctx, right),
+                    ) {
                         (Some(left_variant), Some(right_variant)) => match operator.variant {
                             CompOperatorVariant::Equals => {
                                 Some(ConstantValueVariant::Bool(left_variant == right_variant))
@@ -132,7 +148,10 @@ impl Node {
                     }
                 }
                 NodeVariant::MiscBinOp { left, operator, right } => {
-                    match (eval_as_constant_variant(left), eval_as_constant_variant(right)) {
+                    match (
+                        eval_as_constant_variant(ctx, left),
+                        eval_as_constant_variant(ctx, right),
+                    ) {
                         (Some(left_variant), Some(right_variant)) => match operator.variant {
                             MiscOperatorVariant::Concat => match (left_variant, right_variant) {
                                 (
@@ -159,7 +178,7 @@ impl Node {
                 // --- Unary operations
                 NodeVariant::ArithUnOp { operator, operand } => {
                     if let Some(ConstantValueVariant::Int(ref i)) =
-                        eval_as_constant_variant(operand)
+                        eval_as_constant_variant(ctx, operand)
                     {
                         Some(match &operator.variant {
                             ArithOperatorVariant::Plus => ConstantValueVariant::Int(i.clone()),
@@ -172,7 +191,7 @@ impl Node {
                 }
                 NodeVariant::LogicUnOp { operator, operand } => {
                     if let Some(ConstantValueVariant::Bool(ref b)) =
-                        eval_as_constant_variant(operand)
+                        eval_as_constant_variant(ctx, operand)
                     {
                         Some(match &operator.variant {
                             LogicOperatorVariant::Not => ConstantValueVariant::Bool(!b),
@@ -184,7 +203,7 @@ impl Node {
                 }
 
                 // --- Composite expressions
-                NodeVariant::DottedExpr { prefix, suffix } => eval_as_constant_variant(prefix)
+                NodeVariant::DottedExpr { prefix, suffix } => eval_as_constant_variant(ctx, prefix)
                     .and_then(|prefix_variant: ConstantValueVariant| match prefix_variant {
                         ConstantValueVariant::Null => None,
                         ConstantValueVariant::Object(items) => items
@@ -194,27 +213,36 @@ impl Node {
                         _ => None,
                     }),
                 NodeVariant::IndexExpr { indexed_val, index } => {
-                    eval_as_constant_variant(indexed_val).and_then(|indexed_val_variant| {
+                    eval_as_constant_variant(ctx, indexed_val).and_then(|indexed_val_variant| {
                         match indexed_val_variant {
                             ConstantValueVariant::Null => None,
                             ConstantValueVariant::Tuple(values)
-                            | ConstantValueVariant::List(values) => eval_as_constant_variant(index)
-                                .and_then(|constant_index| match constant_index {
-                                    ConstantValueVariant::Int(constant_index) => {
-                                        if let Ok(i) = usize::try_from(constant_index) {
-                                            values.get(i - 1).map(|c| c.variant.clone()).or(None)
-                                        } else {
-                                            None
+                            | ConstantValueVariant::List(values) => {
+                                eval_as_constant_variant(ctx, index).and_then(|constant_index| {
+                                    match constant_index {
+                                        ConstantValueVariant::Int(constant_index) => {
+                                            if let Ok(i) = usize::try_from(constant_index) {
+                                                values
+                                                    .get(i - 1)
+                                                    .map(|c| c.variant.clone())
+                                                    .or(None)
+                                            } else {
+                                                None
+                                            }
                                         }
+                                        _ => None,
                                     }
-                                    _ => None,
-                                }),
+                                })
+                            }
                             _ => None,
                         }
                     })
                 }
                 NodeVariant::InClause { value, collection } => {
-                    match (eval_as_constant_variant(value), eval_as_constant_variant(collection)) {
+                    match (
+                        eval_as_constant_variant(ctx, value),
+                        eval_as_constant_variant(ctx, collection),
+                    ) {
                         (
                             Some(value_constant),
                             Some(ConstantValueVariant::List(collection_elements)),
@@ -227,27 +255,36 @@ impl Node {
                         _ => None,
                     }
                 }
+                NodeVariant::IfExpr { condition, consequence, alternative } => {
+                    match eval_as_constant_variant(ctx, condition) {
+                        Some(ConstantValueVariant::Bool(cond_value)) => {
+                            if cond_value {
+                                eval_as_constant_variant(ctx, consequence)
+                            } else {
+                                eval_as_constant_variant(ctx, alternative)
+                            }
+                        }
+                        _ => None,
+                    }
+                }
+
+                // --- Let-in
+                NodeVariant::Let { id, value, r#in } => {
+                    if let Some(value_cst) = inner_eval_as_constant(ctx, value) {
+                        ctx.let_bindings.insert(*id, value_cst);
+                    }
+                    eval_as_constant_variant(ctx, r#in)
+                }
+                NodeVariant::Read(id) => ctx.let_bindings.get(id).map(|c| c.variant.clone()),
 
                 // --- Type checking
-                NodeVariant::InstanceOf { expression, expected_type_tag } => expression
-                    .expr_type()
-                    .map(|t| ConstantValueVariant::Bool(&t.tag == expected_type_tag)),
-                NodeVariant::RequireType { expression, .. }
-                | NodeVariant::RequireTrait { expression, .. } => {
-                    expression.expr_type().and_then(|t| {
-                        let predicate = match node.variant {
-                            NodeVariant::RequireType { expected_type, .. } => t == expected_type,
-                            NodeVariant::RequireTrait { required_trait, .. } => {
-                                t.traits.contains(&required_trait)
-                            }
-                            _ => unreachable!(),
-                        };
-                        if predicate {
-                            expression.eval_as_constant().map(|c| c.variant)
-                        } else {
-                            None
-                        }
-                    })
+                NodeVariant::InstanceOf { expression, expected_type_tag } => {
+                    match inner_eval_as_constant(ctx, expression) {
+                        Some(cst) => cst
+                            .constant_type()
+                            .map(|t| ConstantValueVariant::Bool(&t.tag == expected_type_tag)),
+                        _ => None,
+                    }
                 }
 
                 // --- All other nodes cannot be evaluated as constant
@@ -255,11 +292,27 @@ impl Node {
             }
         }
 
-        // Get the constant variant from the current node and return the
-        // wrapped constant value if some.
-        eval_as_constant_variant(self)
-            .map(|variant| ConstantValue { origin_location: self.origin_location, variant })
+        /// Inner function to evaluate a node as a constant value in an
+        /// evaluation context.
+        fn inner_eval_as_constant(
+            ctx: &mut EvaluationContext,
+            node: &Node,
+        ) -> Option<ConstantValue> {
+            // Get the constant variant from the current node and return the
+            // wrapped constant value if some.
+            eval_as_constant_variant(ctx, node)
+                .map(|variant| ConstantValue { origin_location: node.origin_location, variant })
+        }
+
+        // Call the inner function with an empty context
+        let mut evaluation_context = EvaluationContext { let_bindings: HashMap::new() };
+        inner_eval_as_constant(&mut evaluation_context, self)
     }
+}
+
+/// Context used to evaluate an expression.
+struct EvaluationContext {
+    let_bindings: HashMap<usize, ConstantValue>,
 }
 
 /// This type represents a constant value evaluated from an intermediate tree.
@@ -437,6 +490,21 @@ impl ConstantValue {
             _ => None,
         }
     }
+
+    /// Get the type of the constant value if possible.
+    pub fn constant_type(&self) -> Option<&'static BuiltinType> {
+        match self.variant {
+            ConstantValueVariant::Unit => Some(&unit::TYPE),
+            ConstantValueVariant::Bool(_) => Some(&bool::TYPE),
+            ConstantValueVariant::Int(_) => Some(&int::TYPE),
+            ConstantValueVariant::String(_) => Some(&str::TYPE),
+            ConstantValueVariant::Pattern(_) => Some(&pattern::TYPE),
+            ConstantValueVariant::Tuple(_) => Some(&tuple::TYPE),
+            ConstantValueVariant::List(_) => Some(&list::TYPE),
+            ConstantValueVariant::Object(_) => Some(&obj::TYPE),
+            _ => None,
+        }
+    }
 }
 
 /// Compare left and right constant values with the appropriate comparison
@@ -523,8 +591,20 @@ mod tests {
         _node(NodeVariant::PatternLiteral(Regex::new(regex).unwrap()))
     }
 
-    fn _read_node(value: &str) -> Node {
+    fn _read_symbol_node(value: &str) -> Node {
         _node(NodeVariant::ReadSymbol(_id(value)))
+    }
+
+    fn _read_node(id: usize) -> Node {
+        _node(NodeVariant::Read(id))
+    }
+
+    fn _if_node(cond: Node, consequence: Node, alternative: Node) -> Node {
+        _node(NodeVariant::IfExpr {
+            condition: Box::new(cond),
+            consequence: Box::new(consequence),
+            alternative: Box::new(alternative),
+        })
     }
 
     // --- Constant creation helpers
@@ -645,7 +725,7 @@ mod tests {
         );
         intermediate_tree = _node(NodeVariant::TupleLiteral(vec![
             _node(NodeVariant::UnitLiteral),
-            _read_node("nope"),
+            _read_symbol_node("nope"),
         ]));
         assert_eq!(intermediate_tree.eval_as_constant(), None);
 
@@ -665,7 +745,7 @@ mod tests {
         );
         intermediate_tree = _node(NodeVariant::ListLiteral(vec![
             _node(NodeVariant::UnitLiteral),
-            _read_node("nope"),
+            _read_symbol_node("nope"),
         ]));
         assert_eq!(intermediate_tree.eval_as_constant(), None);
 
@@ -688,7 +768,7 @@ mod tests {
         );
         intermediate_tree = _node(NodeVariant::ObjectLiteral(vec![
             (_id("a"), _node(NodeVariant::UnitLiteral)),
-            (_id("a"), _read_node("nope")),
+            (_id("a"), _read_symbol_node("nope")),
         ]));
         assert_eq!(intermediate_tree.eval_as_constant(), None);
     }
@@ -1322,6 +1402,60 @@ mod tests {
     }
 
     #[test]
+    fn test_if_expr() {
+        let mut intermediate_tree = _if_node(_bool_node(true), _int_node("42"), _str_node("hello"));
+        assert_eq!(intermediate_tree.eval_as_constant(), Some(_int_cst("42")));
+        intermediate_tree = _if_node(_bool_node(false), _int_node("42"), _str_node("hello"));
+        assert_eq!(intermediate_tree.eval_as_constant(), Some(_str_cst("hello")));
+        intermediate_tree =
+            _if_node(_read_symbol_node("nope"), _int_node("42"), _str_node("hello"));
+        assert_eq!(intermediate_tree.eval_as_constant(), None);
+        intermediate_tree =
+            _if_node(_bool_node(true), _read_symbol_node("nope"), _str_node("hello"));
+        assert_eq!(intermediate_tree.eval_as_constant(), None);
+        intermediate_tree = _if_node(_bool_node(false), _int_node("42"), _read_symbol_node("nope"));
+        assert_eq!(intermediate_tree.eval_as_constant(), None);
+    }
+
+    #[test]
+    fn test_let_in() {
+        let mut intermediate_tree = _node(NodeVariant::Let {
+            id: 0,
+            value: Box::new(_int_node("42")),
+            r#in: Box::new(_read_node(0)),
+        });
+        assert_eq!(intermediate_tree.eval_as_constant(), Some(_int_cst("42")));
+        intermediate_tree = _node(NodeVariant::Let {
+            id: 0,
+            value: Box::new(_bool_node(true)),
+            r#in: Box::new(_read_node(0)),
+        });
+        assert_eq!(intermediate_tree.eval_as_constant(), Some(_bool_cst(true)));
+        intermediate_tree = _node(NodeVariant::Let {
+            id: 0,
+            value: Box::new(_str_node("hello")),
+            r#in: Box::new(_node(NodeVariant::Let {
+                id: 1,
+                value: Box::new(_int_node("42")),
+                r#in: Box::new(_read_node(0)),
+            })),
+        });
+        assert_eq!(intermediate_tree.eval_as_constant(), Some(_str_cst("hello")));
+        intermediate_tree = _node(NodeVariant::Let {
+            id: 0,
+            value: Box::new(_int_node("42")),
+            r#in: Box::new(_read_node(1)),
+        });
+        assert_eq!(intermediate_tree.eval_as_constant(), None);
+        intermediate_tree = _node(NodeVariant::Let {
+            id: 0,
+            value: Box::new(_read_symbol_node("nope")),
+            r#in: Box::new(_read_node(0)),
+        });
+        assert_eq!(intermediate_tree.eval_as_constant(), None);
+    }
+
+    #[test]
     fn test_instance_of() {
         let mut intermediate_tree = _node(NodeVariant::InstanceOf {
             expression: Box::new(_bool_node(false)),
@@ -1334,7 +1468,7 @@ mod tests {
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(_bool_cst(false)));
         intermediate_tree = _node(NodeVariant::InstanceOf {
-            expression: Box::new(_read_node("x")),
+            expression: Box::new(_read_symbol_node("x")),
             expected_type_tag: bool::TYPE.tag,
         });
         assert_eq!(intermediate_tree.eval_as_constant(), None);
