@@ -152,24 +152,22 @@ impl Node {
                         eval_as_constant_variant(ctx, left),
                         eval_as_constant_variant(ctx, right),
                     ) {
-                        (Some(left_variant), Some(right_variant)) => match operator.variant {
-                            MiscOperatorVariant::Concat => match (left_variant, right_variant) {
-                                (
-                                    ConstantValueVariant::String(ls),
-                                    ConstantValueVariant::String(rs),
-                                ) => Some(ConstantValueVariant::String(format!("{ls}{rs}"))),
-                                (
-                                    ConstantValueVariant::List(ll),
-                                    ConstantValueVariant::List(rl),
-                                ) => {
-                                    let mut constant_result =
-                                        Vec::with_capacity(ll.len() + rl.len());
-                                    ll.iter().for_each(|e| constant_result.push(e.clone()));
-                                    rl.iter().for_each(|e| constant_result.push(e.clone()));
-                                    Some(ConstantValueVariant::List(constant_result))
-                                }
-                                _ => None,
-                            },
+                        (
+                            Some(ConstantValueVariant::String(ls)),
+                            Some(ConstantValueVariant::String(rs)),
+                        ) => match operator.variant {
+                            MiscOperatorVariant::Concat => {
+                                Some(ConstantValueVariant::String(format!("{ls}{rs}")))
+                            }
+                        },
+                        (
+                            Some(ConstantValueVariant::List(mut ll)),
+                            Some(ConstantValueVariant::List(mut rl)),
+                        ) => match operator.variant {
+                            MiscOperatorVariant::Concat => {
+                                ll.append(&mut rl);
+                                Some(ConstantValueVariant::List(ll))
+                            }
                         },
                         _ => None,
                     }
@@ -177,35 +175,28 @@ impl Node {
 
                 // --- Unary operations
                 NodeVariant::ArithUnOp { operator, operand } => {
-                    if let Some(ConstantValueVariant::Int(ref i)) =
-                        eval_as_constant_variant(ctx, operand)
-                    {
-                        Some(match &operator.variant {
+                    match eval_as_constant_variant(ctx, operand) {
+                        Some(ConstantValueVariant::Int(ref i)) => Some(match &operator.variant {
                             ArithOperatorVariant::Plus => ConstantValueVariant::Int(i.clone()),
                             ArithOperatorVariant::Minus => ConstantValueVariant::Int(-i),
                             _ => unreachable!(),
-                        })
-                    } else {
-                        None
+                        }),
+                        _ => None,
                     }
                 }
                 NodeVariant::LogicUnOp { operator, operand } => {
-                    if let Some(ConstantValueVariant::Bool(ref b)) =
-                        eval_as_constant_variant(ctx, operand)
-                    {
-                        Some(match &operator.variant {
+                    match eval_as_constant_variant(ctx, operand) {
+                        Some(ConstantValueVariant::Bool(ref b)) => Some(match &operator.variant {
                             LogicOperatorVariant::Not => ConstantValueVariant::Bool(!b),
                             _ => unreachable!(),
-                        })
-                    } else {
-                        None
+                        }),
+                        _ => None,
                     }
                 }
 
                 // --- Composite expressions
                 NodeVariant::DottedExpr { prefix, suffix } => eval_as_constant_variant(ctx, prefix)
                     .and_then(|prefix_variant: ConstantValueVariant| match prefix_variant {
-                        ConstantValueVariant::Null => None,
                         ConstantValueVariant::Object(items) => items
                             .iter()
                             .find(|(s, _)| s == &suffix.text)
@@ -213,30 +204,19 @@ impl Node {
                         _ => None,
                     }),
                 NodeVariant::IndexExpr { indexed_val, index } => {
-                    eval_as_constant_variant(ctx, indexed_val).and_then(|indexed_val_variant| {
-                        match indexed_val_variant {
-                            ConstantValueVariant::Null => None,
-                            ConstantValueVariant::Tuple(values)
-                            | ConstantValueVariant::List(values) => {
-                                eval_as_constant_variant(ctx, index).and_then(|constant_index| {
-                                    match constant_index {
-                                        ConstantValueVariant::Int(constant_index) => {
-                                            if let Ok(i) = usize::try_from(constant_index) {
-                                                values
-                                                    .get(i - 1)
-                                                    .map(|c| c.variant.clone())
-                                                    .or(None)
-                                            } else {
-                                                None
-                                            }
-                                        }
-                                        _ => None,
-                                    }
-                                })
-                            }
-                            _ => None,
-                        }
-                    })
+                    match (
+                        eval_as_constant_variant(ctx, indexed_val),
+                        eval_as_constant_variant(ctx, index),
+                    ) {
+                        (
+                            Some(ConstantValueVariant::Tuple(values))
+                            | Some(ConstantValueVariant::List(values)),
+                            Some(ConstantValueVariant::Int(constant_index)),
+                        ) => usize::try_from(constant_index)
+                            .ok()
+                            .and_then(|i| values.get(i - 1).map(|c| c.variant.clone())),
+                        _ => None,
+                    }
                 }
                 NodeVariant::InClause { value, collection } => {
                     match (
