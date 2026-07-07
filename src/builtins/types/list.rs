@@ -14,11 +14,9 @@ use crate::{
             TypeImplementation, TypeImplementationKind, TypeRef, img_property, tuple,
         },
     },
-    lua::{LuaState, get_field, get_index, get_length, get_string, push_string, set_top},
     runtime::{Function, LkqlParam, RuntimeValue},
 };
 use const_format::formatcp;
-use std::ffi::c_int;
 
 const TYPE_TAG: i32 = tuple::TYPE.tag + 1;
 
@@ -44,7 +42,7 @@ pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
         (SUBLIST_NAME, TypeField::Value(SUBLIST)),
     ],
     overloads: &[
-        (OverloadTarget::ToString, Function::CFunction(list_tostring)),
+        (OverloadTarget::ToString, LIST_TOSTRING),
         (OverloadTarget::Eq, LIST_EQ),
         (OverloadTarget::Concat, LIST_CONCAT),
     ],
@@ -123,26 +121,19 @@ const SUBLIST: RuntimeValue = RuntimeValue::Callable(Function::LkqlFunction {
 });
 
 /// Overload of "__tostring" for the "List" type
-#[unsafe(no_mangle)]
-extern "C" fn list_tostring(l: LuaState) -> c_int {
-    // Get image of items inside the list
-    let list_len = get_length(l, 1);
-    let mut item_images = Vec::with_capacity(list_len);
-    for i in 1..=list_len {
-        get_index(l, 1, i as i32);
-        get_field(l, 2, "img");
-        item_images.push(get_string(l, 3).unwrap());
-        set_top(l, 1);
-    }
-
-    // Then create the list representation
-    push_string(l, &format!("[{}]", item_images.join(", ")));
-    1
-}
+const LIST_TOSTRING: Function = Function::LuaFunction(
+    "function (self)
+        local images = {}
+        for _, val in ipairs(self) do
+            table.insert(images, val.img)
+        end
+        return '[' .. table.concat(images, ', ') .. ']'
+    end",
+);
 
 /// Overload of "__eq" for the "List" type
 const LIST_EQ: Function = Function::LuaFunction(formatcp!(
-    "function(self, other)
+    "function (self, other)
         -- Start by checking types
         if not other['{TYPE_TAGS_FIELD}'][{TYPE_TAG}] then
             return false

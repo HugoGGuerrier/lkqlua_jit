@@ -12,10 +12,8 @@ use crate::{
             img_property, stream,
         },
     },
-    lua::{LuaState, get_field, get_next_pair, get_string, pop, push_nil, push_string},
     runtime::{Function, LkqlParam, RuntimeValue},
 };
-use std::ffi::c_int;
 
 /// Name of the method to get a subobject without provided keys.
 pub const WITHOUT_KEYS_NAME: &str = "without_keys";
@@ -33,8 +31,8 @@ pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
         (WITHOUT_KEYS_NAME, TypeField::Value(WITHOUT_KEYS)),
     ],
     overloads: &[
-        (OverloadTarget::ToString, Function::CFunction(obj_tostring)),
-        (OverloadTarget::Eq, EQ),
+        (OverloadTarget::ToString, OBJ_TOSTRING),
+        (OverloadTarget::Eq, OBJ_EQ),
     ],
     index_method: None,
     registering_function: None,
@@ -71,39 +69,26 @@ const WITHOUT_KEYS: RuntimeValue = RuntimeValue::Callable(Function::LkqlFunction
 });
 
 /// Overload of "__tostring" for the "Object" type.
-#[unsafe(no_mangle)]
-extern "C" fn obj_tostring(l: LuaState) -> c_int {
-    // Create the vector to place pairs in
-    let mut pairs: Vec<(&str, &str)> = Vec::new();
+const OBJ_TOSTRING: Function = Function::LuaFunction(
+    "function (self)
+        -- Get keys and sort them
+        local keys = {}
+        for key, _ in pairs(self) do
+            table.insert(keys, key)
+        end
+        table.sort(keys)
 
-    // Iterate over all pairs in the object
-    push_nil(l);
-    while get_next_pair(l, 1) {
-        get_field(l, -1, "img");
-        pairs.push((get_string(l, -3).unwrap(), get_string(l, -1).unwrap()));
-        pop(l, 2);
-    }
-
-    // Sort the pair vector and create a string from it
-    pairs.sort_by(|(left_name, _), (right_name, _)| left_name.cmp(right_name));
-
-    // Finally place it on the stack and return 1
-    push_string(
-        l,
-        &format!(
-            "{{{}}}",
-            pairs
-                .into_iter()
-                .map(|(name, value)| format!("\"{name}\": {value}"))
-                .collect::<Vec<_>>()
-                .join(", ")
-        ),
-    );
-    1
-}
+        -- Then get images of values
+        local images = {}
+        for _, key in ipairs(keys) do
+            table.insert(images, '\"' .. key .. '\": ' .. self[key].img)
+        end
+        return '{' .. table.concat(images, ', ') .. '}'
+    end",
+);
 
 /// Overload of "__eq" for the "Object" type.
-const EQ: Function = Function::LuaFunction(
+const OBJ_EQ: Function = Function::LuaFunction(
     "function(self, other)
         -- Start by checking types
         if getmetatable(self) ~= getmetatable(other) then

@@ -54,18 +54,14 @@ extern "C" fn function_tostring(l: LuaState) -> c_int {
         get_field(l, -1, "source");
 
         // Ensure the source name is actually a source id
-        if let Some(source_id_str) = get_string(l, -1) {
-            if let Ok(source_id) = source_id_str.parse::<usize>() {
-                // Get the current execution context
-                get_global(l, CONTEXT_GLOBAL_NAME);
-                let ctx = get_user_data::<ExecutionContext>(l, get_top(l)).unwrap();
-                pop(l, 1);
+        if let Some(Ok(source_id)) = get_string(l, -1).map(str::parse::<usize>) {
+            // Get the current execution context
+            get_global(l, CONTEXT_GLOBAL_NAME);
+            let ctx = get_user_data::<ExecutionContext>(l, get_top(l)).unwrap();
+            pop(l, 1);
 
-                // Get the prototype name
-                &ctx.compilation_cache.get(&source_id).unwrap().prototypes[proto_id].name
-            } else {
-                default_function_name
-            }
+            // Get the prototype name
+            &ctx.compilation_cache.get(&source_id).unwrap().prototypes[proto_id].name
         } else {
             default_function_name
         }

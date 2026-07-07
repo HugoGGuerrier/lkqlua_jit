@@ -178,13 +178,6 @@ pub(crate) fn get_user_data<'a, T: Any>(l: LuaState, index: i32) -> Option<&'a m
     }
 }
 
-/// Pop a key from the stack and push the next key / values pair from the table
-/// at the provided index. This function pushes the key first then the value.
-/// Returns whether a new pair has been pushed on the stack.
-pub(crate) fn get_next_pair(l: LuaState, index: i32) -> bool {
-    unsafe { lua_next(l, index) != 0 }
-}
-
 /// Push the `nil` value to the top of the stack.
 pub(crate) fn push_nil(l: LuaState) {
     unsafe { lua_pushnil(l) }
@@ -593,7 +586,6 @@ unsafe extern "C" {
     fn lua_tointeger(l: LuaState, index: i32) -> isize;
     fn lua_tolstring(l: LuaState, index: c_int, result_size: *mut usize) -> *const c_char;
     fn lua_topointer(l: LuaState, index: c_int) -> *const c_void;
-    fn lua_next(l: LuaState, index: c_int) -> c_int;
 
     fn lua_pushnil(l: LuaState);
     fn lua_pushboolean(l: LuaState, value: c_int);

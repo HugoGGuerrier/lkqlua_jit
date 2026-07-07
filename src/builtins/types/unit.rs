@@ -19,10 +19,10 @@ pub const TYPE: BuiltinType = BuiltinType {
 pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
     name: "Unit",
     fields: &[("img", TypeField::Property(Function::CFunction(img_property)))],
-    overloads: &[(OverloadTarget::ToString, TO_STRING)],
+    overloads: &[(OverloadTarget::ToString, TUPLE_TOSTRING)],
     index_method: None,
     registering_function: None,
 };
 
 /// Overload of "__tostring" for the "Unit" type
-const TO_STRING: Function = Function::LuaFunction("function (_) return '()' end");
+const TUPLE_TOSTRING: Function = Function::LuaFunction("function (_) return '()' end");
