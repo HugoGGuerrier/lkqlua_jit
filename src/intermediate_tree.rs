@@ -6,11 +6,7 @@
 //! program in an arborescent way while being low enough to easily compile to
 //! LuaJIT bytecode.
 
-use crate::{
-    builtins::{traits::BuiltinTrait, types::BuiltinType},
-    errors::ErrorTemplate,
-    sources::SourceSection,
-};
+use crate::{builtins::traits::BuiltinTrait, errors::ErrorTemplate, sources::SourceSection};
 use regex::Regex;
 use std::{
     fmt::{Debug, Display},
@@ -290,13 +286,9 @@ pub enum NodeVariant {
         expression: Box<Node>,
         expected_type_tag: i32,
     },
-    RequireType {
+    HasTrait {
         expression: Box<Node>,
-        expected_type: &'static BuiltinType,
-    },
-    RequireTrait {
-        expression: Box<Node>,
-        required_trait: &'static BuiltinTrait,
+        expected_trait: &'static BuiltinTrait,
     },
 
     // --- Error emission
@@ -495,21 +487,14 @@ impl Node {
                 "InstanceOf",
                 &[
                     ("expression", expression.pretty_print(child_level)),
-                    ("expected_type", expected_type_tag.to_string()),
+                    ("expected_type_tag", expected_type_tag.to_string()),
                 ],
             ),
-            NodeVariant::RequireType { expression, expected_type } => (
-                "RequireType",
+            NodeVariant::HasTrait { expression, expected_trait } => (
+                "HasTrait",
                 &[
                     ("expression", expression.pretty_print(child_level)),
-                    ("expected_type", expected_type.display_name().to_string()),
-                ],
-            ),
-            NodeVariant::RequireTrait { expression, required_trait } => (
-                "RequireTrait",
-                &[
-                    ("expression", expression.pretty_print(child_level)),
-                    ("required_trait", required_trait.name.to_string()),
+                    ("expected_trait", expected_trait.name.to_string()),
                 ],
             ),
             NodeVariant::RuntimeError { error_template, message_args } => (

@@ -9,7 +9,7 @@ use crate::{
     builtins::{
         traits::{self, BuiltinTrait},
         types::{
-            self, BuiltinType,
+            self, BuiltinType, TYPE_NAME_FIELD,
             stream::selector_list::{
                 REC_RECURSE_FIELD, REC_RECURSE_UNPACK_FIELD, REC_RESULT_FIELD,
                 REC_RESULT_UNPACK_FIELD,
@@ -18,10 +18,10 @@ use crate::{
     },
     diagnostics::{Diagnostic, DiagnosticCollector, Hint},
     errors::{
-        AMBIGUOUS_IMPORT, INDEX_OUT_OF_BOUNDS, INVALID_SELECTOR_CALL, MODULE_NOT_FOUND,
-        MULTIPLE_SPLAT_PATTERNS, NULL_DOT_RECEIVER, POS_AFTER_NAMED_ARGUMENT,
+        AMBIGUOUS_IMPORT, ErrorTemplate, INDEX_OUT_OF_BOUNDS, INVALID_SELECTOR_CALL, MISSING_TRAIT,
+        MODULE_NOT_FOUND, MULTIPLE_SPLAT_PATTERNS, NULL_DOT_RECEIVER, POS_AFTER_NAMED_ARGUMENT,
         PREVIOUS_NAMED_ARG_HINT, PREVIOUS_SPLAT_PATTERN_HINT, REGEX_SYNTAX_ERROR, REGEX_TOO_BIG,
-        SUBPATTERN_AFTER_SPLAT, UNKNOWN_MEMBER, UNKNOWN_NODE_TYPE,
+        SUBPATTERN_AFTER_SPLAT, UNKNOWN_MEMBER, UNKNOWN_NODE_TYPE, WRONG_TYPE,
     },
     intermediate_tree::{
         ArithOperator, ArithOperatorVariant, CompOperator, CompOperatorVariant, ExecutionUnit,
@@ -171,10 +171,10 @@ impl ExecutionUnit {
             }
             LkqlNode::SelectorDecl(selector_decl) => {
                 /// Create a symbol reading node wrapped in a type checking one.
-                fn read_int(id: Identifier) -> Box<Node> {
+                fn read_int(ctx: &mut LoweringContext<LkqlNode>, id: Identifier) -> Box<Node> {
                     Box::new(
                         n(id.origin_location, NodeVariant::ReadSymbol(id))
-                            .with_type_requirement(&types::int::TYPE),
+                            .with_type_requirement(ctx, &types::int::TYPE),
                     )
                 }
 
@@ -196,9 +196,9 @@ impl ExecutionUnit {
                         l,
                         NodeVariant::SelectorInstantiation {
                             root: bn(name_location, NodeVariant::ReadSymbol(root_id)),
-                            depth: read_int(depth_id),
-                            min_depth: read_int(min_depth_id),
-                            max_depth: read_int(max_depth_id),
+                            depth: read_int(ctx, depth_id),
+                            min_depth: read_int(ctx, min_depth_id),
+                            max_depth: read_int(ctx, max_depth_id),
                             body_index: *ctx.child_index_map.get(&selector_decl.f_arms()?).unwrap(),
                         },
                     ),
@@ -517,7 +517,7 @@ impl Node {
                 let index_id = ctx.new_tmp_id();
                 let index_ref = n(loc(ctx, &lkql_index), NodeVariant::Read(index_id));
                 let index = Self::lower_lkql_node(ctx, &lkql_index)?
-                    .with_type_requirement(&types::int::TYPE);
+                    .with_type_requirement(ctx, &types::int::TYPE);
 
                 // Create the node to access the indexed value
                 let indexing = n(
@@ -525,7 +525,7 @@ impl Node {
                     NodeVariant::IndexExpr {
                         indexed_val: Box::new(
                             Self::lower_lkql_node(ctx, &lkql_collection)?
-                                .with_trait_requirement(&traits::indexable::TRAIT),
+                                .with_trait_requirement(ctx, &traits::indexable::TRAIT),
                         ),
                         index: Box::new(index_ref.clone()),
                     },
@@ -566,7 +566,7 @@ impl Node {
                 value: Box::new(Self::lower_lkql_node(ctx, &in_clause.f_value_expr()?)?),
                 collection: Box::new(
                     Self::lower_lkql_node(ctx, &in_clause.f_list_expr()?)?
-                        .with_trait_requirement(&traits::iterable::TRAIT),
+                        .with_trait_requirement(ctx, &traits::iterable::TRAIT),
                 ),
             },
 
@@ -582,7 +582,7 @@ impl Node {
             LkqlNode::CondExpr(cond_expr) => NodeVariant::IfExpr {
                 condition: Box::new(
                     Self::lower_lkql_node(ctx, &cond_expr.f_condition()?)?
-                        .with_type_requirement(&types::bool::TYPE),
+                        .with_type_requirement(ctx, &types::bool::TYPE),
                 ),
                 consequence: Box::new(Self::lower_lkql_node(ctx, &cond_expr.f_then_expr()?)?),
                 alternative: cond_expr
@@ -680,7 +680,7 @@ impl Node {
                         Ok(match n?.unwrap() {
                             LkqlNode::ListCompAssoc(assoc) => {
                                 Self::lower_lkql_node(ctx, &assoc.f_coll_expr()?)?
-                                    .with_trait_requirement(&traits::iterable::TRAIT)
+                                    .with_trait_requirement(ctx, &traits::iterable::TRAIT)
                             }
                             _ => unreachable!(),
                         })
@@ -706,9 +706,9 @@ impl Node {
                 let right = Self::lower_lkql_node(ctx, &bin_op.f_right()?)?;
                 match &lkql_operator {
                     LkqlNode::OpAnd(_) | LkqlNode::OpOr(_) => NodeVariant::LogicBinOp {
-                        left: Box::new(left.with_type_requirement(&types::bool::TYPE)),
+                        left: Box::new(left.with_type_requirement(ctx, &types::bool::TYPE)),
                         operator: LogicOperator::lower_lkql_node(&lkql_operator, ctx)?,
-                        right: Box::new(right.with_type_requirement(&types::bool::TYPE)),
+                        right: Box::new(right.with_type_requirement(ctx, &types::bool::TYPE)),
                     },
                     LkqlNode::OpConcat(_) => NodeVariant::MiscBinOp {
                         left: Box::new(left),
@@ -726,11 +726,11 @@ impl Node {
                 match &lkql_operator {
                     LkqlNode::OpPlus(_) | LkqlNode::OpMinus(_) => NodeVariant::ArithUnOp {
                         operator: ArithOperator::lower_lkql_node(&lkql_operator, ctx)?,
-                        operand: Box::new(operand.with_type_requirement(&types::int::TYPE)),
+                        operand: Box::new(operand.with_type_requirement(ctx, &types::int::TYPE)),
                     },
                     LkqlNode::OpNot(_) => NodeVariant::LogicUnOp {
                         operator: LogicOperator::lower_lkql_node(&lkql_operator, ctx)?,
-                        operand: Box::new(operand.with_type_requirement(&types::bool::TYPE)),
+                        operand: Box::new(operand.with_type_requirement(ctx, &types::bool::TYPE)),
                     },
                     _ => unreachable!(),
                 }
@@ -1422,7 +1422,7 @@ impl Node {
                 if let Some(predicate) = complex_pattern.f_predicate()? {
                     matching_elems.push(
                         Self::lower_lkql_node(ctx, &predicate)?
-                            .with_type_requirement(&types::bool::TYPE),
+                            .with_type_requirement(ctx, &types::bool::TYPE),
                     );
                 }
 
@@ -1570,7 +1570,7 @@ impl Node {
                     loc(ctx, &lkql_selector_call),
                     NodeVariant::CallExpr { callee: selector_callee, positional_args, named_args },
                 )
-                .with_trait_requirement(&traits::iterable::TRAIT);
+                .with_trait_requirement(ctx, &traits::iterable::TRAIT);
 
                 // Create a new named value that will contain the resulting
                 // selector list.
@@ -1621,19 +1621,33 @@ impl Node {
     }
 
     /// Wrap the node in a type requirement one.
-    fn with_type_requirement(self, required_type: &'static BuiltinType) -> Self {
-        self.with_wrapper(|n| {
-            Ok(NodeVariant::RequireType { expression: Box::new(n), expected_type: required_type })
-        })
-        .unwrap()
+    fn with_type_requirement(
+        self,
+        ctx: &mut LoweringContext<LkqlNode>,
+        required_type: &'static BuiltinType,
+    ) -> Self {
+        type_requirement_helper(
+            self,
+            ctx,
+            |r| NodeVariant::InstanceOf { expression: r, expected_type_tag: required_type.tag },
+            &WRONG_TYPE,
+            required_type.display_name(),
+        )
     }
 
     /// Wrap the node in a trait requirement one.
-    fn with_trait_requirement(self, required_trait: &'static BuiltinTrait) -> Self {
-        self.with_wrapper(|n| {
-            Ok(NodeVariant::RequireTrait { expression: Box::new(n), required_trait })
-        })
-        .unwrap()
+    fn with_trait_requirement(
+        self,
+        ctx: &mut LoweringContext<LkqlNode>,
+        required_trait: &'static BuiltinTrait,
+    ) -> Self {
+        type_requirement_helper(
+            self,
+            ctx,
+            |r| NodeVariant::HasTrait { expression: r, expected_trait: required_trait },
+            &MISSING_TRAIT,
+            required_trait.name,
+        )
     }
 
     /// Wrap this node in another to introduce a new named value in its
@@ -1909,6 +1923,46 @@ fn lower_matching_arms(
             },
         )
         .with_let(matched_value_id, matched_value))
+}
+
+/// Util function to emit a type checking node that raise an error in case of
+/// failure.
+fn type_requirement_helper<F: Fn(Box<Node>) -> NodeVariant>(
+    node: Node,
+    ctx: &mut LoweringContext<LkqlNode>,
+    condition_creator: F,
+    error_template: &'static ErrorTemplate,
+    required_name: &str,
+) -> Node {
+    // Create working variables
+    let l = node.origin_location;
+    let checked_value_id = ctx.new_tmp_id();
+    let checked_value_ref = bn(l, NodeVariant::Read(checked_value_id));
+
+    // Create the list of error template arguments
+    let message_args = vec![
+        n(l, NodeVariant::StringLiteral(String::from(required_name))),
+        n(
+            l,
+            NodeVariant::DottedExpr {
+                prefix: checked_value_ref.clone(),
+                suffix: id_str(l, TYPE_NAME_FIELD),
+            },
+        ),
+    ];
+
+    // Create the node that check whether the value has the require trait
+    let check_trait = bn(
+        l,
+        NodeVariant::IfExpr {
+            condition: bn(l, condition_creator(checked_value_ref.clone())),
+            consequence: checked_value_ref,
+            alternative: bn(l, NodeVariant::RuntimeError { error_template, message_args }),
+        },
+    );
+
+    // Then return the node that ensure the value has the required trait
+    check_trait.with_let(checked_value_id, node)
 }
 
 /// Util function to get whether the provided LKQL parsing node introduce a

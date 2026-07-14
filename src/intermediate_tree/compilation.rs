@@ -8,8 +8,7 @@ use crate::{
         get_builtin_bindings,
         traits::{BuiltinTrait, iterable::ITERATOR_FIELD},
         types::{
-            BuiltinType, TYPE_NAME_FIELD, TYPE_TAGS_FIELD, TypeImplementation, list, namespace,
-            obj, pattern,
+            TYPE_TAGS_FIELD, TypeImplementation, list, namespace, obj, pattern,
             stream::{lazy_comprehension, selector_list},
             tuple, unit,
         },
@@ -26,9 +25,8 @@ use crate::{
     diagnostics::{Diagnostic, DiagnosticCollector, Hint},
     errors::{
         DIV_BY_ZERO, DUPLICATED_KEY, DUPLICATED_SYMBOL, ErrorInstance, ErrorInstanceArg,
-        ErrorTemplate, MISSING_TRAIT, NO_VALUE_FOR_PARAM, NOT_UNIT_BLOCK_ELEM,
-        POS_AND_NAMED_VALUE_FOR_PARAM, PREVIOUS_SYMBOL_HINT, UNINITIALIZED_SYMBOL, UNKNOWN_SYMBOL,
-        WRONG_TYPE,
+        ErrorTemplate, NO_VALUE_FOR_PARAM, NOT_UNIT_BLOCK_ELEM, POS_AND_NAMED_VALUE_FOR_PARAM,
+        PREVIOUS_SYMBOL_HINT, UNINITIALIZED_SYMBOL, UNKNOWN_SYMBOL,
     },
     intermediate_tree::{
         ArithOperator, ArithOperatorVariant, CompOperator, CompOperatorVariant, ExecutionUnit,
@@ -976,7 +974,8 @@ impl Node {
             }
 
             // --- Type checkers
-            NodeVariant::InstanceOf { expression, expected_type_tag } => {
+            NodeVariant::InstanceOf { expression, .. }
+            | NodeVariant::HasTrait { expression, .. } => {
                 // Get an access to the tested expression
                 let expression_access = expression.compile_as_access(ctx, None);
 
@@ -986,14 +985,25 @@ impl Node {
 
                 // Emit the type checking
                 let next_label = ctx.instructions.new_label();
-                emit_type_check(
-                    ctx,
-                    Some(&self.origin_location),
-                    expression_access.slot(),
-                    *expected_type_tag,
-                    next_label,
-                    false,
-                );
+                match &self.variant {
+                    NodeVariant::InstanceOf { expected_type_tag, .. } => emit_type_check(
+                        ctx,
+                        Some(&self.origin_location),
+                        expression_access.slot(),
+                        *expected_type_tag,
+                        next_label,
+                        false,
+                    ),
+                    NodeVariant::HasTrait { expected_trait, .. } => emit_trait_check(
+                        ctx,
+                        Some(&self.origin_location),
+                        expression_access.slot(),
+                        expected_trait,
+                        next_label,
+                        false,
+                    ),
+                    _ => unreachable!(),
+                };
                 ctx.instructions
                     .ad(&self.origin_location, KPRI, result_slot, PRIM_FALSE);
 
@@ -1002,38 +1012,6 @@ impl Node {
 
                 // Finally, label the next instruction
                 ctx.instructions.label(next_label);
-            }
-            NodeVariant::RequireType { expression, expected_type } => {
-                let expr_slot = Self::compile_type_requirement(
-                    ctx,
-                    expression,
-                    expected_type,
-                    Some(result_slot),
-                );
-                if expr_slot.slot() != result_slot {
-                    ctx.instructions.ad(
-                        &self.origin_location,
-                        MOV,
-                        result_slot,
-                        expr_slot.slot() as u16,
-                    );
-                }
-            }
-            NodeVariant::RequireTrait { expression, required_trait } => {
-                let expr_slot = Self::compile_trait_requirement(
-                    ctx,
-                    expression,
-                    required_trait,
-                    Some(result_slot),
-                );
-                if expr_slot.slot() != result_slot {
-                    ctx.instructions.ad(
-                        &self.origin_location,
-                        MOV,
-                        result_slot,
-                        expr_slot.slot() as u16,
-                    );
-                }
             }
 
             // --- Error emission
@@ -1302,23 +1280,6 @@ impl Node {
                 ValueAccess::BorrowedTmp(tmp_slot)
             }
 
-            NodeVariant::RequireType { expression, expected_type } => {
-                Self::compile_type_requirement(
-                    ctx,
-                    expression,
-                    expected_type,
-                    already_reserved_slot,
-                )
-            }
-
-            NodeVariant::RequireTrait { expression, required_trait } => {
-                Self::compile_trait_requirement(
-                    ctx,
-                    expression,
-                    required_trait,
-                    already_reserved_slot,
-                )
-            }
             _ => fallback(ctx, already_reserved_slot, self),
         }
     }
@@ -1516,7 +1477,8 @@ impl Node {
                     ctx.close_lexical_frame();
                 }
 
-                NodeVariant::InstanceOf { expression, expected_type_tag } => {
+                NodeVariant::InstanceOf { expression, .. }
+                | NodeVariant::HasTrait { expression, .. } => {
                     // Compile the expression
                     let expression_access = expression.compile_as_access(ctx, None);
 
@@ -1525,14 +1487,25 @@ impl Node {
                         BranchingKind::IfTrue => (false, if_true_label),
                         BranchingKind::IfFalse => (true, if_false_label),
                     };
-                    emit_type_check(
-                        ctx,
-                        Some(&node.origin_location),
-                        expression_access.slot(),
-                        *expected_type_tag,
-                        target_label,
-                        reverse_check,
-                    );
+                    match &node.variant {
+                        NodeVariant::InstanceOf { expected_type_tag, .. } => emit_type_check(
+                            ctx,
+                            Some(&node.origin_location),
+                            expression_access.slot(),
+                            *expected_type_tag,
+                            target_label,
+                            reverse_check,
+                        ),
+                        NodeVariant::HasTrait { expected_trait, .. } => emit_trait_check(
+                            ctx,
+                            Some(&node.origin_location),
+                            expression_access.slot(),
+                            expected_trait,
+                            target_label,
+                            reverse_check,
+                        ),
+                        _ => unreachable!(),
+                    };
 
                     // Release the expression access
                     expression_access.release(ctx);
@@ -1873,132 +1846,6 @@ impl Node {
 
         // Release the slot when "unit" is stored
         ctx.frame.borrow_mut().release_slot(unit_tmp);
-    }
-
-    /// Util function to compile a type requirement operation. This function
-    /// first tries to determine the type of `expr_to_check` statically, and
-    /// if it is not possible, the code require to check it at runtime is
-    /// emitted.
-    /// The function returns an access to the value of the expression to check.
-    fn compile_type_requirement(
-        ctx: &mut CompilationContext,
-        expression: &Node,
-        required_type: &BuiltinType,
-        already_reserved_slot: Option<u8>,
-    ) -> ValueAccess {
-        let res = expression.compile_as_access(ctx, already_reserved_slot);
-        match expression.expr_type() {
-            Some(t) if t == required_type => (),
-            Some(t) => ctx.diagnostics.add(Diagnostic::error_from_template(
-                &expression.origin_location,
-                &WRONG_TYPE,
-                &[required_type.display_name(), t.display_name()],
-            )),
-            None => {
-                // Create the next label
-                let next_label = ctx.instructions.new_label();
-
-                // Emit the type checking part
-                emit_type_check(
-                    ctx,
-                    Some(&expression.origin_location),
-                    res.slot(),
-                    required_type.tag,
-                    next_label,
-                    false,
-                );
-
-                // Now emit the code to raise a runtime error in the case where
-                // the value isn't of the required type.
-                let actual_name = ctx.frame.borrow_mut().get_slot();
-                emit_table_member_read(
-                    ctx,
-                    Some(&expression.origin_location),
-                    actual_name,
-                    res.slot(),
-                    TYPE_NAME_FIELD,
-                );
-                emit_runtime_error(
-                    ctx,
-                    Some(&expression.origin_location),
-                    &WRONG_TYPE,
-                    &[
-                        ErrorInstanceArg::Static(String::from(required_type.display_name())),
-                        ErrorInstanceArg::LocalValue(actual_name),
-                    ],
-                );
-                ctx.frame.borrow_mut().release_slot(actual_name);
-
-                // Finally label the next instruction
-                ctx.instructions.label(next_label);
-            }
-        };
-        res
-    }
-
-    /// Util function to compile a type requirement operation. This function
-    /// first tries to determine the type of `expr_to_check` statically, and
-    /// if it is not possible, the code require to check it at runtime is
-    /// emitted.
-    /// The function returns an access to the value of the expression to check.
-    fn compile_trait_requirement(
-        ctx: &mut CompilationContext,
-        expression: &Node,
-        required_trait: &BuiltinTrait,
-        already_reserved_slot: Option<u8>,
-    ) -> ValueAccess {
-        let res = expression.compile_as_access(ctx, already_reserved_slot);
-        match expression.expr_type() {
-            Some(t) if t.traits.contains(&required_trait) => (),
-            Some(t) => ctx.diagnostics.add(Diagnostic::error_from_template(
-                &expression.origin_location,
-                &MISSING_TRAIT,
-                &[required_trait.name, t.display_name()],
-            )),
-            None => {
-                // Create the label for the next instruction
-                let next_label = ctx.instructions.new_label();
-
-                // Then get the field corresponding to the trait name in the
-                // traits table.
-                let trait_res = ctx.frame.borrow_mut().get_slot();
-                emit_table_member_read(
-                    ctx,
-                    Some(&expression.origin_location),
-                    trait_res,
-                    res.slot(),
-                    &required_trait.runtime_field(),
-                );
-                ctx.instructions
-                    .ad(&expression.origin_location, IST, 0, trait_res as u16);
-                ctx.frame.borrow_mut().release_slot(trait_res);
-                ctx.goto(next_label);
-
-                // Emit instructions to raise a runtime error
-                let type_name = ctx.frame.borrow_mut().get_slot();
-                emit_table_member_read(
-                    ctx,
-                    Some(&expression.origin_location),
-                    type_name,
-                    res.slot(),
-                    TYPE_NAME_FIELD,
-                );
-                emit_runtime_error(
-                    ctx,
-                    Some(&expression.origin_location),
-                    &MISSING_TRAIT,
-                    &[
-                        ErrorInstanceArg::Static(String::from(required_trait.name)),
-                        ErrorInstanceArg::LocalValue(type_name),
-                    ],
-                );
-                ctx.frame.borrow_mut().release_slot(type_name);
-
-                // Finally label the next instructions
-                ctx.instructions.label(next_label);
-            }
-        };
-        res
     }
 }
 
@@ -2417,6 +2264,7 @@ fn emit_set_metatable(
 
 /// Emit code that checks whether the value at `value_slot` is an instance
 /// of the `checked_type`. If so, jumps to the `target_label`.
+///
 /// If `reverse` is `true`, the checking logic is reversed and the emitted code
 /// will go to `target_label` if the value is NOT an instance of
 /// `checked_type`.
@@ -2440,6 +2288,41 @@ fn emit_type_check(
         working_tmp,
         checked_type_tag as usize,
     );
+    ctx.instructions.ad_maybe_loc(
+        maybe_origin_location,
+        if reverse_check { ISF } else { IST },
+        0,
+        working_tmp as u16,
+    );
+    ctx.frame.borrow_mut().release_slot(working_tmp);
+    ctx.goto(target_label);
+}
+
+/// Emit code that checks whether the value at `value_slot` implements the
+/// `checked_trait`. If so, jumps to the `target_label`.
+///
+/// If `reverse` is `true`, the checking logic is reversed and the emitted code
+/// will go to `target_label` if the value is NOT implementing the
+/// `checked_trait`.
+fn emit_trait_check(
+    ctx: &mut CompilationContext,
+    maybe_origin_location: Option<&SourceSection>,
+    value_slot: u8,
+    checked_trait: &BuiltinTrait,
+    target_label: Label,
+    reverse_check: bool,
+) {
+    // First get whether the value has the required trait
+    let working_tmp = ctx.frame.borrow_mut().get_slot();
+    emit_table_member_read(
+        ctx,
+        maybe_origin_location,
+        working_tmp,
+        value_slot,
+        &checked_trait.runtime_field(),
+    );
+
+    // Then emit the code to branch
     ctx.instructions.ad_maybe_loc(
         maybe_origin_location,
         if reverse_check { ISF } else { IST },

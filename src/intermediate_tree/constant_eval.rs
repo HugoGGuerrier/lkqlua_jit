@@ -266,6 +266,14 @@ impl Node {
                         _ => None,
                     }
                 }
+                NodeVariant::HasTrait { expression, expected_trait } => {
+                    match inner_eval_as_constant(ctx, expression) {
+                        Some(cst) => cst.constant_type().map(|t| {
+                            ConstantValueVariant::Bool(t.traits.iter().any(|t| t == expected_trait))
+                        }),
+                        _ => None,
+                    }
+                }
 
                 // --- All other nodes cannot be evaluated as constant
                 _ => None,
@@ -1455,67 +1463,20 @@ mod tests {
     }
 
     #[test]
-    fn test_type_requirement() {
-        let mut intermediate_tree = _node(NodeVariant::RequireType {
-            expression: Box::new(_bool_node(false)),
-            expected_type: &bool::TYPE,
+    fn test_has_trait() {
+        let mut intermediate_tree = _node(NodeVariant::HasTrait {
+            expression: Box::new(_node(NodeVariant::ListLiteral(vec![_int_node("2")]))),
+            expected_trait: &iterable::TRAIT,
+        });
+        assert_eq!(intermediate_tree.eval_as_constant(), Some(_bool_cst(true)));
+        intermediate_tree = _node(NodeVariant::HasTrait {
+            expression: Box::new(_str_node("hello")),
+            expected_trait: &iterable::TRAIT,
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(_bool_cst(false)));
-        intermediate_tree = _node(NodeVariant::RequireType {
-            expression: Box::new(_str_node("hello")),
-            expected_type: &str::TYPE,
-        });
-        assert_eq!(intermediate_tree.eval_as_constant(), Some(_str_cst("hello")));
-        intermediate_tree = _node(NodeVariant::RequireType {
-            expression: Box::new(_str_node("hello")),
-            expected_type: &int::TYPE,
-        });
-        assert_eq!(intermediate_tree.eval_as_constant(), None);
-        intermediate_tree = _node(NodeVariant::RequireType {
-            expression: Box::new(_read_node("x")),
-            expected_type: &int::TYPE,
-        });
-        assert_eq!(intermediate_tree.eval_as_constant(), None);
-    }
-
-    #[test]
-    fn test_trait_requirement() {
-        let mut intermediate_tree = _node(NodeVariant::RequireTrait {
-            expression: Box::new(_node(NodeVariant::TupleLiteral(vec![
-                _int_node("1"),
-                _int_node("2"),
-                _int_node("3"),
-            ]))),
-            required_trait: &indexable::TRAIT,
-        });
-        assert_eq!(
-            intermediate_tree.eval_as_constant(),
-            Some(_tuple_cst(vec![_int_cst("1"), _int_cst("2"), _int_cst("3")]))
-        );
-        intermediate_tree = _node(NodeVariant::RequireTrait {
-            expression: Box::new(_node(NodeVariant::ListLiteral(vec![
-                _int_node("1"),
-                _int_node("2"),
-                _int_node("3"),
-            ]))),
-            required_trait: &iterable::TRAIT,
-        });
-        assert_eq!(
-            intermediate_tree.eval_as_constant(),
-            Some(_list_cst(vec![_int_cst("1"), _int_cst("2"), _int_cst("3")]))
-        );
-        intermediate_tree = _node(NodeVariant::RequireTrait {
-            expression: Box::new(_node(NodeVariant::TupleLiteral(vec![
-                _int_node("1"),
-                _int_node("2"),
-                _int_node("3"),
-            ]))),
-            required_trait: &iterable::TRAIT,
-        });
-        assert_eq!(intermediate_tree.eval_as_constant(), None);
-        intermediate_tree = _node(NodeVariant::RequireTrait {
-            expression: Box::new(_read_node("x")),
-            required_trait: &iterable::TRAIT,
+        intermediate_tree = _node(NodeVariant::HasTrait {
+            expression: Box::new(_read_symbol_node("x")),
+            expected_trait: &iterable::TRAIT,
         });
         assert_eq!(intermediate_tree.eval_as_constant(), None);
     }

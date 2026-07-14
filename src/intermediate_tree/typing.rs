@@ -52,6 +52,7 @@ impl Node {
 
                 // --- Type checking
                 NodeVariant::InstanceOf { .. } => Some(&bool::TYPE),
+                NodeVariant::HasTrait { .. } => Some(&bool::TYPE),
 
                 // --- Literals
                 NodeVariant::UnitLiteral => Some(&unit::TYPE),
@@ -83,7 +84,10 @@ struct TypingContext {
 #[allow(unused_imports)]
 mod test {
     use crate::{
-        builtins::types::{bool, function, int, list, obj, str, stream, tuple, unit},
+        builtins::{
+            traits::iterable,
+            types::{bool, function, int, list, obj, str, stream, tuple, unit},
+        },
         intermediate_tree::{
             ArithOperator, ArithOperatorVariant, CompOperator, CompOperatorVariant, Identifier,
             LogicOperator, LogicOperatorVariant, Node, NodeVariant,
@@ -237,6 +241,9 @@ mod test {
         // Type checking
         intermediate_tree =
             _node(NodeVariant::InstanceOf { expression: _dummy(), expected_type_tag: 0 });
+        assert_eq!(intermediate_tree.expr_type(), Some(&bool::TYPE));
+        intermediate_tree =
+            _node(NodeVariant::HasTrait { expression: _dummy(), expected_trait: &iterable::TRAIT });
         assert_eq!(intermediate_tree.expr_type(), Some(&bool::TYPE));
 
         // Literals
