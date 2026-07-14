@@ -619,7 +619,7 @@ impl Node {
 
                 // Emit a call to floor the division result
                 if matches!(operator.variant, ArithOperatorVariant::Divide) {
-                    emit_flooring(ctx, Some(&self.origin_location), result_slot);
+                    emit_int_part_fetching(ctx, Some(&self.origin_location), result_slot);
                 }
             }
             NodeVariant::LogicBinOp { .. } | NodeVariant::CompBinOp { .. } => {
@@ -2474,9 +2474,9 @@ fn emit_div_by_zero_check(
     ctx.instructions.label(next_label);
 }
 
-/// Emit required instructions to preform a flooring operation on the provided
-/// `working_slot`. The result is also placed in this slot.
-fn emit_flooring(
+/// Emit instructions to preform an integer part fetching from the provided
+/// `working_slot`. The result is also placed in this `working_slot`.
+fn emit_int_part_fetching(
     ctx: &mut CompilationContext,
     maybe_origin_location: Option<&SourceSection>,
     working_slot: u8,
@@ -2484,11 +2484,29 @@ fn emit_flooring(
     // Reserve calling slots
     let call_slots = ctx.frame.borrow_mut().reserve_contiguous_slots(3);
 
-    // Load the flooring function
+    // Load the "math" module
     emit_global_read(ctx, maybe_origin_location, call_slots.first, "math");
-    emit_table_member_read(ctx, maybe_origin_location, call_slots.first, call_slots.first, "floor");
 
-    // Move the value to floor
+    // Then load the rounding function according to the valid to process
+    let negative_label = ctx.instructions.new_label();
+    let next_label = ctx.instructions.new_label();
+    let z_cst = ctx.unit_data.constants.get_from_int(0);
+    ctx.instructions
+        .ad_maybe_loc(maybe_origin_location, KNUM, call_slots.last, z_cst);
+    ctx.instructions.ad_maybe_loc(
+        maybe_origin_location,
+        ISLT,
+        working_slot,
+        call_slots.last as u16,
+    );
+    ctx.goto(negative_label);
+    emit_table_member_read(ctx, maybe_origin_location, call_slots.first, call_slots.first, "floor");
+    ctx.goto(next_label);
+    ctx.instructions.label(negative_label);
+    emit_table_member_read(ctx, maybe_origin_location, call_slots.first, call_slots.first, "ceil");
+    ctx.instructions.label(next_label);
+
+    // Move the value to round
     ctx.instructions
         .ad_maybe_loc(maybe_origin_location, MOV, call_slots.last, working_slot as u16);
 

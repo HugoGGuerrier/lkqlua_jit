@@ -499,12 +499,16 @@ pub(crate) fn find_in_lua_path(module_name: &str) -> Option<PathBuf> {
 
 /// Transform the value in the stack at the provided `index` to a string and
 /// return it. This function use the `__tostring` Lua meta-method if the type
-/// of the value requires it. This function panics of the call to `__tostring`
+/// of the value requires it. This function panics if the call to `__tostring`
 /// fails.
 pub(crate) fn to_string(l: LuaState, index: i32) -> &'static str {
     let value_type = get_type(l, index);
     match value_type {
-        LuaType::Number | LuaType::String => get_string(l, index).unwrap(),
+        LuaType::Number => {
+            let int_value = get_integer(l, index);
+            if int_value == 0 { "0" } else { get_string(l, index).unwrap() }
+        }
+        LuaType::String => get_string(l, index).unwrap(),
         LuaType::Boolean => {
             if get_boolean(l, index) {
                 "true"

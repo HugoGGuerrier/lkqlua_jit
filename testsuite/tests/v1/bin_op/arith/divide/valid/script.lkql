@@ -1,5 +1,6 @@
 val x = 40
 val y = 9
+val z = -50
 
 print(1 / 2)
 print(x / 2)
@@ -7,3 +8,4 @@ print(2 / (-50))
 print(x / (-4))
 print(x / 7)
 print(x / y)
+print(x / z)
