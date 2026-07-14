@@ -336,13 +336,12 @@ impl AnalysisLibrary {
         get_global(l, ANALYSIS_LIB_GLOBAL_NAME);
         get_field(l, -1, "root_node_type");
         let root_node_type = get_string(l, -1).unwrap();
-        pop(l, 1);
 
         // Then get the default value of the root node type
-        get_field(l, -1, root_node_type);
+        get_field(l, -2, root_node_type);
         get_field(l, -1, "_default");
         set_global(l, NULL_SINGLETON_GLOBAL_NAME);
-        pop(l, 2);
+        pop(l, 3);
     }
 
     /// Internal helper to setup the error formatting function in the loaded

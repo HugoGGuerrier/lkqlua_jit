@@ -175,7 +175,7 @@ extern "C" fn check_param_type(
                 vec![
                     ErrorInstanceArg::Static(String::from(expected_type.display_name())),
                     ErrorInstanceArg::Static(String::from(param_name)),
-                    ErrorInstanceArg::Static(String::from(param_type_name)),
+                    ErrorInstanceArg::Static(param_type_name),
                 ],
             )
             .to_json(),
@@ -225,12 +225,12 @@ pub fn instance_of(l: LuaState, index: i32, expected_type: &BuiltinType) -> bool
 }
 
 /// Get the type name of the value at the provided index if applicable.
-pub fn get_type_name(l: LuaState, index: i32) -> &'static str {
+pub fn get_type_name(l: LuaState, index: i32) -> String {
     get_field(l, index, TYPE_NAME_FIELD);
     if is_nil(l, -1) {
         panic!("Invalid runtime value");
     } else {
-        let res = get_string(l, -1).unwrap();
+        let res = String::from(get_string(l, -1).unwrap());
         pop(l, 1);
         res
     }
