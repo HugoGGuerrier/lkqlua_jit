@@ -1,0 +1,8 @@
+val s_1 = [a for a in [1, 2, 3]]
+val s_2 = [{print("Processing " & a); a} for a in ["a", "b", "c"]]
+
+print(s_1.head)
+print(s_1.head)
+print(s_2.head)
+print(s_2.head)
+print(s_2.head)

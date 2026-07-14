@@ -19,8 +19,9 @@ use crate::{
             img_property, list,
         },
     },
+    errors::HEAD_OF_EMPTY_STEAM,
     lua::{LuaState, push_string},
-    runtime::Function,
+    runtime::{Function, LKQL_ERROR_GLOBAL_NAME, LkqlParam, RuntimeValue},
 };
 use const_format::formatcp;
 use std::ffi::c_int;
@@ -41,26 +42,30 @@ pub const TYPE: BuiltinType = BuiltinType {
     tag: list::TYPE.tag + 1,
     traits: &[&indexable::TRAIT, &iterable::TRAIT, &sized::TRAIT],
     implementation_variant: TypeImplementationKind::new_poly(
-        TypeImplementation {
-            name: "Stream",
-            fields: &[
-                ("img", TypeField::Property(Function::CFunction(img_property))),
-                ("length", TypeField::Property(STREAM_LENGTH)),
-                (ITERATOR_FIELD, TypeField::Property(STREAM_ITERATOR)),
-                ("any", TypeField::Value(DEFAULT_ITERABLE_ANY)),
-                ("all", TypeField::Value(DEFAULT_ITERABLE_ALL)),
-                ("reduce", TypeField::Value(DEFAULT_ITERABLE_REDUCE)),
-                ("to_list", TypeField::Property(DEFAULT_ITERABLE_TO_LIST)),
-            ],
-            overloads: &[(OverloadTarget::ToString, Function::CFunction(stream_tostring))],
-            index_method: Some(STREAM_INDEX),
-            registering_function: None,
-        },
+        BASE_IMPLEMENTATION,
         &[
             lazy_comprehension::SPECIALIZATION,
             selector_list::SPECIALIZATION,
         ],
     ),
+};
+
+const BASE_IMPLEMENTATION: TypeImplementation = TypeImplementation {
+    name: "Stream",
+    fields: &[
+        ("img", TypeField::Property(Function::CFunction(img_property))),
+        ("length", TypeField::Property(LENGTH)),
+        (ITERATOR_FIELD, TypeField::Property(ITERATOR)),
+        ("any", TypeField::Value(DEFAULT_ITERABLE_ANY)),
+        ("all", TypeField::Value(DEFAULT_ITERABLE_ALL)),
+        ("reduce", TypeField::Value(DEFAULT_ITERABLE_REDUCE)),
+        ("to_list", TypeField::Property(DEFAULT_ITERABLE_TO_LIST)),
+        ("head", TypeField::Property(HEAD)),
+        ("head_or", TypeField::Value(HEAD_OR)),
+    ],
+    overloads: &[(OverloadTarget::ToString, Function::CFunction(stream_tostring))],
+    index_method: Some(INDEX),
+    registering_function: None,
 };
 
 /// Overload of "__tostring" for the "Stream" type.
@@ -72,7 +77,7 @@ extern "C" fn stream_tostring(l: LuaState) -> c_int {
 }
 
 /// Lua function to get the length of a stream.
-const STREAM_LENGTH: Function = Function::LuaFunction(
+const LENGTH: Function = Function::LuaFunction(
     "function (self)
         local _ = self[0]
         return #self
@@ -80,8 +85,8 @@ const STREAM_LENGTH: Function = Function::LuaFunction(
 );
 
 /// Lua function to get an iterator for a stream.
-const STREAM_ITERATOR: Function = Function::LuaFunction(
-    "function(self)
+const ITERATOR: Function = Function::LuaFunction(
+    "function (self)
         local cursor = 1
         local finished = false
         return function()
@@ -101,8 +106,22 @@ const STREAM_ITERATOR: Function = Function::LuaFunction(
     end",
 );
 
+/// Implementation of the "head" method.
+const HEAD: Function = Function::LuaFunction(formatcp!(
+    "function (self)
+        return self[1] or _G['{LKQL_ERROR_GLOBAL_NAME}']('{}')
+    end",
+    HEAD_OF_EMPTY_STEAM.id,
+));
+
+/// Implementation of the "head_or" method.
+const HEAD_OR: RuntimeValue = RuntimeValue::Callable(Function::LkqlFunction {
+    params: &[LkqlParam::new("self"), LkqlParam::new("default_val")],
+    body: "return self[1] or default_val",
+});
+
 /// Lua function used to index inside a stream.
-const STREAM_INDEX: Function = Function::LuaFunction(formatcp!(
+const INDEX: Function = Function::LuaFunction(formatcp!(
     "function(self, field)
         -- Check if the field is a number, in that case initialize the cache to
         -- this index.

@@ -1,0 +1,7 @@
+Error: Head of empty stream
+   ╭─[ <working-dir>/script.lkql:2:7 ]
+   │
+ 2 │ print(s.head)
+   │       ───┬──  
+   │          ╰──── Cannot get the head of an empty stream
+───╯

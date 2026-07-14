@@ -83,9 +83,16 @@ pub const INDEX_OUT_OF_BOUNDS: ErrorTemplate = ErrorTemplate {
     message_template: "Cannot access index {} in the value, it is out of bounds",
 };
 
+/// Error when trying to get the head of en empty stream.
+pub const HEAD_OF_EMPTY_STEAM: ErrorTemplate = ErrorTemplate {
+    id: INDEX_OUT_OF_BOUNDS.id + 1,
+    title: "Head of empty stream",
+    message_template: "Cannot get the head of an empty stream",
+};
+
 /// Error when a unknown member is accessed.
 pub const UNKNOWN_MEMBER: ErrorTemplate = ErrorTemplate {
-    id: INDEX_OUT_OF_BOUNDS.id + 1,
+    id: HEAD_OF_EMPTY_STEAM.id + 1,
     title: "Unknown member",
     message_template: "No member named \"{}\" on the value",
 };
@@ -242,6 +249,7 @@ pub const ERROR_TEMPLATE_REPOSITORY: &[&ErrorTemplate] = &[
     &INVALID_PARAM_VALUE,
     &DIV_BY_ZERO,
     &INDEX_OUT_OF_BOUNDS,
+    &HEAD_OF_EMPTY_STEAM,
     &UNKNOWN_MEMBER,
     &NULL_DOT_RECEIVER,
     &WRONG_TYPE,

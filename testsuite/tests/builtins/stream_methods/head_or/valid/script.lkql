@@ -1,0 +1,9 @@
+val s_1 = [a for a in [1, 2, 3]]
+val s_2 = [{print("Processing " & a); a} for a in ["a", "b", "c"]]
+val empty_s = [a for a in []]
+
+print(s_1.head_or("nope"))
+print(s_2.head_or("nope"))
+print(s_2.head_or("nope"))
+print(empty_s.head_or("My default value"))
+print(empty_s.head_or(default_val="My other default value"))

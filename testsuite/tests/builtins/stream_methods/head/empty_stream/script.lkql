@@ -1,0 +1,2 @@
+val s = [a for a in []]
+print(s.head)
