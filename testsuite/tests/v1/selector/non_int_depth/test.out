@@ -1,9 +1,9 @@
-Error: Invalid expression type
+Error: Invalid argument type
    ╭─[ <working-dir>/script.lkql:1:10 ]
    │
  1 │ selector ints
    │          ──┬─  
-   │            ╰─── Expecting a "Int", got a "Str"
+   │            ╰─── Expecting a "Int" for the parameter "depth", got a "Str"
 ───╯
 Advice: Called in "script.lkql"
    ╭─[ <working-dir>/script.lkql:4:7 ]

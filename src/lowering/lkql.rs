@@ -21,7 +21,7 @@ use crate::{
         AMBIGUOUS_IMPORT, ErrorTemplate, INDEX_OUT_OF_BOUNDS, INVALID_SELECTOR_CALL, MISSING_TRAIT,
         MODULE_NOT_FOUND, MULTIPLE_SPLAT_PATTERNS, NULL_DOT_RECEIVER, POS_AFTER_NAMED_ARGUMENT,
         PREVIOUS_NAMED_ARG_HINT, PREVIOUS_SPLAT_PATTERN_HINT, REGEX_SYNTAX_ERROR, REGEX_TOO_BIG,
-        SUBPATTERN_AFTER_SPLAT, UNKNOWN_MEMBER, UNKNOWN_NODE_TYPE, WRONG_TYPE,
+        SUBPATTERN_AFTER_SPLAT, UNKNOWN_MEMBER, UNKNOWN_NODE_TYPE, WRONG_PARAM_TYPE, WRONG_TYPE,
     },
     intermediate_tree::{
         ArithOperator, ArithOperatorVariant, CompOperator, CompOperatorVariant, ExecutionUnit,
@@ -172,9 +172,10 @@ impl ExecutionUnit {
             LkqlNode::SelectorDecl(selector_decl) => {
                 /// Create a symbol reading node wrapped in a type checking one.
                 fn read_int(ctx: &mut LoweringContext<LkqlNode>, id: Identifier) -> Box<Node> {
+                    let id_text = id.text.clone();
                     Box::new(
                         n(id.origin_location, NodeVariant::ReadSymbol(id))
-                            .with_type_requirement(ctx, &types::int::TYPE),
+                            .with_param_type_requirement(ctx, &types::int::TYPE, id_text),
                     )
                 }
 
@@ -1626,12 +1627,40 @@ impl Node {
         ctx: &mut LoweringContext<LkqlNode>,
         required_type: &'static BuiltinType,
     ) -> Self {
+        let l = self.origin_location;
         type_requirement_helper(
-            self,
             ctx,
+            self,
             |r| NodeVariant::InstanceOf { expression: r, expected_type_tag: required_type.tag },
             &WRONG_TYPE,
-            required_type.display_name(),
+            |actual| {
+                vec![
+                    n(l, NodeVariant::StringLiteral(String::from(required_type.display_name()))),
+                    actual,
+                ]
+            },
+        )
+    }
+
+    fn with_param_type_requirement(
+        self,
+        ctx: &mut LoweringContext<LkqlNode>,
+        required_type: &'static BuiltinType,
+        param_name: String,
+    ) -> Self {
+        let l = self.origin_location;
+        type_requirement_helper(
+            ctx,
+            self,
+            |r| NodeVariant::InstanceOf { expression: r, expected_type_tag: required_type.tag },
+            &WRONG_PARAM_TYPE,
+            |actual| {
+                vec![
+                    n(l, NodeVariant::StringLiteral(String::from(required_type.display_name()))),
+                    n(l, NodeVariant::StringLiteral(param_name)),
+                    actual,
+                ]
+            },
         )
     }
 
@@ -1641,12 +1670,18 @@ impl Node {
         ctx: &mut LoweringContext<LkqlNode>,
         required_trait: &'static BuiltinTrait,
     ) -> Self {
+        let l = self.origin_location;
         type_requirement_helper(
-            self,
             ctx,
+            self,
             |r| NodeVariant::HasTrait { expression: r, expected_trait: required_trait },
             &MISSING_TRAIT,
-            required_trait.name,
+            |actual| {
+                vec![
+                    n(l, NodeVariant::StringLiteral(String::from(required_trait.name))),
+                    actual,
+                ]
+            },
         )
     }
 
@@ -1927,12 +1962,12 @@ fn lower_matching_arms(
 
 /// Util function to emit a type checking node that raise an error in case of
 /// failure.
-fn type_requirement_helper<F: Fn(Box<Node>) -> NodeVariant>(
-    node: Node,
+fn type_requirement_helper<F: Fn(Box<Node>) -> NodeVariant, G: FnOnce(Node) -> Vec<Node>>(
     ctx: &mut LoweringContext<LkqlNode>,
+    node: Node,
     condition_creator: F,
     error_template: &'static ErrorTemplate,
-    required_name: &str,
+    error_args_creator: G,
 ) -> Node {
     // Create working variables
     let l = node.origin_location;
@@ -1940,16 +1975,13 @@ fn type_requirement_helper<F: Fn(Box<Node>) -> NodeVariant>(
     let checked_value_ref = bn(l, NodeVariant::Read(checked_value_id));
 
     // Create the list of error template arguments
-    let message_args = vec![
-        n(l, NodeVariant::StringLiteral(String::from(required_name))),
-        n(
-            l,
-            NodeVariant::DottedExpr {
-                prefix: checked_value_ref.clone(),
-                suffix: id_str(l, TYPE_NAME_FIELD),
-            },
-        ),
-    ];
+    let message_args = error_args_creator(n(
+        l,
+        NodeVariant::DottedExpr {
+            prefix: checked_value_ref.clone(),
+            suffix: id_str(l, TYPE_NAME_FIELD),
+        },
+    ));
 
     // Create the node that check whether the value has the require trait
     let check_trait = bn(
