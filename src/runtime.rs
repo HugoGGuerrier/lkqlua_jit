@@ -8,8 +8,7 @@ use crate::{
         types::{TYPE_NAME_FIELD, TYPE_TAGS_FIELD, TypeRef},
     },
     errors::{
-        ErrorInstance, ErrorInstanceArg, MISSING_PARAM_TRAIT, NO_VALUE_FOR_PARAM,
-        POS_AND_NAMED_VALUE_FOR_PARAM, WRONG_PARAM_TYPE,
+        MISSING_PARAM_TRAIT, NO_VALUE_FOR_PARAM, POS_AND_NAMED_VALUE_FOR_PARAM, WRONG_PARAM_TYPE,
     },
     lua::{
         LuaCFunction, LuaState, call, copy_value, get_global, get_metatable, get_top,
@@ -142,14 +141,12 @@ impl Function {
                             if {name} == nil then
                                 {name} = named_value
                             elseif named_value ~= nil then
-                                error('{}')
+                                _G['{LKQL_ERROR_GLOBAL_NAME}'](
+                                    '{}',
+                                    {{'{name}'}}
+                                )
                             end",
-                            ErrorInstance::new(
-                                POS_AND_NAMED_VALUE_FOR_PARAM.id,
-                                vec![ErrorInstanceArg::Static(String::from(name))],
-                            )
-                            .to_json()
-                            .escape_debug()
+                            POS_AND_NAMED_VALUE_FOR_PARAM.id,
                         )
                     })
                     .collect::<Vec<_>>()
@@ -167,13 +164,11 @@ impl Function {
                             .as_ref()
                             .map(RuntimeValue::lua_literal)
                             .unwrap_or(format!(
-                                "error('{}')",
-                                ErrorInstance::new(
-                                    NO_VALUE_FOR_PARAM.id,
-                                    vec![ErrorInstanceArg::Static(String::from(name))],
-                                )
-                                .to_json()
-                                .escape_debug()
+                                "_G['{LKQL_ERROR_GLOBAL_NAME}'](
+                                    '{}',
+                                    {{'{name}'}}
+                                )",
+                                NO_VALUE_FOR_PARAM.id,
                             ));
                         format!("{name} = {name} or {default}")
                     })
@@ -210,23 +205,20 @@ impl Function {
                                     String::from(t.name),
                                 ),
                             };
-                            let wrong_type_error = ErrorInstance::new(
-                                error_id,
-                                vec![
-                                    ErrorInstanceArg::Static(expected_name),
-                                    ErrorInstanceArg::Static(String::from(name)),
-                                    ErrorInstanceArg::Static(String::from("%s")),
-                                ],
-                            )
-                            .to_json();
 
                             // Then create the statement to check the parameter type
                             format!(
                                 "local __types = {name}['{TYPE_TAGS_FIELD}']
                             if not ({checking_expr}) then
-                                error(string.format('{}', {name}['{TYPE_NAME_FIELD}']))
+                            _G['{LKQL_ERROR_GLOBAL_NAME}'](
+                                '{error_id}',
+                                {{
+                                    '{expected_name}',
+                                    '{name}',
+                                    {name}['{TYPE_NAME_FIELD}']
+                                }}
+                            )
                             end",
-                                wrong_type_error.escape_debug()
                             )
                         })
                     })

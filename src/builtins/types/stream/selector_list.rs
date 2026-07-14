@@ -8,9 +8,11 @@ use const_format::formatcp;
 
 use crate::{
     builtins::types::{
-        TYPE_TAGS_FIELD, TypeField, TypeImplementation, stream::INTERNAL_NEXT_FIELD, unit,
+        TYPE_NAME_FIELD, TYPE_TAGS_FIELD, TypeField, TypeImplementation,
+        stream::INTERNAL_NEXT_FIELD, unit,
     },
-    runtime::{Function, RuntimeValue},
+    errors::WRONG_TYPE,
+    runtime::{Function, LKQL_ERROR_GLOBAL_NAME, RuntimeValue},
 };
 
 /// Field that contains the value to recurse on.
@@ -152,12 +154,19 @@ const NEXT: RuntimeValue = RuntimeValue::Callable(Function::LuaFunction(formatcp
                 next['{TYPE_TAGS_FIELD}'][{UNIT_TYPE_TAG}] or
                 (next['@entity'] and next['@entity'].node == nil)
             ) then
-                error('Unexpected selector result: ' .. img(nil, next))
+                _G['{LKQL_ERROR_GLOBAL_NAME}'](
+                    '{WRONG_TYPE_ID}',
+                    {{
+                        'RecExpr',
+                        next['{TYPE_NAME_FIELD}']
+                    }}
+                )
             end
         end
 
         -- If we get here, there is no result
         return nil
     end",
-    UNIT_TYPE_TAG = unit::TYPE.tag
+    UNIT_TYPE_TAG = unit::TYPE.tag,
+    WRONG_TYPE_ID = WRONG_TYPE.id,
 )));

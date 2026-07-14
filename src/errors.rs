@@ -120,15 +120,23 @@ pub const MISSING_TRAIT: ErrorTemplate = ErrorTemplate {
     message_template: "Trait \"{}\" is required, the type \"{}\" isn't implementing it",
 };
 
+/// Error when an argument isn't implementing a required trait.
 pub const MISSING_PARAM_TRAIT: ErrorTemplate = ErrorTemplate {
     id: MISSING_TRAIT.id + 1,
     title: "Argument is missing required trait",
     message_template: "Trait \"{}\" is required for the parameter \"{}\", the type \"{}\" isn't implementing it",
 };
 
+/// Error when an operation is invalid.
+pub const INVALID_OPERATION: ErrorTemplate = ErrorTemplate {
+    id: MISSING_PARAM_TRAIT.id + 1,
+    title: "Invalid operation",
+    message_template: "Cannot perform a \"{}\" operation on a \"{}\" and a \"{}\"",
+};
+
 /// Error when encountering an unknown node type name.
 pub const UNKNOWN_NODE_TYPE: ErrorTemplate = ErrorTemplate {
-    id: MISSING_PARAM_TRAIT.id + 1,
+    id: INVALID_OPERATION.id + 1,
     title: "Unknown node type",
     message_template: "Cannot find the \"{}\" node type",
 };
@@ -240,6 +248,7 @@ pub const ERROR_TEMPLATE_REPOSITORY: &[&ErrorTemplate] = &[
     &WRONG_PARAM_TYPE,
     &MISSING_TRAIT,
     &MISSING_PARAM_TRAIT,
+    &INVALID_OPERATION,
     &UNKNOWN_NODE_TYPE,
     &NOT_UNIT_BLOCK_ELEM,
     &MODULE_NOT_FOUND,

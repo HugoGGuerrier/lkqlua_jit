@@ -1,7 +1,7 @@
-Error: Error from the Lua engine
+Error: Invalid expression type
    ╭─[ <working-dir>/script.lkql:4:7 ]
    │
  4 │ print(ints(0)[1])
    │       ─────┬────  
-   │            ╰────── Unexpected selector result: 1
+   │            ╰────── Expecting a "RecExpr", got a "Int"
 ───╯

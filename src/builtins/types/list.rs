@@ -14,11 +14,14 @@ use crate::{
             TypeImplementation, TypeImplementationKind, TypeRef, img_property, tuple,
         },
     },
-    runtime::{Function, LkqlParam, RuntimeValue},
+    errors::INVALID_OPERATION,
+    runtime::{Function, LKQL_ERROR_GLOBAL_NAME, LkqlParam, RuntimeValue},
 };
 use const_format::formatcp;
 
 const TYPE_TAG: i32 = tuple::TYPE.tag + 1;
+
+const TYPE_NAME: &str = "List";
 
 /// Name of the method to get a sublist from a list.
 pub const SUBLIST_NAME: &str = "sublist";
@@ -30,7 +33,7 @@ pub const TYPE: BuiltinType = BuiltinType {
 };
 
 pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
-    name: "List",
+    name: TYPE_NAME,
     fields: &[
         ("img", TypeField::Property(Function::CFunction(img_property))),
         ("length", TypeField::Property(DEFAULT_SIZED_LENGTH)),
@@ -156,26 +159,21 @@ const LIST_EQ: Function = Function::LuaFunction(formatcp!(
 
 /// Overload of "__concat" for the "List" type
 const LIST_CONCAT: Function = Function::LuaFunction(formatcp!(
-    "function(self, other)
+    "function (self, other)
         -- Start by checking types
-        if not self['{TYPE_TAGS_FIELD}'][{TYPE_TAG}] then
-            error(
-                'Attempt to concatenate a list with a \"' ..
-                self['{TYPE_NAME_FIELD}'] ..
-                '\"'
-            )
-        end
-
         if not other['{TYPE_TAGS_FIELD}'][{TYPE_TAG}] then
-            error(
-                'Attempt to concatenate a list with a \"' ..
-                other['{TYPE_NAME_FIELD}'] ..
-                '\"'
+            _G['{LKQL_ERROR_GLOBAL_NAME}'](
+                '{}',
+                {{
+                    '&',
+                    self['{TYPE_NAME_FIELD}'],
+                    other['{TYPE_NAME_FIELD}']
+                }}
             )
         end
 
         -- Create a new result
-        local res = setmetatable({{}}, _G['type@List'])
+        local res = setmetatable({{}}, _G['type@{TYPE_NAME}'])
 
         -- Place self elements in the result
         local self_len = #self
@@ -189,4 +187,5 @@ const LIST_CONCAT: Function = Function::LuaFunction(formatcp!(
         -- Finally return the result
         return res
     end",
+    INVALID_OPERATION.id
 ));
