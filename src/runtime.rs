@@ -27,6 +27,10 @@ pub const NULL_SINGLETON_GLOBAL_NAME: &str = "value@null";
 /// Name of the global variable where the importation function is stored.
 pub const LKQL_IMPORT_GLOBAL_NAME: &str = "value@lkql_import";
 
+/// Name of the global variable where the LKQL specific error raising function
+/// is stored.
+pub const LKQL_ERROR_GLOBAL_NAME: &str = "value@lkql_error";
+
 /// Name of the global variable where the LKQL execution context is stored.
 pub const CONTEXT_GLOBAL_NAME: &str = "value@execution_context";
 

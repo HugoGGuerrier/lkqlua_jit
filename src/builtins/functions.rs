@@ -10,8 +10,8 @@ use crate::{
     },
     errors::{DEPENDENCY_CYCLE, ErrorInstance, ErrorInstanceArg},
     lua::{
-        LuaState, get_global, get_string, get_top, get_type, get_user_data, pop, push_string,
-        raise_error, to_string,
+        LuaState, get_global, get_index, get_length, get_string, get_top, get_type, get_user_data,
+        is_nil, pop, push_string, raise_error, to_string,
     },
     runtime::{ANALYSIS_UNITS_GLOBAL_NAME, CONTEXT_GLOBAL_NAME},
 };
@@ -110,4 +110,35 @@ pub extern "C" fn lkql_import(l: LuaState) -> c_int {
     } else {
         1
     }
+}
+
+/// The internal error raising function. This function expects 2 arguments:
+///   * The first one is the identifier of the error template to instantiate as
+///     a string.
+///   * The second on is a table containing all arguments for the error
+///     template.
+pub extern "C" fn lkql_error(l: LuaState) -> c_int {
+    // Get the template to instantiate
+    let template_id = get_string(l, 1).unwrap().parse::<usize>().unwrap();
+
+    // Fetch all arguments for the template
+    let mut message_args = Vec::new();
+    if !is_nil(l, 2) {
+        let message_args_count = get_length(l, 2);
+        for i in 1..=message_args_count {
+            get_index(l, 2, i as i32);
+            message_args.push(ErrorInstanceArg::Static(String::from(to_string(l, -1))));
+            pop(l, 1);
+        }
+    }
+
+    // Create the error instance object and push its JSON representation on
+    // the Lua stack.
+    raise_error(
+        l,
+        &ErrorInstance::new(template_id as usize, message_args)
+            .to_json()
+            .to_string(),
+    );
+    0
 }

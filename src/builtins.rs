@@ -5,14 +5,17 @@
 
 use crate::{
     builtins::{
-        functions::{lkql_img, lkql_import, lkql_print, lkql_units},
+        functions::{lkql_error, lkql_img, lkql_import, lkql_print, lkql_units},
         types::{
             BuiltinType, BuiltinTypeRepo,
             pattern::{PATTERN_CONSTRUCTOR, pattern_constructor},
         },
     },
     lua::{LuaState, get_global, push_table, set_metatable},
-    runtime::{Function, LKQL_IMPORT_GLOBAL_NAME, RuntimeValue, UNIT_SINGLETON_GLOBAL_NAME},
+    runtime::{
+        Function, LKQL_ERROR_GLOBAL_NAME, LKQL_IMPORT_GLOBAL_NAME, RuntimeValue,
+        UNIT_SINGLETON_GLOBAL_NAME,
+    },
 };
 use std::collections::HashMap;
 
@@ -38,6 +41,10 @@ pub fn get_builtin_bindings() -> HashMap<&'static str, RuntimeValue> {
     b(
         LKQL_IMPORT_GLOBAL_NAME,
         RuntimeValue::Callable(Function::CFunction(lkql_import)),
+    );
+    b(
+        LKQL_ERROR_GLOBAL_NAME,
+        RuntimeValue::Callable(Function::CFunction(lkql_error)),
     );
     b(UNIT_SINGLETON_GLOBAL_NAME, RuntimeValue::FromBuilder(create_unit_value));
 
