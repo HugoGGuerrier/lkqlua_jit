@@ -3,11 +3,8 @@
 //! This module defines the LKQL "Int" type.
 
 use crate::{
-    builtins::types::{
-        BuiltinType, TypeField, TypeImplementation, TypeImplementationKind, bool, img_property,
-    },
+    builtins::types::{BuiltinType, IMG_FIELD, TypeImplementation, TypeImplementationKind, bool},
     lua::{LuaState, copy_value, push_number, set_metatable},
-    runtime::Function,
 };
 
 pub const TYPE: BuiltinType = BuiltinType {
@@ -18,7 +15,7 @@ pub const TYPE: BuiltinType = BuiltinType {
 
 const IMPLEMENTATION: TypeImplementation = TypeImplementation {
     name: "Int",
-    fields: &[("img", TypeField::Property(Function::CFunction(img_property)))],
+    fields: &[IMG_FIELD],
     overloads: &[],
     index_method: None,
     registering_function: Some(register_metatable),

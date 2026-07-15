@@ -3,11 +3,8 @@
 //! This module defines the LKQL "Bool" type.
 
 use crate::{
-    builtins::types::{
-        BuiltinType, TypeField, TypeImplementation, TypeImplementationKind, img_property, unit,
-    },
+    builtins::types::{BuiltinType, IMG_FIELD, TypeImplementation, TypeImplementationKind, unit},
     lua::{LuaState, copy_value, push_bool, set_metatable},
-    runtime::Function,
 };
 
 pub const TYPE: BuiltinType = BuiltinType {
@@ -18,7 +15,7 @@ pub const TYPE: BuiltinType = BuiltinType {
 
 const IMPLEMENTATION: TypeImplementation = TypeImplementation {
     name: "Bool",
-    fields: &[("img", TypeField::Property(Function::CFunction(img_property)))],
+    fields: &[IMG_FIELD],
     overloads: &[],
     index_method: None,
     registering_function: Some(register_metatable),

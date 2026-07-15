@@ -10,8 +10,8 @@ use crate::{
             sized::{self, DEFAULT_SIZED_LENGTH},
         },
         types::{
-            BuiltinType, OverloadTarget, TYPE_NAME_FIELD, TYPE_TAGS_FIELD, TypeField,
-            TypeImplementation, TypeImplementationKind, TypeRef, img_property, tuple,
+            BuiltinType, IMG_FIELD, OverloadTarget, TYPE_NAME_FIELD, TYPE_TAGS_FIELD, TypeField,
+            TypeImplementation, TypeImplementationKind, TypeRef, tuple,
         },
     },
     errors::INVALID_OPERATION,
@@ -35,7 +35,7 @@ pub const TYPE: BuiltinType = BuiltinType {
 pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
     name: TYPE_NAME,
     fields: &[
-        ("img", TypeField::Property(Function::CFunction(img_property))),
+        IMG_FIELD,
         ("length", TypeField::Property(DEFAULT_SIZED_LENGTH)),
         (ITERATOR_FIELD, TypeField::Property(ITERATOR)),
         ("any", TypeField::Value(ANY)),

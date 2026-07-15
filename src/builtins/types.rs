@@ -395,6 +395,10 @@ const GENERIC_INDEX: &str = "function (self, field)
     return __uv[1][field]
 end";
 
+/// Property that all values are implementing.
+const IMG_FIELD: (&str, TypeField) =
+    ("img", TypeField::Property(Function::CFunction(img_property)));
+
 /// The "img" property, it relies on the [`lkql_img`] function to execute.
 #[unsafe(no_mangle)]
 pub extern "C" fn img_property(l: LuaState) -> c_int {

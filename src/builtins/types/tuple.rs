@@ -6,8 +6,8 @@ use crate::{
     builtins::{
         traits,
         types::{
-            BuiltinType, OverloadTarget, TypeField, TypeImplementation, TypeImplementationKind,
-            img_property, pattern,
+            BuiltinType, IMG_FIELD, OverloadTarget, TypeImplementation, TypeImplementationKind,
+            pattern,
         },
     },
     runtime::Function,
@@ -21,7 +21,7 @@ pub const TYPE: BuiltinType = BuiltinType {
 
 pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
     name: "Tuple",
-    fields: &[("img", TypeField::Property(Function::CFunction(img_property)))],
+    fields: &[IMG_FIELD],
     overloads: &[
         (OverloadTarget::ToString, TUPLE_TOSTRING),
         (OverloadTarget::Eq, TUPLE_EQ),

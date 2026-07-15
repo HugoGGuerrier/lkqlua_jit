@@ -4,8 +4,7 @@
 
 use crate::{
     builtins::types::{
-        BuiltinType, OverloadTarget, TypeField, TypeImplementation, TypeImplementationKind,
-        img_property,
+        BuiltinType, IMG_FIELD, OverloadTarget, TypeImplementation, TypeImplementationKind,
     },
     runtime::Function,
 };
@@ -18,7 +17,7 @@ pub const TYPE: BuiltinType = BuiltinType {
 
 pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
     name: "Unit",
-    fields: &[("img", TypeField::Property(Function::CFunction(img_property)))],
+    fields: &[IMG_FIELD],
     overloads: &[(OverloadTarget::ToString, TUPLE_TOSTRING)],
     index_method: None,
     registering_function: None,

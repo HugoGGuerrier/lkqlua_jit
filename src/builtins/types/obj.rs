@@ -8,8 +8,8 @@ use crate::{
     builtins::{
         traits::iterable::{self, ITERATOR_FIELD},
         types::{
-            BuiltinType, OverloadTarget, TypeField, TypeImplementation, TypeImplementationKind,
-            img_property, stream,
+            BuiltinType, IMG_FIELD, OverloadTarget, TypeField, TypeImplementation,
+            TypeImplementationKind, stream,
         },
     },
     runtime::{Function, LkqlParam, RuntimeValue},
@@ -27,7 +27,7 @@ pub const TYPE: BuiltinType = BuiltinType {
 pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
     name: "Object",
     fields: &[
-        ("img", TypeField::Property(Function::CFunction(img_property))),
+        IMG_FIELD,
         (WITHOUT_KEYS_NAME, TypeField::Value(WITHOUT_KEYS)),
     ],
     overloads: &[

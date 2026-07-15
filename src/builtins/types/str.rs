@@ -6,8 +6,8 @@ use crate::{
     builtins::{
         traits::{self, sized::DEFAULT_SIZED_LENGTH},
         types::{
-            BuiltinType, TYPE_TAGS_FIELD, TypeField, TypeImplementation, TypeImplementationKind,
-            TypeRef, img_property, int,
+            BuiltinType, IMG_FIELD, TYPE_TAGS_FIELD, TypeField, TypeImplementation,
+            TypeImplementationKind, TypeRef, int,
         },
     },
     lua::{LuaState, copy_value, push_string, set_metatable},
@@ -26,7 +26,7 @@ pub const TYPE: BuiltinType = BuiltinType {
 const IMPLEMENTATION: TypeImplementation = TypeImplementation {
     name: "Str",
     fields: &[
-        ("img", TypeField::Property(Function::CFunction(img_property))),
+        IMG_FIELD,
         ("length", TypeField::Property(DEFAULT_SIZED_LENGTH)),
         ("base_name", TypeField::Property(BASE_NAME)),
         ("starts_with", TypeField::Value(STARTS_WITH)),

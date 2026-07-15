@@ -15,8 +15,8 @@ use crate::{
             sized,
         },
         types::{
-            BuiltinType, OverloadTarget, TypeField, TypeImplementation, TypeImplementationKind,
-            img_property, list,
+            BuiltinType, IMG_FIELD, OverloadTarget, TypeField, TypeImplementation,
+            TypeImplementationKind, list,
         },
     },
     errors::HEAD_OF_EMPTY_STEAM,
@@ -53,7 +53,7 @@ pub const TYPE: BuiltinType = BuiltinType {
 const BASE_IMPLEMENTATION: TypeImplementation = TypeImplementation {
     name: "Stream",
     fields: &[
-        ("img", TypeField::Property(Function::CFunction(img_property))),
+        IMG_FIELD,
         ("length", TypeField::Property(LENGTH)),
         (ITERATOR_FIELD, TypeField::Property(ITERATOR)),
         ("any", TypeField::Value(DEFAULT_ITERABLE_ANY)),

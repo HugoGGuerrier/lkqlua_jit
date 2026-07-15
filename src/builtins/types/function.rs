@@ -5,8 +5,8 @@
 use crate::{
     ExecutionContext,
     builtins::types::{
-        BuiltinType, OverloadTarget, TypeField, TypeImplementation, TypeImplementationKind,
-        img_property, namespace,
+        BuiltinType, IMG_FIELD, OverloadTarget, TypeImplementation, TypeImplementationKind,
+        namespace,
     },
     lua::{
         LuaState, call, copy_value, debug_get_func_id, get_field, get_global, get_string, get_top,
@@ -24,7 +24,7 @@ pub const TYPE: BuiltinType = BuiltinType {
 
 const IMPLEMENTATION: TypeImplementation = TypeImplementation {
     name: "Function",
-    fields: &[("img", TypeField::Property(Function::CFunction(img_property)))],
+    fields: &[IMG_FIELD],
     overloads: &[(OverloadTarget::ToString, Function::CFunction(function_tostring))],
     index_method: None,
     registering_function: Some(register_metatable),

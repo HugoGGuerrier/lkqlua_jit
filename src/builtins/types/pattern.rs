@@ -6,8 +6,8 @@
 use crate::{
     builtins::{
         types::{
-            BuiltinType, OverloadTarget, TypeField, TypeImplementation, TypeImplementationKind,
-            img_property, str,
+            BuiltinType, IMG_FIELD, OverloadTarget, TypeField, TypeImplementation,
+            TypeImplementationKind, str,
         },
         utils::{get_bool_param, get_param, get_string_param},
     },
@@ -43,11 +43,11 @@ pub const TYPE: BuiltinType = BuiltinType {
 pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
     name: "Pattern",
     fields: &[
+        IMG_FIELD,
         (
             NATIVE_HANDLE_FIELD,
             TypeField::Property(Function::CFunction(pattern_native_handle)),
         ),
-        ("img", TypeField::Property(Function::CFunction(img_property))),
         (
             IS_MATCH_NAME,
             TypeField::Value(RuntimeValue::Callable(Function::CFunction(pattern_is_match))),
