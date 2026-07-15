@@ -1,0 +1,2 @@
+val l = [1, 2, 3]
+print(l.map((i) => i + 1, fn=(i) => i + 1))

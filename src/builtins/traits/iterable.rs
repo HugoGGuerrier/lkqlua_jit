@@ -9,8 +9,10 @@
 use crate::{
     builtins::{
         traits::{BuiltinTrait, RequiredField},
-        types::TYPE_GLOBAL_FIELD_PREFIX,
-        types::{TypeRef, list},
+        types::{
+            TYPE_GLOBAL_FIELD_PREFIX, TypeRef, list,
+            stream::map_stream::{self, MAP_FUNCTION_FIELD, SOURCE_ITERATOR_FIELD},
+        },
     },
     runtime::{Function, LkqlParam, RuntimeValue},
 };
@@ -26,6 +28,7 @@ pub const TRAIT: BuiltinTrait = BuiltinTrait {
         RequiredField::Property(ITERATOR_FIELD),
         RequiredField::Value("any"),
         RequiredField::Value("all"),
+        RequiredField::Value("map"),
         RequiredField::Value("reduce"),
         RequiredField::Property("to_list"),
     ],
@@ -70,7 +73,29 @@ pub const DEFAULT_ITERABLE_ALL: RuntimeValue = RuntimeValue::Callable(Function::
     ),
 });
 
-/// List of parameters that the "reduce" method require.
+/// List of parameters that the "map" method requires.
+pub const MAP_PARAMS: &[LkqlParam] = &[
+    LkqlParam::new("self"),
+    LkqlParam::with_type("fn", TypeRef::Function),
+];
+
+/// Default implementation of the "map" method on iterable values.
+pub const DEFAULT_ITERABLE_MAP: RuntimeValue = RuntimeValue::Callable(Function::LkqlFunction {
+    params: MAP_PARAMS,
+    body: formatcp!(
+        "return setmetatable(
+            {{
+                ['{SOURCE_ITERATOR_FIELD}'] = self['{ITERATOR_FIELD}'],
+                ['{MAP_FUNCTION_FIELD}'] = fn,
+            }},
+            _G['{MAP_STREAM_TYPE}']
+        )",
+        MAP_STREAM_TYPE =
+            formatcp!("{TYPE_GLOBAL_FIELD_PREFIX}{}", map_stream::SPECIALIZATION.name)
+    ),
+});
+
+/// List of parameters that the "reduce" method requires.
 pub const REDUCE_PARAMS: &[LkqlParam] = &[
     LkqlParam::new("self"),
     LkqlParam::with_type("fn", TypeRef::Function),
@@ -92,6 +117,7 @@ pub const DEFAULT_ITERABLE_REDUCE: RuntimeValue = RuntimeValue::Callable(Functio
     ),
 });
 
+/// Default implementation of the "to_list" method on iterable values.
 pub const DEFAULT_ITERABLE_TO_LIST: Function = Function::LuaFunction(formatcp!(
     "function (self)
             local it = self['{ITERATOR_FIELD}']

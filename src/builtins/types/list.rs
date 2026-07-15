@@ -6,7 +6,9 @@ use crate::{
     builtins::{
         traits::{
             indexable,
-            iterable::{self, ANY_AND_ALL_PARAMS, ITERATOR_FIELD, REDUCE_PARAMS},
+            iterable::{
+                self, ANY_AND_ALL_PARAMS, DEFAULT_ITERABLE_MAP, ITERATOR_FIELD, REDUCE_PARAMS,
+            },
             sized::{self, DEFAULT_SIZED_LENGTH},
         },
         types::{
@@ -40,6 +42,7 @@ pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
         (ITERATOR_FIELD, TypeField::Property(ITERATOR)),
         ("any", TypeField::Value(ANY)),
         ("all", TypeField::Value(ALL)),
+        ("map", TypeField::Value(DEFAULT_ITERABLE_MAP)),
         ("reduce", TypeField::Value(REDUCE)),
         ("to_list", TypeField::Property(TO_LIST)),
         (SUBLIST_NAME, TypeField::Value(SUBLIST)),

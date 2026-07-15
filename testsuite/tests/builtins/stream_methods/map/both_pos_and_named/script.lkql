@@ -1,0 +1,2 @@
+val s = [i for i in [1, 2, 3]]
+print(s.map((i) => i + 1, fn=(i) => i + 1))
