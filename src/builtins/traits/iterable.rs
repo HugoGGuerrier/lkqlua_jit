@@ -140,17 +140,17 @@ pub const DEFAULT_ITERABLE_REDUCE: RuntimeValue = RuntimeValue::Callable(Functio
     ),
 });
 
-/// Default implementation of the "to_list" method on iterable values.
+/// Default implementation of the "to_list" property on iterable values.
 pub const DEFAULT_ITERABLE_TO_LIST: Function = Function::LuaFunction(formatcp!(
     "function (self)
-            local it = self['{ITERATOR_FIELD}']
-            local next = it()
-            local res = setmetatable({{}}, _G['{LIST_TYPE}'])
-            while next ~= nil do
-                table.insert(res, next)
-                next = it()
-            end
-            return res
-        end",
+        local it = self['{ITERATOR_FIELD}']
+        local next = it()
+        local res = setmetatable({{}}, _G['{LIST_TYPE}'])
+        while next ~= nil do
+            table.insert(res, next)
+            next = it()
+        end
+        return res
+    end",
     LIST_TYPE = formatcp!("{TYPE_GLOBAL_FIELD_PREFIX}{}", list::IMPLEMENTATION.name)
 ));
