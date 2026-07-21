@@ -2108,14 +2108,24 @@ fn all_local_execution_units(
 ) -> Result<(), Box<Diagnostic>> {
     for maybe_child in node {
         if let Some(child) = maybe_child? {
-            match child {
+            match &child {
                 LkqlNode::TopLevelList(_)
                 | LkqlNode::FunDecl(_)
                 | LkqlNode::SelectorDecl(_)
                 | LkqlNode::SelectorArmList(_)
-                | LkqlNode::AnonymousFunction(_)
-                | LkqlNode::ListComprehension(_)
-                | LkqlNode::NodePatternSelector(_) => output.push(child),
+                | LkqlNode::AnonymousFunction(_) => output.push(child),
+                LkqlNode::ListComprehension(list_comp) => {
+                    // For list comprehensions, recurse on generators that
+                    // belongs to the current local scope.
+                    all_local_execution_units(&list_comp.f_generators()?, output)?;
+                    output.push(child);
+                }
+                LkqlNode::NodePatternSelector(pattern_selector) => {
+                    // For node pattern selector, recurse on the call that
+                    // belongs to the current local scope.
+                    all_local_execution_units(&pattern_selector.f_call()?, output)?;
+                    output.push(child);
+                }
                 _ => all_local_execution_units(&child, output)?,
             }
         }
