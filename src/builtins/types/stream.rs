@@ -9,9 +9,9 @@ use crate::{
         traits::{
             indexable,
             iterable::{
-                self, DEFAULT_ITERABLE_ALL, DEFAULT_ITERABLE_ANY, DEFAULT_ITERABLE_FLATTEN,
-                DEFAULT_ITERABLE_MAP, DEFAULT_ITERABLE_REDUCE, DEFAULT_ITERABLE_TO_LIST,
-                ITERATOR_FIELD,
+                self, DEFAULT_ITERABLE_ALL, DEFAULT_ITERABLE_ANY, DEFAULT_ITERABLE_FLAT_MAP,
+                DEFAULT_ITERABLE_FLATTEN, DEFAULT_ITERABLE_MAP, DEFAULT_ITERABLE_REDUCE,
+                DEFAULT_ITERABLE_TO_LIST, ITERATOR_FIELD,
             },
             sized,
         },
@@ -65,6 +65,7 @@ const BASE_IMPLEMENTATION: TypeImplementation = TypeImplementation {
         ("all", TypeField::Value(DEFAULT_ITERABLE_ALL)),
         ("flatten", TypeField::Property(DEFAULT_ITERABLE_FLATTEN)),
         ("map", TypeField::Value(DEFAULT_ITERABLE_MAP)),
+        ("flat_map", TypeField::Value(DEFAULT_ITERABLE_FLAT_MAP)),
         ("reduce", TypeField::Value(DEFAULT_ITERABLE_REDUCE)),
         ("to_list", TypeField::Property(DEFAULT_ITERABLE_TO_LIST)),
         ("head", TypeField::Property(HEAD)),

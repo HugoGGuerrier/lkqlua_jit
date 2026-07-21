@@ -7,8 +7,8 @@ use crate::{
         traits::{
             indexable,
             iterable::{
-                self, ANY_AND_ALL_PARAMS, DEFAULT_ITERABLE_FLATTEN, DEFAULT_ITERABLE_MAP,
-                ITERATOR_FIELD, REDUCE_PARAMS,
+                self, ANY_AND_ALL_PARAMS, DEFAULT_ITERABLE_FLAT_MAP, DEFAULT_ITERABLE_FLATTEN,
+                DEFAULT_ITERABLE_MAP, ITERATOR_FIELD, REDUCE_PARAMS,
             },
             sized::{self, DEFAULT_SIZED_LENGTH},
         },
@@ -45,6 +45,7 @@ pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
         ("all", TypeField::Value(ALL)),
         ("flatten", TypeField::Property(DEFAULT_ITERABLE_FLATTEN)),
         ("map", TypeField::Value(DEFAULT_ITERABLE_MAP)),
+        ("flat_map", TypeField::Value(DEFAULT_ITERABLE_FLAT_MAP)),
         ("reduce", TypeField::Value(REDUCE)),
         ("to_list", TypeField::Property(TO_LIST)),
         (SUBLIST_NAME, TypeField::Value(SUBLIST)),

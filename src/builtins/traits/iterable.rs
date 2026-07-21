@@ -33,6 +33,7 @@ pub const TRAIT: BuiltinTrait = BuiltinTrait {
         RequiredField::Value("all"),
         RequiredField::Property("flatten"),
         RequiredField::Value("map"),
+        RequiredField::Value("flat_map"),
         RequiredField::Value("reduce"),
         RequiredField::Property("to_list"),
     ],
@@ -117,6 +118,19 @@ pub const DEFAULT_ITERABLE_MAP: RuntimeValue = RuntimeValue::Callable(Function::
             formatcp!("{TYPE_GLOBAL_FIELD_PREFIX}{}", map_stream::SPECIALIZATION.name)
     ),
 });
+
+/// List of parameters that the "flat_map" method requires.
+pub const FLAT_MAP_PARAMS: &[LkqlParam] = &[
+    LkqlParam::new("self"),
+    LkqlParam::with_type("fn", TypeRef::Function),
+];
+
+/// Default implementation of the "flat_map" method on iterable values.
+pub const DEFAULT_ITERABLE_FLAT_MAP: RuntimeValue =
+    RuntimeValue::Callable(Function::LkqlFunction {
+        params: FLAT_MAP_PARAMS,
+        body: "return self.map(nil, self, fn).flatten",
+    });
 
 /// List of parameters that the "reduce" method requires.
 pub const REDUCE_PARAMS: &[LkqlParam] = &[

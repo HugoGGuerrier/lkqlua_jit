@@ -1,0 +1,16 @@
+selector countdown_from
+| 0 => ()
+| n => rec(n-1, n)
+
+val s = [i for i in [1, 2, 3]]
+
+print(s.flat_map(countdown_from)[1])
+print(s.flat_map(countdown_from)[2])
+print(s.flat_map(countdown_from)[3])
+print(s.flat_map(countdown_from).to_list)
+
+val flat_map_res = s.flat_map((i) => { print("Processing " & i.img); [i, i] })
+print(flat_map_res[1])
+print(flat_map_res[2])
+print(flat_map_res[3])
+print(flat_map_res[6])
