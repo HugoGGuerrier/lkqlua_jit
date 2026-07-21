@@ -1,0 +1,19 @@
+# val s_1 = [l for l in [[1, 2, 3], [4, 5, 6]]]
+
+# print(s_1.flatten[1])
+# print(s_1.flatten[2])
+# print(s_1.flatten[3])
+# print(s_1.flatten[6])
+# print(s_1.flatten.to_list)
+
+val s_2 = [
+    l for l in [
+        [{ print("Processing " & i.img); i } for i in [1, 2, 3]],
+        [{ print("Processing " & i.img); i } for i in [4, 5, 6]]
+    ]
+]
+val flatten_result = s_2.flatten
+
+print(flatten_result[1])
+print(flatten_result[2])
+print(flatten_result[6])

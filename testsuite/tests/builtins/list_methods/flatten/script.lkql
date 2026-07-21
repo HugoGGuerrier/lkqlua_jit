@@ -1,0 +1,7 @@
+val l = [[1, 2, 3], [4, 5, 6]]
+
+print(l.flatten[1])
+print(l.flatten[2])
+print(l.flatten[3])
+print(l.flatten[6])
+print(l.flatten.to_list)

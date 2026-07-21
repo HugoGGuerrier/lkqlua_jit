@@ -11,7 +11,10 @@ use crate::{
         traits::{BuiltinTrait, RequiredField},
         types::{
             TYPE_GLOBAL_FIELD_PREFIX, TypeRef, list,
-            stream::map_stream::{self, MAP_FUNCTION_FIELD, SOURCE_ITERATOR_FIELD},
+            stream::{
+                flatten_stream::{self, INNER_ITERATOR_FIELD},
+                map_stream::{self, MAP_FUNCTION_FIELD},
+            },
         },
     },
     runtime::{Function, LkqlParam, RuntimeValue},
@@ -28,6 +31,7 @@ pub const TRAIT: BuiltinTrait = BuiltinTrait {
         RequiredField::Property(ITERATOR_FIELD),
         RequiredField::Value("any"),
         RequiredField::Value("all"),
+        RequiredField::Property("flatten"),
         RequiredField::Value("map"),
         RequiredField::Value("reduce"),
         RequiredField::Property("to_list"),
@@ -73,6 +77,24 @@ pub const DEFAULT_ITERABLE_ALL: RuntimeValue = RuntimeValue::Callable(Function::
     ),
 });
 
+/// Default implementation of the "flatten" property on iterable values.
+pub const DEFAULT_ITERABLE_FLATTEN: Function = Function::LuaFunction(formatcp!(
+    "function (self)
+        local it = self['{ITERATOR_FIELD}']
+        local inner_it = it()['{ITERATOR_FIELD}']
+        return setmetatable(
+            {{
+                ['{SOURCE_FIELD}'] = it,
+                ['{INNER_ITERATOR_FIELD}'] = inner_it,
+            }},
+            _G['{FLATTEN_STREAM_TYPE}']
+        )
+    end",
+    SOURCE_FIELD = flatten_stream::SOURCE_ITERATOR_FIELD,
+    FLATTEN_STREAM_TYPE =
+        formatcp!("{TYPE_GLOBAL_FIELD_PREFIX}{}", flatten_stream::SPECIALIZATION.name)
+));
+
 /// List of parameters that the "map" method requires.
 pub const MAP_PARAMS: &[LkqlParam] = &[
     LkqlParam::new("self"),
@@ -85,11 +107,12 @@ pub const DEFAULT_ITERABLE_MAP: RuntimeValue = RuntimeValue::Callable(Function::
     body: formatcp!(
         "return setmetatable(
             {{
-                ['{SOURCE_ITERATOR_FIELD}'] = self['{ITERATOR_FIELD}'],
+                ['{SOURCE_FIELD}'] = self['{ITERATOR_FIELD}'],
                 ['{MAP_FUNCTION_FIELD}'] = fn,
             }},
             _G['{MAP_STREAM_TYPE}']
         )",
+        SOURCE_FIELD = map_stream::SOURCE_ITERATOR_FIELD,
         MAP_STREAM_TYPE =
             formatcp!("{TYPE_GLOBAL_FIELD_PREFIX}{}", map_stream::SPECIALIZATION.name)
     ),
