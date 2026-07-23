@@ -50,11 +50,11 @@ impl AnalysisLibrary {
         let module_file = match find_in_lua_path(&module_name) {
             Some(f) => f,
             None => {
-                return Err(DiagnosticCollector::from(Diagnostic::error_msg(format!(
+                return Err(Diagnostic::error_msg(format!(
                     "Cannot find the {} analysis library, please ensure \"{}.lua\" is accessible \
                      through the LUA_PATH",
                     config.analyzed_lang_name, module_name
-                ))));
+                )))?;
             }
         };
 
@@ -87,14 +87,14 @@ impl AnalysisLibrary {
         }
         pop(l, 1);
 
-        // Configure struct based type type be compatible with the "Object"
+        // Configure struct based Langkit types be compatible with the "Object"
         // LKQL type.
         for obj_type in ["SourceLocation", "SourceLocationRange", "Diagnostic"] {
             Self::init_type_compatibility(l, obj_type, &obj::TYPE, &obj::IMPLEMENTATION);
         }
 
-        // Configure the "ArrayBase" type to be compatible with the "List"
-        // LKQL type.
+        // Configure the "ArrayBase" Langkit type to be compatible with the
+        // "List" LKQL type.
         Self::init_type_compatibility(l, "ArrayBase", &list::TYPE, &list::IMPLEMENTATION);
 
         // Configure all structure types to be compatible with the "Object"
@@ -277,7 +277,7 @@ impl AnalysisLibrary {
                     -3
                 }
                 TypeField::Property(function_value) => {
-                    function_value.push_on_stack_with_uv(l, 0);
+                    function_value.push_on_stack(l, 0);
                     -2
                 }
             };
@@ -287,7 +287,7 @@ impl AnalysisLibrary {
 
         // Finally, set type overloads
         for (target, function) in implementation.overloads {
-            function.push_on_stack_with_uv(l, 0);
+            function.push_on_stack(l, 0);
             set_field(l, -2, target.metamethod_name());
         }
 

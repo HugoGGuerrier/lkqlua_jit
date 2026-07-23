@@ -64,7 +64,7 @@ impl RuntimeValue {
             RuntimeValue::Boolean(b) => push_bool(l, *b),
             RuntimeValue::Integer(i) => push_integer(l, *i),
             RuntimeValue::String(s) => push_string(l, s),
-            RuntimeValue::Callable(f) => f.push_on_stack_with_uv(l, 0),
+            RuntimeValue::Callable(f) => f.push_on_stack(l, 0),
             RuntimeValue::FromBuilder(builder) => builder(l),
         }
     }
@@ -106,7 +106,7 @@ impl Function {
     ///
     /// Pop as many values as `up_value_count` from the stack and provide them
     /// as up-values for the new function value.
-    pub(crate) fn push_on_stack_with_uv(&self, l: LuaState, up_value_count: u8) {
+    pub(crate) fn push_on_stack(&self, l: LuaState, up_value_count: u8) {
         match self {
             Function::CFunction(function) => push_c_closure(l, *function, up_value_count),
             Function::LuaFunction(source) => {
@@ -209,23 +209,23 @@ impl Function {
                             // Then create the statement to check the parameter type
                             format!(
                                 "local __types = {name}['{TYPE_TAGS_FIELD}']
-                            if not ({checking_expr}) then
-                            _G['{LKQL_ERROR_GLOBAL_NAME}'](
-                                '{error_id}',
-                                {{
-                                    '{expected_name}',
-                                    '{name}',
-                                    {name}['{TYPE_NAME_FIELD}']
-                                }}
-                            )
-                            end",
+                                if not ({checking_expr}) then
+                                    _G['{LKQL_ERROR_GLOBAL_NAME}'](
+                                        '{error_id}',
+                                        {{
+                                            '{expected_name}',
+                                            '{name}',
+                                            {name}['{TYPE_NAME_FIELD}']
+                                        }}
+                                    )
+                                end",
                             )
                         })
                     })
                     .collect::<Vec<_>>()
                     .join("\n");
 
-                // Finally assemble all statements and the function body to
+                // Finally, assemble all statements and the function body to
                 // create the Lua value.
                 let uv_table = if up_value_count > 0 { "{...}" } else { "nil" };
                 let final_source = format!(
@@ -318,7 +318,7 @@ pub(crate) fn register_for_gc(l: LuaState, index: i32) {
     // Create a closure to forward the GC call
     copy_value(l, -3);
     Function::LuaFunction("function(_) getmetatable(__uv[1]).__gc(__uv[1]) end")
-        .push_on_stack_with_uv(l, 1);
+        .push_on_stack(l, 1);
 
     // Set the GC forwarder in the proxy metatable
     set_field(l, -2, "__gc");

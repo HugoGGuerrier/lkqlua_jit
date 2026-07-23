@@ -264,7 +264,7 @@ impl TypeImplementation {
             set_field(l, -3, n);
         });
         properties.iter().for_each(|(n, v)| {
-            v.push_on_stack_with_uv(l, 0);
+            v.push_on_stack(l, 0);
             set_field(l, -2, n);
         });
     }
@@ -275,14 +275,14 @@ impl TypeImplementation {
         self.index_method
             .as_ref()
             .unwrap_or(&Function::LuaFunction(GENERIC_INDEX))
-            .push_on_stack_with_uv(l, 2);
+            .push_on_stack(l, 2);
     }
 
     /// Push all overloads meta-methods of this type implementation in the
     /// table at the top of the Lua stack.
     fn push_overloads(&self, l: LuaState) {
         for (target, function) in self.overloads {
-            function.push_on_stack_with_uv(l, 0);
+            function.push_on_stack(l, 0);
             set_field(l, -2, target.metamethod_name());
         }
     }
@@ -299,9 +299,8 @@ pub enum TypeField {
     Property(Function),
 }
 
-/// This types offer a way to reference to a type without referencing its
-/// [`BuiltinType`] implementation. It is useful to avoid dependency cycles in
-/// built-in types definitions.
+/// This type offers a way to reference a built-in type without having access
+/// to its [`BuiltinType`] value. It is useful to avoid dependency cycles.
 #[derive(Debug, Clone)]
 pub enum TypeRef {
     Unit,
