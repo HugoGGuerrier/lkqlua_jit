@@ -1078,6 +1078,15 @@ mod constant_evaluation_tests {
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(_bool_cst(false)));
         intermediate_tree = _node(NodeVariant::InstanceOf {
+            expression: _node(NodeVariant::CompBinOp {
+                left: _read_symbol_node(),
+                operator: _comp_op(CompOperatorVariant::Equals),
+                right: _read_symbol_node(),
+            }),
+            expected_type_tag: bool::TYPE.tag,
+        });
+        assert_eq!(intermediate_tree.eval_as_constant(), Some(_bool_cst(true)));
+        intermediate_tree = _node(NodeVariant::InstanceOf {
             expression: _read_symbol_node(),
             expected_type_tag: bool::TYPE.tag,
         });
@@ -1096,6 +1105,11 @@ mod constant_evaluation_tests {
             expected_trait: &iterable::TRAIT,
         });
         assert_eq!(intermediate_tree.eval_as_constant(), Some(_bool_cst(false)));
+        let mut intermediate_tree = _node(NodeVariant::HasTrait {
+            expression: _node(NodeVariant::ListLiteral(vec![*_read_symbol_node()])),
+            expected_trait: &iterable::TRAIT,
+        });
+        assert_eq!(intermediate_tree.eval_as_constant(), Some(_bool_cst(true)));
         intermediate_tree = _node(NodeVariant::HasTrait {
             expression: _read_symbol_node(),
             expected_trait: &iterable::TRAIT,

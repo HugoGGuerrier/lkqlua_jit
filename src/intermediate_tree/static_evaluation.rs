@@ -21,15 +21,94 @@ use std::collections::HashMap;
 mod test;
 
 impl Node {
+    /// Try to deduct the type of the expression represented by the node.
+    /// Returns [`None`] if this isn't possible to determine it.
+    pub fn expr_type(&self) -> Option<&'static BuiltinType> {
+        // Create a typing context and call the inner function
+        let mut typing_context = EvaluationContext { let_bindings: HashMap::new() };
+        self.expr_type_with_context(&mut typing_context)
+    }
+
+    /// Inner function to get the type of an intermediate node in an evaluation
+    /// context.
+    fn expr_type_with_context<'a: 'b, 'b: 'a>(
+        &'a self,
+        ctx: &mut EvaluationContext<'b>,
+    ) -> Option<&'static BuiltinType> {
+        match &self.variant {
+            // --- Composite expression
+            NodeVariant::InClause { .. } => Some(&bool::TYPE),
+            NodeVariant::BlockExpr { val, .. } => val.expr_type_with_context(ctx),
+            NodeVariant::LazyComprehension { .. } => Some(&stream::TYPE),
+
+            // --- Binary operations
+            NodeVariant::LogicBinOp { .. } => Some(&bool::TYPE),
+            NodeVariant::ArithBinOp { .. } => Some(&int::TYPE),
+            NodeVariant::CompBinOp { .. } => Some(&bool::TYPE),
+
+            // --- Unary operations
+            NodeVariant::LogicUnOp { .. } => Some(&bool::TYPE),
+            NodeVariant::ArithUnOp { .. } => Some(&int::TYPE),
+
+            // --- Symbol introductions
+            NodeVariant::InitLocal { .. } => Some(&unit::TYPE),
+            NodeVariant::InitLocalFun { .. } => Some(&unit::TYPE),
+
+            // --- Recursive nodes
+            NodeVariant::InLexicalScope { expr, .. } => expr.expr_type_with_context(ctx),
+            NodeVariant::OutsideLexicalScope(expr) => expr.expr_type_with_context(ctx),
+
+            // --- Let-in
+            NodeVariant::Let { id, value, r#in } => {
+                ctx.let_bindings.insert(*id, value);
+                r#in.expr_type_with_context(ctx)
+            }
+            NodeVariant::Read(id) => {
+                if let Some(n) = ctx.let_bindings.get(id) {
+                    n.expr_type_with_context(ctx)
+                } else {
+                    None
+                }
+            }
+
+            // --- Type checking
+            NodeVariant::InstanceOf { .. } => Some(&bool::TYPE),
+            NodeVariant::HasTrait { .. } => Some(&bool::TYPE),
+
+            // --- Literals
+            NodeVariant::UnitLiteral => Some(&unit::TYPE),
+            NodeVariant::BoolLiteral(_) => Some(&bool::TYPE),
+            NodeVariant::IntLiteral(_) => Some(&int::TYPE),
+            NodeVariant::StringLiteral(_) => Some(&str::TYPE),
+            NodeVariant::PatternLiteral(_) => Some(&pattern::TYPE),
+            NodeVariant::TupleLiteral(_) => Some(&tuple::TYPE),
+            NodeVariant::ListLiteral(_) => Some(&list::TYPE),
+            NodeVariant::ObjectLiteral(_) => Some(&obj::TYPE),
+            NodeVariant::ReadChildUnit(_) => Some(&function::TYPE),
+
+            // --- Default case, no type can be deducted
+            _ => None,
+        }
+    }
+
     /// Try to evaluate this node as a constant value, returning it if this is
     /// feasible. Otherwise this function returns [`None`].
     pub fn eval_as_constant(&self) -> Option<ConstantValue> {
+        // Call the inner function with an empty context
+        let mut evaluation_context = EvaluationContext { let_bindings: HashMap::new() };
+        self.eval_as_constant_with_context(&mut evaluation_context)
+    }
+
+    fn eval_as_constant_with_context<'a: 'b, 'b: 'a>(
+        &'a self,
+        ctx: &mut EvaluationContext<'b>,
+    ) -> Option<ConstantValue> {
         /// Internal recursive function to evaluate a node as a constant
         /// variant. This is used to avoid useless wrapping during constant
         /// evaluation.
-        fn eval_as_constant_variant(
-            ctx: &mut EvaluationContext,
-            node: &Node,
+        fn eval_as_constant_variant<'a: 'b, 'b: 'a>(
+            ctx: &mut EvaluationContext<'b>,
+            node: &'a Node,
         ) -> Option<ConstantValueVariant> {
             match &node.variant {
                 // --- Literals
@@ -45,7 +124,7 @@ impl Node {
                 NodeVariant::TupleLiteral(nodes) | NodeVariant::ListLiteral(nodes) => {
                     let constants = nodes
                         .iter()
-                        .filter_map(|n| inner_eval_as_constant(ctx, n))
+                        .filter_map(|n| n.eval_as_constant_with_context(ctx))
                         .collect::<Vec<_>>();
                     if constants.len() != nodes.len() {
                         None
@@ -61,7 +140,8 @@ impl Node {
                     let constant_items = items
                         .iter()
                         .filter_map(|(n, v)| {
-                            inner_eval_as_constant(ctx, v).map(|c| (n.text.clone(), c))
+                            v.eval_as_constant_with_context(ctx)
+                                .map(|c| (n.text.clone(), c))
                         })
                         .collect::<Vec<_>>();
                     if constant_items.len() != items.len() {
@@ -254,29 +334,25 @@ impl Node {
 
                 // --- Let-in
                 NodeVariant::Let { id, value, r#in } => {
-                    if let Some(value_cst) = inner_eval_as_constant(ctx, value) {
-                        ctx.let_bindings.insert(*id, value_cst);
-                    }
+                    ctx.let_bindings.insert(*id, value);
                     eval_as_constant_variant(ctx, r#in)
                 }
-                NodeVariant::Read(id) => ctx.let_bindings.get(id).map(|c| c.variant.clone()),
-
-                // --- Type checking
-                NodeVariant::InstanceOf { expression, expected_type_tag } => {
-                    match inner_eval_as_constant(ctx, expression) {
-                        Some(cst) => cst
-                            .constant_type()
-                            .map(|t| ConstantValueVariant::Bool(&t.tag == expected_type_tag)),
-                        _ => None,
+                NodeVariant::Read(id) => {
+                    if let Some(n) = ctx.let_bindings.get(id) {
+                        eval_as_constant_variant(ctx, n)
+                    } else {
+                        None
                     }
                 }
+
+                // --- Type checking
+                NodeVariant::InstanceOf { expression, expected_type_tag } => expression
+                    .expr_type_with_context(ctx)
+                    .map(|t| ConstantValueVariant::Bool(&t.tag == expected_type_tag)),
                 NodeVariant::HasTrait { expression, expected_trait } => {
-                    match inner_eval_as_constant(ctx, expression) {
-                        Some(cst) => cst.constant_type().map(|t| {
-                            ConstantValueVariant::Bool(t.traits.iter().any(|t| t == expected_trait))
-                        }),
-                        _ => None,
-                    }
+                    expression.expr_type_with_context(ctx).map(|t| {
+                        ConstantValueVariant::Bool(t.traits.iter().any(|t| t == expected_trait))
+                    })
                 }
 
                 // --- All other nodes cannot be evaluated as constant
@@ -284,94 +360,16 @@ impl Node {
             }
         }
 
-        /// Inner function to evaluate a node as a constant value in an
-        /// evaluation context.
-        fn inner_eval_as_constant(
-            ctx: &mut EvaluationContext,
-            node: &Node,
-        ) -> Option<ConstantValue> {
-            // Get the constant variant from the current node and return the
-            // wrapped constant value if some.
-            eval_as_constant_variant(ctx, node)
-                .map(|variant| ConstantValue { origin_location: node.origin_location, variant })
-        }
-
-        // Call the inner function with an empty context
-        let mut evaluation_context = EvaluationContext { let_bindings: HashMap::new() };
-        inner_eval_as_constant(&mut evaluation_context, self)
-    }
-
-    /// Try to deduct the type of the expression represented by the node.
-    /// Returns [`None`] if this isn't possible to determine it.
-    pub fn expr_type(&self) -> Option<&BuiltinType> {
-        /// Inner typing function to carry a typing context.
-        fn inner_expr_type(ctx: &mut TypingContext, node: &Node) -> Option<&'static BuiltinType> {
-            match &node.variant {
-                // --- Composite expression
-                NodeVariant::InClause { .. } => Some(&bool::TYPE),
-                NodeVariant::BlockExpr { val, .. } => inner_expr_type(ctx, val),
-                NodeVariant::LazyComprehension { .. } => Some(&stream::TYPE),
-
-                // --- Binary operations
-                NodeVariant::LogicBinOp { .. } => Some(&bool::TYPE),
-                NodeVariant::ArithBinOp { .. } => Some(&int::TYPE),
-                NodeVariant::CompBinOp { .. } => Some(&bool::TYPE),
-
-                // --- Unary operations
-                NodeVariant::LogicUnOp { .. } => Some(&bool::TYPE),
-                NodeVariant::ArithUnOp { .. } => Some(&int::TYPE),
-
-                // --- Symbol introductions
-                NodeVariant::InitLocal { .. } => Some(&unit::TYPE),
-                NodeVariant::InitLocalFun { .. } => Some(&unit::TYPE),
-
-                // --- Recursive nodes
-                NodeVariant::InLexicalScope { expr, .. } => inner_expr_type(ctx, expr),
-                NodeVariant::OutsideLexicalScope(expr) => inner_expr_type(ctx, expr),
-
-                // --- Let-in
-                NodeVariant::Let { id, value, r#in } => {
-                    if let Some(value_type) = inner_expr_type(ctx, value) {
-                        ctx.let_bindings.insert(*id, value_type);
-                    }
-                    inner_expr_type(ctx, r#in)
-                }
-                NodeVariant::Read(id) => ctx.let_bindings.get(id).copied(),
-
-                // --- Type checking
-                NodeVariant::InstanceOf { .. } => Some(&bool::TYPE),
-                NodeVariant::HasTrait { .. } => Some(&bool::TYPE),
-
-                // --- Literals
-                NodeVariant::UnitLiteral => Some(&unit::TYPE),
-                NodeVariant::BoolLiteral(_) => Some(&bool::TYPE),
-                NodeVariant::IntLiteral(_) => Some(&int::TYPE),
-                NodeVariant::StringLiteral(_) => Some(&str::TYPE),
-                NodeVariant::PatternLiteral(_) => Some(&pattern::TYPE),
-                NodeVariant::TupleLiteral(_) => Some(&tuple::TYPE),
-                NodeVariant::ListLiteral(_) => Some(&list::TYPE),
-                NodeVariant::ObjectLiteral(_) => Some(&obj::TYPE),
-                NodeVariant::ReadChildUnit(_) => Some(&function::TYPE),
-
-                // --- Default case, no type can be deducted
-                _ => None,
-            }
-        }
-
-        // Create a typing context and call the inner function
-        let mut typing_context = TypingContext { let_bindings: HashMap::new() };
-        inner_expr_type(&mut typing_context, self)
+        // Get the constant variant from the current node and return the
+        // wrapped constant value if some.
+        eval_as_constant_variant(ctx, self)
+            .map(|variant| ConstantValue { origin_location: self.origin_location, variant })
     }
 }
 
 /// Context used to evaluate an expression.
-struct EvaluationContext {
-    let_bindings: HashMap<usize, ConstantValue>,
-}
-
-/// Context used to type an expression.
-struct TypingContext {
-    let_bindings: HashMap<usize, &'static BuiltinType>,
+struct EvaluationContext<'a> {
+    let_bindings: HashMap<usize, &'a Node>,
 }
 
 /// This type represents a constant value evaluated from an intermediate tree.
@@ -546,21 +544,6 @@ impl ConstantValue {
             ConstantValueVariant::String(value) => {
                 Some(TableConstantElement::String(value.clone()))
             }
-            _ => None,
-        }
-    }
-
-    /// Get the type of the constant value if possible.
-    pub fn constant_type(&self) -> Option<&'static BuiltinType> {
-        match self.variant {
-            ConstantValueVariant::Unit => Some(&unit::TYPE),
-            ConstantValueVariant::Bool(_) => Some(&bool::TYPE),
-            ConstantValueVariant::Int(_) => Some(&int::TYPE),
-            ConstantValueVariant::String(_) => Some(&str::TYPE),
-            ConstantValueVariant::Pattern(_) => Some(&pattern::TYPE),
-            ConstantValueVariant::Tuple(_) => Some(&tuple::TYPE),
-            ConstantValueVariant::List(_) => Some(&list::TYPE),
-            ConstantValueVariant::Object(_) => Some(&obj::TYPE),
             _ => None,
         }
     }
