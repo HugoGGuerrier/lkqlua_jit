@@ -14,8 +14,7 @@ use std::{
 };
 
 pub mod compilation;
-pub mod constant_eval;
-pub mod typing;
+pub mod static_evaluation;
 
 const INDENT_STR: &str = "|  ";
 const EMPTY_STR: &str = "[EMPTY]";

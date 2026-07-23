@@ -35,7 +35,7 @@ use crate::{
         compilation::frame::{
             BindingData, ClosingKind, Frame, FrameVariant, SlotRange, UpValueTarget,
         },
-        constant_eval::{ConstantValue, ConstantValueVariant},
+        static_evaluation::{ConstantValue, ConstantValueVariant},
     },
     runtime::{NULL_SINGLETON_GLOBAL_NAME, UNIT_SINGLETON_GLOBAL_NAME},
     sources::SourceSection,
