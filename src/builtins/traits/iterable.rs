@@ -18,7 +18,7 @@ use crate::{
             },
         },
     },
-    runtime::{Function, LkqlParam, RuntimeValue},
+    runtime::{Function, LkqlParam, NULL_SINGLETON_GLOBAL_NAME, RuntimeValue},
 };
 use const_format::formatcp;
 
@@ -32,6 +32,7 @@ pub const TRAIT: BuiltinTrait = BuiltinTrait {
         RequiredField::Property(ITERATOR_FIELD),
         RequiredField::Value("any"),
         RequiredField::Value("all"),
+        RequiredField::Value("find"),
         RequiredField::Property("flatten"),
         RequiredField::Value("filter"),
         RequiredField::Value("map"),
@@ -77,6 +78,28 @@ pub const DEFAULT_ITERABLE_ALL: RuntimeValue = RuntimeValue::Callable(Function::
             next = it()
         end
         return true",
+    ),
+});
+
+/// List of parameters that the "find" method requires.
+pub const CONST_PARAMS: &[LkqlParam] = &[
+    LkqlParam::new("self"),
+    LkqlParam::with_type("predicate", TypeRef::Function),
+];
+
+/// Default implementation of the "find" method on iterable values.
+pub const DEFAULT_ITERABLE_FIND: RuntimeValue = RuntimeValue::Callable(Function::LkqlFunction {
+    params: CONST_PARAMS,
+    body: formatcp!(
+        "local it = self['{ITERATOR_FIELD}']
+        local next = it()
+        while next ~= nil do
+            if predicate(nil, next) then
+                return next
+            end
+            next = it()
+        end
+        return _G['{NULL_SINGLETON_GLOBAL_NAME}']"
     ),
 });
 
