@@ -13,7 +13,7 @@ use crate::{
         LuaState, get_global, get_index, get_length, get_string, get_top, get_type, get_user_data,
         is_nil, pop, push_string, raise_error, to_string,
     },
-    runtime::{ANALYSIS_UNITS_GLOBAL_NAME, CONTEXT_GLOBAL_NAME},
+    runtime::{ANALYSIS_ROOTS_GLOBAL_NAME, ANALYSIS_UNITS_GLOBAL_NAME, CONTEXT_GLOBAL_NAME},
 };
 use std::{ffi::c_int, io::Write, path::Path};
 
@@ -60,6 +60,13 @@ pub extern "C" fn lkql_img(l: LuaState) -> c_int {
 #[unsafe(no_mangle)]
 pub extern "C" fn lkql_units(l: LuaState) -> c_int {
     get_global(l, ANALYSIS_UNITS_GLOBAL_NAME);
+    1
+}
+
+/// The "roots" function.
+#[unsafe(no_mangle)]
+pub extern "C" fn lkql_roots(l: LuaState) -> c_int {
+    get_global(l, ANALYSIS_ROOTS_GLOBAL_NAME);
     1
 }
 

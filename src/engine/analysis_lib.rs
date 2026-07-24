@@ -21,8 +21,8 @@ use crate::{
         push_table, safe_call, set_field, set_global, set_index, set_metatable,
     },
     runtime::{
-        ANALYSIS_CONTEXT_GLOBAL_NAME, ANALYSIS_LIB_GLOBAL_NAME, ANALYSIS_UNITS_GLOBAL_NAME,
-        NULL_SINGLETON_GLOBAL_NAME,
+        ANALYSIS_CONTEXT_GLOBAL_NAME, ANALYSIS_LIB_GLOBAL_NAME, ANALYSIS_ROOTS_GLOBAL_NAME,
+        ANALYSIS_UNITS_GLOBAL_NAME, NULL_SINGLETON_GLOBAL_NAME,
     },
 };
 use std::{cmp::min, ffi::c_int, path::PathBuf};
@@ -134,8 +134,9 @@ impl AnalysisLibrary {
     }
 
     fn parse_sources(l: LuaState, sources: &[PathBuf]) -> Result<(), DiagnosticCollector> {
-        // Create the analysis unit list table
+        // Create analysis unit and root tables
         let array_size = min(sources.len(), i32::MAX as usize) as i32;
+        push_table(l, array_size, 0);
         push_table(l, array_size, 0);
 
         // Parse all requested sources with the analysis context
@@ -146,15 +147,20 @@ impl AnalysisLibrary {
             copy_value(l, -3);
             push_string(l, &file.to_string_lossy());
             Self::pcall(l, 3)?;
-            set_index(l, -3, (i + 1) as i32);
+            get_field(l, -1, "root");
+            set_index(l, -4, (i + 1) as i32);
+            set_index(l, -4, (i + 1) as i32);
         }
         pop(l, 1);
 
-        // Set the "List" type to the analysis unit table
+        // Set the "List" type to both tables
         get_global(l, &list::IMPLEMENTATION.global_field_name());
-        set_metatable(l, -2);
+        copy_value(l, -1);
+        set_metatable(l, -3);
+        set_metatable(l, -3);
 
         // Finally, store analysis unit in the Lua state
+        set_global(l, ANALYSIS_ROOTS_GLOBAL_NAME);
         set_global(l, ANALYSIS_UNITS_GLOBAL_NAME);
         Ok(())
     }

@@ -42,6 +42,9 @@ pub const ANALYSIS_CONTEXT_GLOBAL_NAME: &str = "value@analysis_context";
 /// Name of the global variable where the all analysis units are stored.
 pub const ANALYSIS_UNITS_GLOBAL_NAME: &str = "value@analysis_units";
 
+/// Name of the global variable where all roots of analysis units are stored.
+pub const ANALYSIS_ROOTS_GLOBAL_NAME: &str = "value@analysis_roots";
+
 /// This type represents a runtime value that can be pushed on a Lua state
 /// stack.
 #[derive(Debug, Clone)]

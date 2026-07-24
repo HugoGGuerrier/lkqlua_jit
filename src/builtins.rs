@@ -5,7 +5,7 @@
 
 use crate::{
     builtins::{
-        functions::{lkql_error, lkql_img, lkql_import, lkql_print, lkql_units},
+        functions::{lkql_error, lkql_img, lkql_import, lkql_print, lkql_roots, lkql_units},
         types::{
             BuiltinType, BuiltinTypeRepo,
             pattern::{PATTERN_CONSTRUCTOR, pattern_constructor},
@@ -38,6 +38,7 @@ pub fn get_builtin_bindings() -> HashMap<&'static str, RuntimeValue> {
     b("print", RuntimeValue::Callable(Function::CFunction(lkql_print)));
     b("img", RuntimeValue::Callable(Function::CFunction(lkql_img)));
     b("units", RuntimeValue::Callable(Function::CFunction(lkql_units)));
+    b("roots", RuntimeValue::Callable(Function::CFunction(lkql_roots)));
     b(
         LKQL_IMPORT_GLOBAL_NAME,
         RuntimeValue::Callable(Function::CFunction(lkql_import)),
