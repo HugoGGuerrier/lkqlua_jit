@@ -13,7 +13,7 @@ use crate::{
             TYPE_GLOBAL_FIELD_PREFIX, TypeRef, list,
             stream::{
                 flattening::{self, INNER_ITERATOR_FIELD},
-                map_stream::{self, MAP_FUNCTION_FIELD},
+                mapping::{self, MAP_FUNCTION_FIELD},
             },
         },
     },
@@ -113,9 +113,8 @@ pub const DEFAULT_ITERABLE_MAP: RuntimeValue = RuntimeValue::Callable(Function::
             }},
             _G['{MAP_STREAM_TYPE}']
         )",
-        SOURCE_FIELD = map_stream::SOURCE_ITERATOR_FIELD,
-        MAP_STREAM_TYPE =
-            formatcp!("{TYPE_GLOBAL_FIELD_PREFIX}{}", map_stream::SPECIALIZATION.name)
+        SOURCE_FIELD = mapping::SOURCE_ITERATOR_FIELD,
+        MAP_STREAM_TYPE = formatcp!("{TYPE_GLOBAL_FIELD_PREFIX}{}", mapping::SPECIALIZATION.name)
     ),
 });
 

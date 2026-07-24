@@ -29,7 +29,7 @@ use std::ffi::c_int;
 
 pub mod flattening;
 pub mod lazy_comprehension;
-pub mod map_stream;
+pub mod mapping;
 pub mod selector_list;
 
 /// Name of the internal method used to get the next element of the stream,
@@ -49,7 +49,7 @@ pub const TYPE: BuiltinType = BuiltinType {
         &[
             flattening::SPECIALIZATION,
             lazy_comprehension::SPECIALIZATION,
-            map_stream::SPECIALIZATION,
+            mapping::SPECIALIZATION,
             selector_list::SPECIALIZATION,
         ],
     ),
