@@ -16,7 +16,7 @@ use crate::{
 };
 
 /// Name of the method to get a subobject without provided keys.
-pub const WITHOUT_KEYS_NAME: &str = "without_keys";
+pub const WITHOUT_KEYS_FIELD: &str = "without_keys";
 
 pub const TYPE: BuiltinType = BuiltinType {
     tag: stream::TYPE.tag + 1,
@@ -28,7 +28,7 @@ pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
     name: "Object",
     fields: &[
         IMG_FIELD,
-        (WITHOUT_KEYS_NAME, TypeField::Value(WITHOUT_KEYS)),
+        (WITHOUT_KEYS_FIELD, TypeField::Value(WITHOUT_KEYS)),
     ],
     overloads: &[
         (OverloadTarget::ToString, OBJ_TOSTRING),

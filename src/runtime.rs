@@ -18,32 +18,32 @@ use crate::{
 };
 
 /// Name of the global variable where the "Unit" singleton is stored.
-pub const UNIT_SINGLETON_GLOBAL_NAME: &str = "value@unit";
+pub const G_UNIT: &str = "value@unit";
 
 /// Name of the global variable where the "null" value is stored.
-pub const NULL_SINGLETON_GLOBAL_NAME: &str = "value@null";
+pub const G_NULL: &str = "value@null";
 
 /// Name of the global variable where the importation function is stored.
-pub const LKQL_IMPORT_GLOBAL_NAME: &str = "value@lkql_import";
+pub const G_LKQL_IMPORT: &str = "value@lkql_import";
 
 /// Name of the global variable where the LKQL specific error raising function
 /// is stored.
-pub const LKQL_ERROR_GLOBAL_NAME: &str = "value@lkql_error";
+pub const G_LKQL_ERROR: &str = "value@lkql_error";
 
 /// Name of the global variable where the LKQL execution context is stored.
-pub const CONTEXT_GLOBAL_NAME: &str = "value@execution_context";
+pub const G_EXECUTION_CONTEXT: &str = "value@execution_context";
 
 /// Name of the global variable where the analysis library is stored.
-pub const ANALYSIS_LIB_GLOBAL_NAME: &str = "value@analysis_lib";
+pub const G_ANALYSIS_LIB: &str = "value@analysis_lib";
 
 /// Name of the global variable where the analysis context is stored.
-pub const ANALYSIS_CONTEXT_GLOBAL_NAME: &str = "value@analysis_context";
+pub const G_ANALYSIS_CONTEXT: &str = "value@analysis_context";
 
 /// Name of the global variable where the all analysis units are stored.
-pub const ANALYSIS_UNITS_GLOBAL_NAME: &str = "value@analysis_units";
+pub const G_ANALYSIS_UNITS: &str = "value@analysis_units";
 
 /// Name of the global variable where all roots of analysis units are stored.
-pub const ANALYSIS_ROOTS_GLOBAL_NAME: &str = "value@analysis_roots";
+pub const G_ANALYSIS_ROOTS: &str = "value@analysis_roots";
 
 /// This type represents a runtime value that can be pushed on a Lua state
 /// stack.
@@ -144,7 +144,7 @@ impl Function {
                             if {name} == nil then
                                 {name} = named_value
                             elseif named_value ~= nil then
-                                _G['{LKQL_ERROR_GLOBAL_NAME}'](
+                                _G['{G_LKQL_ERROR}'](
                                     '{}',
                                     {{'{name}'}}
                                 )
@@ -167,7 +167,7 @@ impl Function {
                             .as_ref()
                             .map(RuntimeValue::lua_literal)
                             .unwrap_or(format!(
-                                "_G['{LKQL_ERROR_GLOBAL_NAME}'](
+                                "_G['{G_LKQL_ERROR}'](
                                     '{}',
                                     {{'{name}'}}
                                 )",
@@ -213,7 +213,7 @@ impl Function {
                             format!(
                                 "local __types = {name}['{TYPE_TAGS_FIELD}']
                                 if not ({checking_expr}) then
-                                    _G['{LKQL_ERROR_GLOBAL_NAME}'](
+                                    _G['{G_LKQL_ERROR}'](
                                         '{error_id}',
                                         {{
                                             '{expected_name}',

@@ -37,7 +37,7 @@ use crate::{
         },
         static_evaluation::{ConstantValue, ConstantValueVariant},
     },
-    runtime::{NULL_SINGLETON_GLOBAL_NAME, UNIT_SINGLETON_GLOBAL_NAME},
+    runtime::{G_NULL, G_UNIT},
     sources::SourceSection,
 };
 use core::slice;
@@ -852,24 +852,14 @@ impl Node {
                 ctx.frame.borrow_mut().init_local(&symbol.text, birth_label);
 
                 // Finally, set the result to unit
-                emit_global_read(
-                    ctx,
-                    Some(&self.origin_location),
-                    result_slot,
-                    UNIT_SINGLETON_GLOBAL_NAME,
-                );
+                emit_global_read(ctx, Some(&self.origin_location), result_slot, G_UNIT);
             }
             NodeVariant::InitLocalFun(child_index) => {
                 // Compile the child unit
                 Self::compile_child_unit(ctx, &self.origin_location, *child_index as usize);
 
                 // Set the result to unit
-                emit_global_read(
-                    ctx,
-                    Some(&self.origin_location),
-                    result_slot,
-                    UNIT_SINGLETON_GLOBAL_NAME,
-                );
+                emit_global_read(ctx, Some(&self.origin_location), result_slot, G_UNIT);
             }
 
             // --- Symbol accesses
@@ -1802,7 +1792,7 @@ impl Node {
     fn compile_block_body(ctx: &mut CompilationContext, working_slot: u8, body: &[Node]) {
         // Get the unit value to compare it to element result
         let unit_tmp = ctx.frame.borrow_mut().get_slot();
-        emit_global_read(ctx, None, unit_tmp, UNIT_SINGLETON_GLOBAL_NAME);
+        emit_global_read(ctx, None, unit_tmp, G_UNIT);
 
         // Compile the body of the block
         for body_elem in body {
@@ -1863,21 +1853,11 @@ impl ConstantValue {
                 true
             }
             ConstantValueVariant::Null => {
-                emit_global_read(
-                    ctx,
-                    Some(&self.origin_location),
-                    result_slot,
-                    NULL_SINGLETON_GLOBAL_NAME,
-                );
+                emit_global_read(ctx, Some(&self.origin_location), result_slot, G_NULL);
                 true
             }
             ConstantValueVariant::Unit => {
-                emit_global_read(
-                    ctx,
-                    Some(&self.origin_location),
-                    result_slot,
-                    UNIT_SINGLETON_GLOBAL_NAME,
-                );
+                emit_global_read(ctx, Some(&self.origin_location), result_slot, G_UNIT);
                 true
             }
             ConstantValueVariant::Bool(value) => {

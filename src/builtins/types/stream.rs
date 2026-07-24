@@ -9,10 +9,8 @@ use crate::{
         traits::{
             indexable,
             iterable::{
-                self, DEFAULT_ITERABLE_ALL, DEFAULT_ITERABLE_ANY, DEFAULT_ITERABLE_FILTER,
-                DEFAULT_ITERABLE_FIND, DEFAULT_ITERABLE_FLAT_MAP, DEFAULT_ITERABLE_FLATTEN,
-                DEFAULT_ITERABLE_MAP, DEFAULT_ITERABLE_REDUCE, DEFAULT_ITERABLE_TO_LIST,
-                ITERATOR_FIELD,
+                self, DEFAULT_ALL, DEFAULT_ANY, DEFAULT_FILTER, DEFAULT_FIND, DEFAULT_FLAT_MAP,
+                DEFAULT_FLATTEN, DEFAULT_MAP, DEFAULT_REDUCE, DEFAULT_TO_LIST, ITERATOR_FIELD,
             },
             sized,
         },
@@ -23,7 +21,7 @@ use crate::{
     },
     errors::HEAD_OF_EMPTY_STEAM,
     lua::{LuaState, push_string},
-    runtime::{Function, LKQL_ERROR_GLOBAL_NAME, LkqlParam, RuntimeValue},
+    runtime::{Function, G_LKQL_ERROR, LkqlParam, RuntimeValue},
 };
 use const_format::formatcp;
 use std::ffi::c_int;
@@ -64,15 +62,15 @@ const BASE_IMPLEMENTATION: TypeImplementation = TypeImplementation {
         IMG_FIELD,
         ("length", TypeField::Property(LENGTH)),
         (ITERATOR_FIELD, TypeField::Property(ITERATOR)),
-        ("any", TypeField::Value(DEFAULT_ITERABLE_ANY)),
-        ("all", TypeField::Value(DEFAULT_ITERABLE_ALL)),
-        ("find", TypeField::Value(DEFAULT_ITERABLE_FIND)),
-        ("flatten", TypeField::Property(DEFAULT_ITERABLE_FLATTEN)),
-        ("filter", TypeField::Value(DEFAULT_ITERABLE_FILTER)),
-        ("map", TypeField::Value(DEFAULT_ITERABLE_MAP)),
-        ("flat_map", TypeField::Value(DEFAULT_ITERABLE_FLAT_MAP)),
-        ("reduce", TypeField::Value(DEFAULT_ITERABLE_REDUCE)),
-        ("to_list", TypeField::Property(DEFAULT_ITERABLE_TO_LIST)),
+        ("any", TypeField::Value(DEFAULT_ANY)),
+        ("all", TypeField::Value(DEFAULT_ALL)),
+        ("find", TypeField::Value(DEFAULT_FIND)),
+        ("flatten", TypeField::Property(DEFAULT_FLATTEN)),
+        ("filter", TypeField::Value(DEFAULT_FILTER)),
+        ("map", TypeField::Value(DEFAULT_MAP)),
+        ("flat_map", TypeField::Value(DEFAULT_FLAT_MAP)),
+        ("reduce", TypeField::Value(DEFAULT_REDUCE)),
+        ("to_list", TypeField::Property(DEFAULT_TO_LIST)),
         ("head", TypeField::Property(HEAD)),
         ("head_or", TypeField::Value(HEAD_OR)),
     ],
@@ -122,7 +120,7 @@ const ITERATOR: Function = Function::LuaFunction(
 /// Implementation of the "head" method.
 const HEAD: Function = Function::LuaFunction(formatcp!(
     "function (self)
-        return self[1] or _G['{LKQL_ERROR_GLOBAL_NAME}']('{}')
+        return self[1] or _G['{G_LKQL_ERROR}']('{}')
     end",
     HEAD_OF_EMPTY_STEAM.id,
 ));

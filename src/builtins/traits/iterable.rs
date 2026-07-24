@@ -10,7 +10,7 @@ use crate::{
     builtins::{
         traits::{BuiltinTrait, RequiredField},
         types::{
-            TYPE_GLOBAL_FIELD_PREFIX, TypeRef, list,
+            TYPE_FIELD_PREFIX, TypeRef, list,
             stream::{
                 filtering::{self, PREDICATE_FUNCTION_FIELD},
                 flattening::{self, INNER_ITERATOR_FIELD},
@@ -18,7 +18,7 @@ use crate::{
             },
         },
     },
-    runtime::{Function, LkqlParam, NULL_SINGLETON_GLOBAL_NAME, RuntimeValue},
+    runtime::{Function, G_NULL, LkqlParam, RuntimeValue},
 };
 use const_format::formatcp;
 
@@ -50,7 +50,7 @@ pub const ANY_AND_ALL_PARAMS: &[LkqlParam] = &[
 ];
 
 /// Default implementation of the "any" method on iterable values.
-pub const DEFAULT_ITERABLE_ANY: RuntimeValue = RuntimeValue::Callable(Function::LkqlFunction {
+pub const DEFAULT_ANY: RuntimeValue = RuntimeValue::Callable(Function::LkqlFunction {
     params: ANY_AND_ALL_PARAMS,
     body: formatcp!(
         "local it = self['{ITERATOR_FIELD}']
@@ -66,7 +66,7 @@ pub const DEFAULT_ITERABLE_ANY: RuntimeValue = RuntimeValue::Callable(Function::
 });
 
 /// Default implementation of the "all" method on iterable values.
-pub const DEFAULT_ITERABLE_ALL: RuntimeValue = RuntimeValue::Callable(Function::LkqlFunction {
+pub const DEFAULT_ALL: RuntimeValue = RuntimeValue::Callable(Function::LkqlFunction {
     params: ANY_AND_ALL_PARAMS,
     body: formatcp!(
         "local it = self['{ITERATOR_FIELD}']
@@ -82,14 +82,14 @@ pub const DEFAULT_ITERABLE_ALL: RuntimeValue = RuntimeValue::Callable(Function::
 });
 
 /// List of parameters that the "find" method requires.
-pub const CONST_PARAMS: &[LkqlParam] = &[
+pub const FIND_PARAMS: &[LkqlParam] = &[
     LkqlParam::new("self"),
     LkqlParam::with_type("predicate", TypeRef::Function),
 ];
 
 /// Default implementation of the "find" method on iterable values.
-pub const DEFAULT_ITERABLE_FIND: RuntimeValue = RuntimeValue::Callable(Function::LkqlFunction {
-    params: CONST_PARAMS,
+pub const DEFAULT_FIND: RuntimeValue = RuntimeValue::Callable(Function::LkqlFunction {
+    params: FIND_PARAMS,
     body: formatcp!(
         "local it = self['{ITERATOR_FIELD}']
         local next = it()
@@ -99,12 +99,12 @@ pub const DEFAULT_ITERABLE_FIND: RuntimeValue = RuntimeValue::Callable(Function:
             end
             next = it()
         end
-        return _G['{NULL_SINGLETON_GLOBAL_NAME}']"
+        return _G['{G_NULL}']"
     ),
 });
 
 /// Default implementation of the "flatten" property on iterable values.
-pub const DEFAULT_ITERABLE_FLATTEN: Function = Function::LuaFunction(formatcp!(
+pub const DEFAULT_FLATTEN: Function = Function::LuaFunction(formatcp!(
     "function (self)
         local it = self['{ITERATOR_FIELD}']
         local inner_it = it()['{ITERATOR_FIELD}']
@@ -117,8 +117,7 @@ pub const DEFAULT_ITERABLE_FLATTEN: Function = Function::LuaFunction(formatcp!(
         )
     end",
     SOURCE_FIELD = flattening::SOURCE_ITERATOR_FIELD,
-    FLATTEN_STREAM_TYPE =
-        formatcp!("{TYPE_GLOBAL_FIELD_PREFIX}{}", flattening::SPECIALIZATION.name)
+    FLATTEN_STREAM_TYPE = formatcp!("{TYPE_FIELD_PREFIX}{}", flattening::SPECIALIZATION.name)
 ));
 
 /// List of parameters that the "filter" method requires.
@@ -128,7 +127,7 @@ pub const FILTER_PARAMS: &[LkqlParam] = &[
 ];
 
 /// Default implementation of the "filter" method on iterable values.
-pub const DEFAULT_ITERABLE_FILTER: RuntimeValue = RuntimeValue::Callable(Function::LkqlFunction {
+pub const DEFAULT_FILTER: RuntimeValue = RuntimeValue::Callable(Function::LkqlFunction {
     params: FILTER_PARAMS,
     body: formatcp!(
         "return setmetatable(
@@ -139,8 +138,7 @@ pub const DEFAULT_ITERABLE_FILTER: RuntimeValue = RuntimeValue::Callable(Functio
             _G['{FILTER_STREAM_TYPE}']
         )",
         SOURCE_FIELD = filtering::SOURCE_ITERATOR_FIELD,
-        FILTER_STREAM_TYPE =
-            formatcp!("{TYPE_GLOBAL_FIELD_PREFIX}{}", filtering::SPECIALIZATION.name)
+        FILTER_STREAM_TYPE = formatcp!("{TYPE_FIELD_PREFIX}{}", filtering::SPECIALIZATION.name)
     ),
 });
 
@@ -151,7 +149,7 @@ pub const MAP_PARAMS: &[LkqlParam] = &[
 ];
 
 /// Default implementation of the "map" method on iterable values.
-pub const DEFAULT_ITERABLE_MAP: RuntimeValue = RuntimeValue::Callable(Function::LkqlFunction {
+pub const DEFAULT_MAP: RuntimeValue = RuntimeValue::Callable(Function::LkqlFunction {
     params: MAP_PARAMS,
     body: formatcp!(
         "return setmetatable(
@@ -162,7 +160,7 @@ pub const DEFAULT_ITERABLE_MAP: RuntimeValue = RuntimeValue::Callable(Function::
             _G['{MAP_STREAM_TYPE}']
         )",
         SOURCE_FIELD = mapping::SOURCE_ITERATOR_FIELD,
-        MAP_STREAM_TYPE = formatcp!("{TYPE_GLOBAL_FIELD_PREFIX}{}", mapping::SPECIALIZATION.name)
+        MAP_STREAM_TYPE = formatcp!("{TYPE_FIELD_PREFIX}{}", mapping::SPECIALIZATION.name)
     ),
 });
 
@@ -173,11 +171,10 @@ pub const FLAT_MAP_PARAMS: &[LkqlParam] = &[
 ];
 
 /// Default implementation of the "flat_map" method on iterable values.
-pub const DEFAULT_ITERABLE_FLAT_MAP: RuntimeValue =
-    RuntimeValue::Callable(Function::LkqlFunction {
-        params: FLAT_MAP_PARAMS,
-        body: "return self.map(nil, self, fn).flatten",
-    });
+pub const DEFAULT_FLAT_MAP: RuntimeValue = RuntimeValue::Callable(Function::LkqlFunction {
+    params: FLAT_MAP_PARAMS,
+    body: "return self.map(nil, self, fn).flatten",
+});
 
 /// List of parameters that the "reduce" method requires.
 pub const REDUCE_PARAMS: &[LkqlParam] = &[
@@ -187,7 +184,7 @@ pub const REDUCE_PARAMS: &[LkqlParam] = &[
 ];
 
 /// Default implementation of the "reduce" method on iterable values.
-pub const DEFAULT_ITERABLE_REDUCE: RuntimeValue = RuntimeValue::Callable(Function::LkqlFunction {
+pub const DEFAULT_REDUCE: RuntimeValue = RuntimeValue::Callable(Function::LkqlFunction {
     params: REDUCE_PARAMS,
     body: formatcp!(
         "local it = self['{ITERATOR_FIELD}']
@@ -202,7 +199,7 @@ pub const DEFAULT_ITERABLE_REDUCE: RuntimeValue = RuntimeValue::Callable(Functio
 });
 
 /// Default implementation of the "to_list" property on iterable values.
-pub const DEFAULT_ITERABLE_TO_LIST: Function = Function::LuaFunction(formatcp!(
+pub const DEFAULT_TO_LIST: Function = Function::LuaFunction(formatcp!(
     "function (self)
         local it = self['{ITERATOR_FIELD}']
         local next = it()
@@ -213,5 +210,5 @@ pub const DEFAULT_ITERABLE_TO_LIST: Function = Function::LuaFunction(formatcp!(
         end
         return res
     end",
-    LIST_TYPE = formatcp!("{TYPE_GLOBAL_FIELD_PREFIX}{}", list::IMPLEMENTATION.name)
+    LIST_TYPE = formatcp!("{TYPE_FIELD_PREFIX}{}", list::IMPLEMENTATION.name)
 ));

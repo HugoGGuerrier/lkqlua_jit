@@ -29,7 +29,7 @@ use crate::{
         MiscOperatorVariant, Node, NodeVariant,
     },
     lowering::{LoweringContext, unescape_string},
-    runtime::LKQL_IMPORT_GLOBAL_NAME,
+    runtime::G_LKQL_IMPORT,
     sources::{Location, SourceId, SourceSection},
 };
 use liblkqllang::{BaseFunction, LkqlNode};
@@ -344,7 +344,7 @@ impl Node {
                 // the module local name.
                 let module_value = if module_files.len() == 1 {
                     NodeVariant::CallExpr {
-                        callee: bn(l, NodeVariant::ReadSymbol(id_str(l, LKQL_IMPORT_GLOBAL_NAME))),
+                        callee: bn(l, NodeVariant::ReadSymbol(id_str(l, G_LKQL_IMPORT))),
                         positional_args: vec![n(
                             module_name.origin_location,
                             NodeVariant::StringLiteral(String::from(
@@ -983,7 +983,7 @@ impl Node {
                                     l,
                                     NodeVariant::DottedExpr {
                                         prefix: pattern_ref.clone(),
-                                        suffix: id_str(l, types::pattern::IS_MATCH_NAME),
+                                        suffix: id_str(l, types::pattern::IS_MATCH_FIELD),
                                     },
                                 ),
                                 positional_args: vec![*pattern_ref, *matched_value_ref],
@@ -1177,7 +1177,7 @@ impl Node {
                         l,
                         NodeVariant::DottedExpr {
                             prefix: matched_value_ref.clone(),
-                            suffix: id_str(l, types::list::SUBLIST_NAME),
+                            suffix: id_str(l, types::list::SUBLIST_FIELD),
                         },
                     );
                     let sublist_call = bn(
@@ -1288,7 +1288,7 @@ impl Node {
                     l,
                     NodeVariant::DottedExpr {
                         prefix: matched_value_ref.clone(),
-                        suffix: id_str(l, types::obj::WITHOUT_KEYS_NAME),
+                        suffix: id_str(l, types::obj::WITHOUT_KEYS_FIELD),
                     },
                 );
                 let without_keys_call = bn(

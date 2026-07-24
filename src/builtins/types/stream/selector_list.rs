@@ -12,7 +12,7 @@ use crate::{
         stream::INTERNAL_NEXT_FIELD, unit,
     },
     errors::WRONG_TYPE,
-    runtime::{Function, LKQL_ERROR_GLOBAL_NAME, RuntimeValue},
+    runtime::{Function, G_LKQL_ERROR, RuntimeValue},
 };
 
 /// Field that contains the value to recurse on.
@@ -154,7 +154,7 @@ const NEXT: RuntimeValue = RuntimeValue::Callable(Function::LuaFunction(formatcp
                 next['{TYPE_TAGS_FIELD}'][{UNIT_TYPE_TAG}] or
                 (next['@entity'] and next['@entity'].node == nil)
             ) then
-                _G['{LKQL_ERROR_GLOBAL_NAME}'](
+                _G['{G_LKQL_ERROR}'](
                     '{WRONG_TYPE_ID}',
                     {{
                         'RecExpr',

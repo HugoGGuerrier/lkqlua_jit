@@ -7,11 +7,10 @@ use crate::{
         traits::{
             indexable,
             iterable::{
-                self, ANY_AND_ALL_PARAMS, DEFAULT_ITERABLE_FILTER, DEFAULT_ITERABLE_FIND,
-                DEFAULT_ITERABLE_FLAT_MAP, DEFAULT_ITERABLE_FLATTEN, DEFAULT_ITERABLE_MAP,
-                ITERATOR_FIELD, REDUCE_PARAMS,
+                self, ANY_AND_ALL_PARAMS, DEFAULT_FILTER, DEFAULT_FIND, DEFAULT_FLAT_MAP,
+                DEFAULT_FLATTEN, DEFAULT_MAP, ITERATOR_FIELD, REDUCE_PARAMS,
             },
-            sized::{self, DEFAULT_SIZED_LENGTH},
+            sized::{self, DEFAULT_LENGTH},
         },
         types::{
             BuiltinType, IMG_FIELD, OverloadTarget, TYPE_NAME_FIELD, TYPE_TAGS_FIELD, TypeField,
@@ -19,7 +18,7 @@ use crate::{
         },
     },
     errors::INVALID_OPERATION,
-    runtime::{Function, LKQL_ERROR_GLOBAL_NAME, LkqlParam, RuntimeValue},
+    runtime::{Function, G_LKQL_ERROR, LkqlParam, RuntimeValue},
 };
 use const_format::formatcp;
 
@@ -28,7 +27,7 @@ const TYPE_TAG: i32 = tuple::TYPE.tag + 1;
 const TYPE_NAME: &str = "List";
 
 /// Name of the method to get a sublist from a list.
-pub const SUBLIST_NAME: &str = "sublist";
+pub const SUBLIST_FIELD: &str = "sublist";
 
 pub const TYPE: BuiltinType = BuiltinType {
     tag: TYPE_TAG,
@@ -40,18 +39,18 @@ pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
     name: TYPE_NAME,
     fields: &[
         IMG_FIELD,
-        ("length", TypeField::Property(DEFAULT_SIZED_LENGTH)),
+        ("length", TypeField::Property(DEFAULT_LENGTH)),
         (ITERATOR_FIELD, TypeField::Property(ITERATOR)),
         ("any", TypeField::Value(ANY)),
         ("all", TypeField::Value(ALL)),
-        ("find", TypeField::Value(DEFAULT_ITERABLE_FIND)),
-        ("flatten", TypeField::Property(DEFAULT_ITERABLE_FLATTEN)),
-        ("filter", TypeField::Value(DEFAULT_ITERABLE_FILTER)),
-        ("map", TypeField::Value(DEFAULT_ITERABLE_MAP)),
-        ("flat_map", TypeField::Value(DEFAULT_ITERABLE_FLAT_MAP)),
+        ("find", TypeField::Value(DEFAULT_FIND)),
+        ("flatten", TypeField::Property(DEFAULT_FLATTEN)),
+        ("filter", TypeField::Value(DEFAULT_FILTER)),
+        ("map", TypeField::Value(DEFAULT_MAP)),
+        ("flat_map", TypeField::Value(DEFAULT_FLAT_MAP)),
         ("reduce", TypeField::Value(REDUCE)),
         ("to_list", TypeField::Property(TO_LIST)),
-        (SUBLIST_NAME, TypeField::Value(SUBLIST)),
+        (SUBLIST_FIELD, TypeField::Value(SUBLIST)),
     ],
     overloads: &[
         (OverloadTarget::ToString, LIST_TOSTRING),
@@ -171,7 +170,7 @@ const LIST_CONCAT: Function = Function::LuaFunction(formatcp!(
     "function (self, other)
         -- Start by checking types
         if not other['{TYPE_TAGS_FIELD}'][{TYPE_TAG}] then
-            _G['{LKQL_ERROR_GLOBAL_NAME}'](
+            _G['{G_LKQL_ERROR}'](
                 '{}',
                 {{
                     '&',

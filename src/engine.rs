@@ -16,7 +16,7 @@ use crate::{
         load_buffer, new_lua_state, open_lua_libs, pop, push_c_function, push_string,
         push_user_data, remove_value, safe_call, set_global, to_string,
     },
-    runtime::CONTEXT_GLOBAL_NAME,
+    runtime::G_EXECUTION_CONTEXT,
     sources::SourceSection,
 };
 use regex::Regex;
@@ -83,7 +83,7 @@ impl Engine {
 
         // Place the execution context in the global Lua table
         push_user_data(self.lua_state, ctx);
-        set_global(self.lua_state, CONTEXT_GLOBAL_NAME);
+        set_global(self.lua_state, G_EXECUTION_CONTEXT);
 
         // Set the error handler
         push_c_function(self.lua_state, handle_error);
@@ -251,7 +251,7 @@ extern "C" fn handle_error(l: LuaState) -> c_int {
             };
 
         // Get the execution context
-        get_global(l, CONTEXT_GLOBAL_NAME);
+        get_global(l, G_EXECUTION_CONTEXT);
         let execution_context = get_user_data::<ExecutionContext>(l, get_top(l)).unwrap();
         pop(l, 1);
 

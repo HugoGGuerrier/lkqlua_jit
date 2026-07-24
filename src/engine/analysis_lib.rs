@@ -20,10 +20,7 @@ use crate::{
         get_string, load_lua_file, pop, push_bool, push_c_function, push_nil, push_string,
         push_table, safe_call, set_field, set_global, set_index, set_metatable,
     },
-    runtime::{
-        ANALYSIS_CONTEXT_GLOBAL_NAME, ANALYSIS_LIB_GLOBAL_NAME, ANALYSIS_ROOTS_GLOBAL_NAME,
-        ANALYSIS_UNITS_GLOBAL_NAME, NULL_SINGLETON_GLOBAL_NAME,
-    },
+    runtime::{G_ANALYSIS_CONTEXT, G_ANALYSIS_LIB, G_ANALYSIS_ROOTS, G_ANALYSIS_UNITS, G_NULL},
 };
 use std::{cmp::min, ffi::c_int, path::PathBuf};
 
@@ -61,7 +58,7 @@ impl AnalysisLibrary {
         // Load the Lua analysis library
         load_lua_file(l, &module_file);
         Self::pcall(l, 0)?;
-        set_global(l, ANALYSIS_LIB_GLOBAL_NAME);
+        set_global(l, G_ANALYSIS_LIB);
 
         // Initialize the analysis context
         Self::create_analysis_context(l)?;
@@ -70,7 +67,7 @@ impl AnalysisLibrary {
         Self::parse_sources(l, &config.files_to_analyze)?;
 
         // Add the "img" property to all constant analysis library types
-        get_global(l, ANALYSIS_LIB_GLOBAL_NAME);
+        get_global(l, G_ANALYSIS_LIB);
         for lua_type in [
             "BigInt",
             "SourceLocation",
@@ -124,11 +121,11 @@ impl AnalysisLibrary {
     /// Internal helper to create a new analysis context from the loaded
     /// analysis library and store it in the Lua state.
     fn create_analysis_context(l: LuaState) -> Result<(), DiagnosticCollector> {
-        get_global(l, ANALYSIS_LIB_GLOBAL_NAME);
+        get_global(l, G_ANALYSIS_LIB);
         get_field(l, -1, "AnalysisContext");
         get_field(l, -1, "create");
         Self::pcall(l, 0)?;
-        set_global(l, ANALYSIS_CONTEXT_GLOBAL_NAME);
+        set_global(l, G_ANALYSIS_CONTEXT);
         pop(l, 2);
         Ok(())
     }
@@ -140,7 +137,7 @@ impl AnalysisLibrary {
         push_table(l, array_size, 0);
 
         // Parse all requested sources with the analysis context
-        get_global(l, ANALYSIS_CONTEXT_GLOBAL_NAME);
+        get_global(l, G_ANALYSIS_CONTEXT);
         for (i, file) in sources.iter().enumerate() {
             get_field(l, -1, "get_unit_from_file");
             push_nil(l);
@@ -160,8 +157,8 @@ impl AnalysisLibrary {
         set_metatable(l, -3);
 
         // Finally, store analysis unit in the Lua state
-        set_global(l, ANALYSIS_ROOTS_GLOBAL_NAME);
-        set_global(l, ANALYSIS_UNITS_GLOBAL_NAME);
+        set_global(l, G_ANALYSIS_ROOTS);
+        set_global(l, G_ANALYSIS_UNITS);
         Ok(())
     }
 
@@ -169,7 +166,7 @@ impl AnalysisLibrary {
     /// defined by the analysis library.
     fn get_struct_types(l: LuaState) -> Vec<String> {
         // Get all struct types in Lua
-        get_global(l, ANALYSIS_LIB_GLOBAL_NAME);
+        get_global(l, G_ANALYSIS_LIB);
         get_field(l, -1, "struct_types");
 
         // Transform the Lua table into a Rust vector
@@ -191,7 +188,7 @@ impl AnalysisLibrary {
     /// Get all node types defined by the loaded analysis library.
     fn get_node_types(l: LuaState, first_tag: i32) -> NodeTypeRepo {
         // Get all node types in Lua
-        get_global(l, ANALYSIS_LIB_GLOBAL_NAME);
+        get_global(l, G_ANALYSIS_LIB);
         get_field(l, -1, "node_types");
 
         // Then create a vector of all node type info
@@ -254,7 +251,7 @@ impl AnalysisLibrary {
         implementation: &TypeImplementation,
     ) {
         // Get the Lua type
-        get_global(l, ANALYSIS_LIB_GLOBAL_NAME);
+        get_global(l, G_ANALYSIS_LIB);
         get_field(l, -1, lua_type);
 
         // Fill constant fields
@@ -305,7 +302,7 @@ impl AnalysisLibrary {
     /// loaded analysis library.
     fn init_node_type(l: LuaState, node_type: &NodeType) {
         // Get the Lua type
-        get_global(l, ANALYSIS_LIB_GLOBAL_NAME);
+        get_global(l, G_ANALYSIS_LIB);
         get_field(l, -1, &node_type.name);
 
         // Fill type tags
@@ -339,21 +336,21 @@ impl AnalysisLibrary {
 
     fn register_null_value(l: LuaState) {
         // Get the name of the root node type
-        get_global(l, ANALYSIS_LIB_GLOBAL_NAME);
+        get_global(l, G_ANALYSIS_LIB);
         get_field(l, -1, "root_node_type");
         let root_node_type = get_string(l, -1).unwrap();
 
         // Then get the default value of the root node type
         get_field(l, -2, root_node_type);
         get_field(l, -1, "_default");
-        set_global(l, NULL_SINGLETON_GLOBAL_NAME);
+        set_global(l, G_NULL);
         pop(l, 3);
     }
 
     /// Internal helper to setup the error formatting function in the loaded
     /// analysis library.
     fn register_error_formatter(l: LuaState) {
-        get_global(l, ANALYSIS_LIB_GLOBAL_NAME);
+        get_global(l, G_ANALYSIS_LIB);
         get_field(l, -1, "Exception");
         push_c_function(l, analysis_lib_error_formatter);
         set_field(l, -2, "format_exception_message");

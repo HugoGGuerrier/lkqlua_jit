@@ -4,7 +4,7 @@
 
 use crate::{
     builtins::{
-        traits::{self, sized::DEFAULT_SIZED_LENGTH},
+        traits::{self, sized::DEFAULT_LENGTH},
         types::{
             BuiltinType, IMG_FIELD, TYPE_TAGS_FIELD, TypeField, TypeImplementation,
             TypeImplementationKind, TypeRef, int,
@@ -27,7 +27,7 @@ const IMPLEMENTATION: TypeImplementation = TypeImplementation {
     name: "Str",
     fields: &[
         IMG_FIELD,
-        ("length", TypeField::Property(DEFAULT_SIZED_LENGTH)),
+        ("length", TypeField::Property(DEFAULT_LENGTH)),
         ("base_name", TypeField::Property(BASE_NAME)),
         ("starts_with", TypeField::Value(STARTS_WITH)),
         ("ends_with", TypeField::Value(ENDS_WITH)),

@@ -12,10 +12,7 @@ use crate::{
         },
     },
     lua::{LuaState, get_global, push_table, set_metatable},
-    runtime::{
-        Function, LKQL_ERROR_GLOBAL_NAME, LKQL_IMPORT_GLOBAL_NAME, RuntimeValue,
-        UNIT_SINGLETON_GLOBAL_NAME,
-    },
+    runtime::{Function, G_LKQL_ERROR, G_LKQL_IMPORT, G_UNIT, RuntimeValue},
 };
 use std::collections::HashMap;
 
@@ -39,15 +36,9 @@ pub fn get_builtin_bindings() -> HashMap<&'static str, RuntimeValue> {
     b("img", RuntimeValue::Callable(Function::CFunction(lkql_img)));
     b("units", RuntimeValue::Callable(Function::CFunction(lkql_units)));
     b("roots", RuntimeValue::Callable(Function::CFunction(lkql_roots)));
-    b(
-        LKQL_IMPORT_GLOBAL_NAME,
-        RuntimeValue::Callable(Function::CFunction(lkql_import)),
-    );
-    b(
-        LKQL_ERROR_GLOBAL_NAME,
-        RuntimeValue::Callable(Function::CFunction(lkql_error)),
-    );
-    b(UNIT_SINGLETON_GLOBAL_NAME, RuntimeValue::FromBuilder(create_unit_value));
+    b(G_LKQL_IMPORT, RuntimeValue::Callable(Function::CFunction(lkql_import)));
+    b(G_LKQL_ERROR, RuntimeValue::Callable(Function::CFunction(lkql_error)));
+    b(G_UNIT, RuntimeValue::FromBuilder(create_unit_value));
 
     // Then, return the result
     res

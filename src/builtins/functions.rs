@@ -5,7 +5,7 @@
 use crate::{
     ExecutionContext,
     builtins::{
-        UNIT_SINGLETON_GLOBAL_NAME,
+        G_UNIT,
         utils::{get_bool_param, get_param, get_string_param},
     },
     errors::{DEPENDENCY_CYCLE, ErrorInstance, ErrorInstanceArg},
@@ -13,7 +13,7 @@ use crate::{
         LuaState, get_global, get_index, get_length, get_string, get_top, get_type, get_user_data,
         is_nil, pop, push_string, raise_error, to_string,
     },
-    runtime::{ANALYSIS_ROOTS_GLOBAL_NAME, ANALYSIS_UNITS_GLOBAL_NAME, CONTEXT_GLOBAL_NAME},
+    runtime::{G_ANALYSIS_ROOTS, G_ANALYSIS_UNITS, G_EXECUTION_CONTEXT},
 };
 use std::{ffi::c_int, io::Write, path::Path};
 
@@ -26,7 +26,7 @@ pub extern "C" fn lkql_print(l: LuaState) -> c_int {
     let new_line = get_bool_param(l, param_count, 2, "new_line", Some(true));
 
     // Get the current execution context
-    get_global(l, CONTEXT_GLOBAL_NAME);
+    get_global(l, G_EXECUTION_CONTEXT);
     let ctx = get_user_data::<ExecutionContext>(l, get_top(l)).unwrap();
     pop(l, 1);
 
@@ -38,7 +38,7 @@ pub extern "C" fn lkql_print(l: LuaState) -> c_int {
     }
 
     // Return the LKQL unit value
-    get_global(l, UNIT_SINGLETON_GLOBAL_NAME);
+    get_global(l, G_UNIT);
     1
 }
 
@@ -59,14 +59,14 @@ pub extern "C" fn lkql_img(l: LuaState) -> c_int {
 /// The "units" function.
 #[unsafe(no_mangle)]
 pub extern "C" fn lkql_units(l: LuaState) -> c_int {
-    get_global(l, ANALYSIS_UNITS_GLOBAL_NAME);
+    get_global(l, G_ANALYSIS_UNITS);
     1
 }
 
 /// The "roots" function.
 #[unsafe(no_mangle)]
 pub extern "C" fn lkql_roots(l: LuaState) -> c_int {
-    get_global(l, ANALYSIS_ROOTS_GLOBAL_NAME);
+    get_global(l, G_ANALYSIS_ROOTS);
     1
 }
 
@@ -78,7 +78,7 @@ pub extern "C" fn lkql_import(l: LuaState) -> c_int {
     let module_file = Path::new(get_string_param(l, param_count, 1, "module_file", None));
 
     // Get the current execution context
-    get_global(l, CONTEXT_GLOBAL_NAME);
+    get_global(l, G_EXECUTION_CONTEXT);
     let ctx = get_user_data::<ExecutionContext>(l, get_top(l)).unwrap();
     pop(l, 1);
 

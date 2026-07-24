@@ -12,7 +12,7 @@ use crate::{
         LuaState, call, copy_value, debug_get_func_id, get_field, get_global, get_string, get_top,
         get_user_data, load_lua_code, pop, push_string, set_metatable,
     },
-    runtime::{CONTEXT_GLOBAL_NAME, Function},
+    runtime::{Function, G_EXECUTION_CONTEXT},
 };
 use std::ffi::c_int;
 
@@ -56,7 +56,7 @@ extern "C" fn function_tostring(l: LuaState) -> c_int {
         // Ensure the source name is actually a source id
         if let Some(Ok(source_id)) = get_string(l, -1).map(str::parse::<usize>) {
             // Get the current execution context
-            get_global(l, CONTEXT_GLOBAL_NAME);
+            get_global(l, G_EXECUTION_CONTEXT);
             let ctx = get_user_data::<ExecutionContext>(l, get_top(l)).unwrap();
             pop(l, 1);
 
