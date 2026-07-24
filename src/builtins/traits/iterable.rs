@@ -12,7 +12,7 @@ use crate::{
         types::{
             TYPE_GLOBAL_FIELD_PREFIX, TypeRef, list,
             stream::{
-                flatten_stream::{self, INNER_ITERATOR_FIELD},
+                flattening::{self, INNER_ITERATOR_FIELD},
                 map_stream::{self, MAP_FUNCTION_FIELD},
             },
         },
@@ -91,9 +91,9 @@ pub const DEFAULT_ITERABLE_FLATTEN: Function = Function::LuaFunction(formatcp!(
             _G['{FLATTEN_STREAM_TYPE}']
         )
     end",
-    SOURCE_FIELD = flatten_stream::SOURCE_ITERATOR_FIELD,
+    SOURCE_FIELD = flattening::SOURCE_ITERATOR_FIELD,
     FLATTEN_STREAM_TYPE =
-        formatcp!("{TYPE_GLOBAL_FIELD_PREFIX}{}", flatten_stream::SPECIALIZATION.name)
+        formatcp!("{TYPE_GLOBAL_FIELD_PREFIX}{}", flattening::SPECIALIZATION.name)
 ));
 
 /// List of parameters that the "map" method requires.

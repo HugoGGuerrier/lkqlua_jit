@@ -27,7 +27,7 @@ use crate::{
 use const_format::formatcp;
 use std::ffi::c_int;
 
-pub mod flatten_stream;
+pub mod flattening;
 pub mod lazy_comprehension;
 pub mod map_stream;
 pub mod selector_list;
@@ -47,7 +47,7 @@ pub const TYPE: BuiltinType = BuiltinType {
     implementation_variant: TypeImplementationKind::new_poly(
         BASE_IMPLEMENTATION,
         &[
-            flatten_stream::SPECIALIZATION,
+            flattening::SPECIALIZATION,
             lazy_comprehension::SPECIALIZATION,
             map_stream::SPECIALIZATION,
             selector_list::SPECIALIZATION,

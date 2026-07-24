@@ -1,4 +1,4 @@
-//! # Flatten stream implementation
+//! # Flattening stream implementation
 //!
 //! This module defines the "flattening" implementation of the "Stream" LKQL
 //! type. This implementation generates a new stream by processing another one,
