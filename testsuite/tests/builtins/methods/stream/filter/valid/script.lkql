@@ -1,0 +1,12 @@
+val s = [i for i in [1, 2, 3, 4, 5, 6]]
+
+print(s.filter((i) => i >= 3)[1])
+print(s.filter((i) => i >= 3)[2])
+print(s.filter((i) => i >= 3)[3])
+print(s.filter((i) => i >= 3).to_list)
+
+val other_s = [{print("Generating " & i.img); i} for i in s]
+val filter_res = other_s.filter((i) => { print("Processing " & i.img); i >= 2 and i < 6 })
+print(filter_res[1])
+print(filter_res[3])
+print(filter_res?[5])

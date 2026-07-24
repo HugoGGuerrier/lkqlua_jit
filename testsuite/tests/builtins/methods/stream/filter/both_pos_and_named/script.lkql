@@ -1,0 +1,2 @@
+val s = [i for i in [1, 2, 3]]
+print(s.filter((i) => i + 1, predicate=(i) => i + 1))

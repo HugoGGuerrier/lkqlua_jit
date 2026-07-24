@@ -9,9 +9,9 @@ use crate::{
         traits::{
             indexable,
             iterable::{
-                self, DEFAULT_ITERABLE_ALL, DEFAULT_ITERABLE_ANY, DEFAULT_ITERABLE_FLAT_MAP,
-                DEFAULT_ITERABLE_FLATTEN, DEFAULT_ITERABLE_MAP, DEFAULT_ITERABLE_REDUCE,
-                DEFAULT_ITERABLE_TO_LIST, ITERATOR_FIELD,
+                self, DEFAULT_ITERABLE_ALL, DEFAULT_ITERABLE_ANY, DEFAULT_ITERABLE_FILTER,
+                DEFAULT_ITERABLE_FLAT_MAP, DEFAULT_ITERABLE_FLATTEN, DEFAULT_ITERABLE_MAP,
+                DEFAULT_ITERABLE_REDUCE, DEFAULT_ITERABLE_TO_LIST, ITERATOR_FIELD,
             },
             sized,
         },
@@ -27,6 +27,7 @@ use crate::{
 use const_format::formatcp;
 use std::ffi::c_int;
 
+pub mod filtering;
 pub mod flattening;
 pub mod lazy_comprehension;
 pub mod mapping;
@@ -47,6 +48,7 @@ pub const TYPE: BuiltinType = BuiltinType {
     implementation_variant: TypeImplementationKind::new_poly(
         BASE_IMPLEMENTATION,
         &[
+            filtering::SPECIALIZATION,
             flattening::SPECIALIZATION,
             lazy_comprehension::SPECIALIZATION,
             mapping::SPECIALIZATION,
@@ -64,6 +66,7 @@ const BASE_IMPLEMENTATION: TypeImplementation = TypeImplementation {
         ("any", TypeField::Value(DEFAULT_ITERABLE_ANY)),
         ("all", TypeField::Value(DEFAULT_ITERABLE_ALL)),
         ("flatten", TypeField::Property(DEFAULT_ITERABLE_FLATTEN)),
+        ("filter", TypeField::Value(DEFAULT_ITERABLE_FILTER)),
         ("map", TypeField::Value(DEFAULT_ITERABLE_MAP)),
         ("flat_map", TypeField::Value(DEFAULT_ITERABLE_FLAT_MAP)),
         ("reduce", TypeField::Value(DEFAULT_ITERABLE_REDUCE)),

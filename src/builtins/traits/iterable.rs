@@ -12,6 +12,7 @@ use crate::{
         types::{
             TYPE_GLOBAL_FIELD_PREFIX, TypeRef, list,
             stream::{
+                filtering::{self, PREDICATE_FUNCTION_FIELD},
                 flattening::{self, INNER_ITERATOR_FIELD},
                 mapping::{self, MAP_FUNCTION_FIELD},
             },
@@ -32,6 +33,7 @@ pub const TRAIT: BuiltinTrait = BuiltinTrait {
         RequiredField::Value("any"),
         RequiredField::Value("all"),
         RequiredField::Property("flatten"),
+        RequiredField::Value("filter"),
         RequiredField::Value("map"),
         RequiredField::Value("flat_map"),
         RequiredField::Value("reduce"),
@@ -95,6 +97,29 @@ pub const DEFAULT_ITERABLE_FLATTEN: Function = Function::LuaFunction(formatcp!(
     FLATTEN_STREAM_TYPE =
         formatcp!("{TYPE_GLOBAL_FIELD_PREFIX}{}", flattening::SPECIALIZATION.name)
 ));
+
+/// List of parameters that the "filter" method requires.
+pub const FILTER_PARAMS: &[LkqlParam] = &[
+    LkqlParam::new("self"),
+    LkqlParam::with_type("predicate", TypeRef::Function),
+];
+
+/// Default implementation of the "filter" method on iterable values.
+pub const DEFAULT_ITERABLE_FILTER: RuntimeValue = RuntimeValue::Callable(Function::LkqlFunction {
+    params: FILTER_PARAMS,
+    body: formatcp!(
+        "return setmetatable(
+            {{
+                ['{SOURCE_FIELD}'] = self['{ITERATOR_FIELD}'],
+                ['{PREDICATE_FUNCTION_FIELD}'] = predicate,
+            }},
+            _G['{FILTER_STREAM_TYPE}']
+        )",
+        SOURCE_FIELD = filtering::SOURCE_ITERATOR_FIELD,
+        FILTER_STREAM_TYPE =
+            formatcp!("{TYPE_GLOBAL_FIELD_PREFIX}{}", filtering::SPECIALIZATION.name)
+    ),
+});
 
 /// List of parameters that the "map" method requires.
 pub const MAP_PARAMS: &[LkqlParam] = &[
