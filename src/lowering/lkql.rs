@@ -962,10 +962,6 @@ impl Node {
                 // Try to compile the regex
                 match Regex::new(&format!("^{regex_source}$")) {
                     Ok(regex) => {
-                        // Create a temporary value to reference the pattern value
-                        let pattern_id = ctx.new_tmp_id();
-                        let pattern_ref = bn(l, NodeVariant::Read(pattern_id));
-
                         // Create the node to check the value type
                         let type_check = n(
                             l,
@@ -976,21 +972,11 @@ impl Node {
                         );
 
                         // Create the node to check if the pattern match the value
-                        let is_match = n(
-                            l,
-                            NodeVariant::CallExpr {
-                                callee: bn(
-                                    l,
-                                    NodeVariant::DottedExpr {
-                                        prefix: pattern_ref.clone(),
-                                        suffix: id_str(l, types::pattern::IS_MATCH_FIELD),
-                                    },
-                                ),
-                                positional_args: vec![*pattern_ref, *matched_value_ref],
-                                named_args: vec![],
-                            },
-                        )
-                        .with_let(pattern_id, n(l, NodeVariant::PatternLiteral(regex)));
+                        let is_match = n(l, NodeVariant::PatternLiteral(regex)).with_method_call(
+                            ctx,
+                            types::pattern::IS_MATCH_FIELD,
+                            vec![*matched_value_ref],
+                        );
 
                         // Then return the checking combination
                         combine_predicates(vec![type_check, is_match]).variant
@@ -1172,35 +1158,25 @@ impl Node {
                     && let Some(binding) = splat_pattern.f_binding()?
                 {
                     let l = loc(ctx, &binding);
-                    let binding_id = id(ctx, &binding);
-                    let sublist_access = bn(
-                        l,
-                        NodeVariant::DottedExpr {
-                            prefix: matched_value_ref.clone(),
-                            suffix: id_str(l, types::list::SUBLIST_FIELD),
-                        },
+                    let sublist_call = matched_value_ref.clone().with_method_call(
+                        ctx,
+                        types::list::SUBLIST_FIELD,
+                        vec![
+                            n(l, NodeVariant::IntLiteral((sub_pattern_count + 1).to_string())),
+                            n(l, NodeVariant::LengthExpr(matched_value_ref)),
+                        ],
                     );
-                    let sublist_call = bn(
-                        l,
-                        NodeVariant::CallExpr {
-                            callee: sublist_access,
-                            positional_args: vec![
-                                *matched_value_ref.clone(),
-                                n(l, NodeVariant::IntLiteral((sub_pattern_count + 1).to_string())),
-                                n(l, NodeVariant::LengthExpr(matched_value_ref)),
-                            ],
-                            named_args: vec![],
-                        },
-                    );
-                    let bool_lit = bn(l, NodeVariant::BoolLiteral(true));
                     sub_patterns.push(n(
                         l,
                         NodeVariant::BlockExpr {
                             body: vec![n(
                                 l,
-                                NodeVariant::InitLocal { symbol: binding_id, val: sublist_call },
+                                NodeVariant::InitLocal {
+                                    symbol: id(ctx, &binding),
+                                    val: Box::new(sublist_call),
+                                },
                             )],
-                            val: bool_lit,
+                            val: bn(l, NodeVariant::BoolLiteral(true)),
                         },
                     ));
                 }
@@ -1284,32 +1260,19 @@ impl Node {
                 );
 
                 // Create the node to access the new object without matched keys
-                let without_keys_access = bn(
-                    l,
-                    NodeVariant::DottedExpr {
-                        prefix: matched_value_ref.clone(),
-                        suffix: id_str(l, types::obj::WITHOUT_KEYS_FIELD),
-                    },
-                );
-                let without_keys_call = bn(
-                    l,
-                    NodeVariant::CallExpr {
-                        callee: without_keys_access,
-                        positional_args: vec![
-                            *matched_value_ref.clone(),
-                            n(
-                                l,
-                                NodeVariant::ListLiteral(
-                                    matched_fields
-                                        .into_iter()
-                                        .map(|f| n(l, NodeVariant::StringLiteral(f)))
-                                        .collect(),
-                                ),
-                            ),
-                        ],
-                        named_args: vec![],
-                    },
-                );
+                let without_keys_call = Box::new(matched_value_ref.clone().with_method_call(
+                    ctx,
+                    types::obj::WITHOUT_KEYS_FIELD,
+                    vec![n(
+                        l,
+                        NodeVariant::ListLiteral(
+                            matched_fields
+                                .into_iter()
+                                .map(|f| n(l, NodeVariant::StringLiteral(f)))
+                                .collect(),
+                        ),
+                    )],
+                ));
 
                 // If there is a splat pattern with a bindings, assign the
                 // remaining object to it.
@@ -1573,36 +1536,16 @@ impl Node {
                 )
                 .with_trait_requirement(ctx, &traits::iterable::TRAIT);
 
-                // Create a new named value that will contain the resulting
-                // selector list.
-                let selector_list_id = ctx.new_tmp_id();
-                let selector_list_ref = n(l, NodeVariant::Read(selector_list_id));
-
-                // Create the quantifier call node
-                let quantifier_call = n(
-                    l,
-                    NodeVariant::CallExpr {
-                        callee: bn(
+                // Create the quantifier call node and return it
+                selector_call
+                    .with_method_call(
+                        ctx,
+                        &lkql_quantified_selector_call.f_quantifier()?.text()?,
+                        vec![n(
                             l,
-                            NodeVariant::DottedExpr {
-                                prefix: Box::new(selector_list_ref.clone()),
-                                suffix: id(ctx, &lkql_quantified_selector_call.f_quantifier()?),
-                            },
-                        ),
-                        positional_args: vec![
-                            selector_list_ref,
-                            n(
-                                l,
-                                NodeVariant::ReadChildUnit(*ctx.child_index_map.get(node).unwrap()),
-                            ),
-                        ],
-                        named_args: vec![],
-                    },
-                );
-
-                // Finally, create the quantification call node
-                quantifier_call
-                    .with_let(selector_list_id, selector_call)
+                            NodeVariant::ReadChildUnit(*ctx.child_index_map.get(node).unwrap()),
+                        )],
+                    )
                     .variant
             }
             _ => unreachable!(),
@@ -1720,6 +1663,52 @@ impl Node {
                 alternative: Box::new(alternative),
             },
         )
+    }
+
+    /// Wrap the provided node in a call to method named `method_name` on the
+    /// value represented by this node with provided arguments.
+    fn with_method_call(
+        self,
+        ctx: &mut LoweringContext<LkqlNode>,
+        method_name: &str,
+        mut positional_args: Vec<Node>,
+    ) -> Self {
+        // Get the location of the node
+        let l = self.origin_location;
+
+        // Create or get temporary valid id and reference for the dispatching
+        // parameter.
+        let (dispatching_arg_id, dispatching_arg_ref) = match &self.variant {
+            NodeVariant::Read(id) => (*id, self.clone()),
+            _ => {
+                let id = ctx.new_tmp_id();
+                (id, n(l, NodeVariant::Read(id)))
+            }
+        };
+
+        // Create the method calling node
+        positional_args.insert(0, dispatching_arg_ref.clone());
+        let res = n(
+            l,
+            NodeVariant::CallExpr {
+                callee: bn(
+                    l,
+                    NodeVariant::DottedExpr {
+                        prefix: Box::new(dispatching_arg_ref),
+                        suffix: id_str(l, method_name),
+                    },
+                ),
+                positional_args,
+                named_args: vec![],
+            },
+        );
+
+        // If required, wraps the result node in a let-in one
+        if matches!(&self.variant, NodeVariant::Read(_)) {
+            res
+        } else {
+            res.with_let(dispatching_arg_id, self)
+        }
     }
 }
 
