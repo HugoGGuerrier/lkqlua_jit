@@ -102,11 +102,23 @@ impl ExecutionUnit {
             _ => unreachable!(),
         };
 
+        // Fetch all children units in this execution unit
+        let mut local_units = Vec::new();
+        match node {
+            LkqlNode::ListComprehension(list_comp) => {
+                all_local_execution_units(&list_comp.f_expr()?, &mut local_units)?;
+                if let Some(guard) = list_comp.f_guard()? {
+                    all_local_execution_units(&guard, &mut local_units)?;
+                }
+            }
+            LkqlNode::NodePatternSelector(pattern_selector) => {
+                all_local_execution_units(&pattern_selector.f_pattern()?, &mut local_units)?;
+            }
+            _ => all_local_execution_units(node, &mut local_units)?,
+        };
         // Iterate over all children execution units to lower them and to
         // associate each one to an index in the children units vector.
         // This needs to be done before the lowering of the unit itself.
-        let mut local_units = Vec::new();
-        all_local_execution_units(node, &mut local_units)?;
         let mut children_units = Vec::new();
         for unit in &local_units {
             ctx.child_index_map
