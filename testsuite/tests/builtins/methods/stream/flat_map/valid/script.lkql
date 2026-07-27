@@ -8,6 +8,7 @@ print(s.flat_map(countdown_from)[1])
 print(s.flat_map(countdown_from)[2])
 print(s.flat_map(countdown_from)[3])
 print(s.flat_map(countdown_from).to_list)
+print([i for i in []].flat_map(countdown_from).to_list)
 
 val flat_map_res = s.flat_map((i) => { print("Processing " & i.img); [i, i] })
 print(flat_map_res[1])

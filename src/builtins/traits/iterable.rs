@@ -107,7 +107,15 @@ pub const DEFAULT_FIND: RuntimeValue = RuntimeValue::Callable(Function::LkqlFunc
 pub const DEFAULT_FLATTEN: Function = Function::LuaFunction(formatcp!(
     "function (self)
         local it = self['{ITERATOR_FIELD}']
-        local inner_it = it()['{ITERATOR_FIELD}']
+
+        -- Get the inner iterator if possible
+        local inner_iterable = it()
+        local inner_it = nil
+        if inner_iterable ~= nil then
+            inner_it = inner_iterable['{ITERATOR_FIELD}']
+        end
+
+        -- Then, return the resulting object
         return setmetatable(
             {{
                 ['{SOURCE_FIELD}'] = it,

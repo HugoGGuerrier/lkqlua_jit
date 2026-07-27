@@ -3,3 +3,4 @@ val l = [1, 2, 3]
 print(l.find((i) => i == 3))
 print(l.find((i) => i == 4))
 print(l.find(predicate=(i) => i == 2))
+print([].find((i) => i == 1))

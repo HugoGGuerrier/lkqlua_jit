@@ -5,6 +5,7 @@ print(s_1.flatten[2])
 print(s_1.flatten[3])
 print(s_1.flatten[6])
 print(s_1.flatten.to_list)
+print([l for l in []].flatten.to_list)
 
 val s_2 = [
     l for l in [

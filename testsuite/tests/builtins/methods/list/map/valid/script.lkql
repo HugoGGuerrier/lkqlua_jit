@@ -4,6 +4,7 @@ print(l.map((i) => i + 1)[1])
 print(l.map((i) => i + 1)[2])
 print(l.map((i) => i + 1)[3])
 print(l.map((i) => i + 1).to_list)
+print([].map((i) => i).to_list)
 
 val map_res = l.map((i) => { print("Processing " & i.img); i })
 print(map_res[1])

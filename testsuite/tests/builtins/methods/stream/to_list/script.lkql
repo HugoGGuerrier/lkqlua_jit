@@ -1,2 +1,3 @@
 print([i * 2 for i in [1, 2, 3]].to_list)
 print(["elem " & e for e in ["a", "b", "c"]].to_list)
+print([i for i in []].to_list)
