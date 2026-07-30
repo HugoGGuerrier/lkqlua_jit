@@ -72,7 +72,7 @@ const NEXT: RuntimeValue = RuntimeValue::Callable(Function::LuaFunction(formatcp
         local result_list = self['{RESULT_LIST_FIELD}']
 
         -- Now process the recurse list
-        while #recurse_list ~= 0 do
+        while #recurse_list ~= 0 or #result_list ~= 0 do
             -- Check if there is an element to return
             if #result_list > 0 then
                 return table.remove(result_list, 1)
@@ -85,7 +85,7 @@ const NEXT: RuntimeValue = RuntimeValue::Callable(Function::LuaFunction(formatcp
 
             -- If the next element is a recurse value, add it to the result
             -- and the recurse list.
-            if next['{REC_RECURSE_FIELD}'] then
+            if next['{REC_RECURSE_FIELD}'] ~= nil then
                 -- Get working value in the next value
                 local rec_value = next['{REC_RECURSE_FIELD}']
                 local rec_unpack = next['{REC_RECURSE_UNPACK_FIELD}']
@@ -113,8 +113,8 @@ const NEXT: RuntimeValue = RuntimeValue::Callable(Function::LuaFunction(formatcp
                         next_depth <= self['{MAX_DEPTH_FIELD}']
                     )
                     is_valid_depth = (
-                        (self['{MIN_DEPTH_FIELD}'] <= -1 or next_depth >= self['{MIN_DEPTH_FIELD}']) and
-                        is_under_maximum_depth
+                        (self['{MIN_DEPTH_FIELD}'] <= -1 or next_depth >= self['{MIN_DEPTH_FIELD}'])
+                        and is_under_maximum_depth
                     )
                 end
 
