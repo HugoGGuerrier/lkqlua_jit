@@ -82,10 +82,17 @@ pub extern "C" fn lkql_import(l: LuaState) -> c_int {
     let ctx = get_user_data::<ExecutionContext>(l, get_top(l)).unwrap();
     pop(l, 1);
 
+    // Add the source to execute to the context
+    let module_source = match ctx.add_source_file(module_file) {
+        Ok(id) => id,
+        Err(diagnostics) => {
+            raise_error(l, &diagnostics.to_json());
+            return 0;
+        }
+    };
+
     // Check dependency cycle
-    if let Some(module_source) = &ctx.source_repo.get_id_by_file(module_file)
-        && ctx.execution_stack.contains(module_source)
-    {
+    if ctx.execution_stack.contains(&module_source) {
         let exec_stack_image = ctx
             .execution_stack
             .iter()
@@ -111,7 +118,7 @@ pub extern "C" fn lkql_import(l: LuaState) -> c_int {
     }
 
     // Then execute the module file, report errors if there are some
-    if let Err(diagnostics) = ctx.execute_lkql_file(Path::new(module_file)) {
+    if let Err(diagnostics) = ctx.execute_source(module_source) {
         raise_error(l, &diagnostics.to_json());
         0
     } else {

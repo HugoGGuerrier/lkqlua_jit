@@ -6,8 +6,9 @@
 use crate::{
     bytecode::extended_bytecode::ExtendedBytecodeUnit,
     diagnostics::{Diagnostic, DiagnosticCollector},
-    engine::Engine,
+    engine::{Engine, analysis_lib::NodeTypeRepo},
     intermediate_tree::ExecutionUnit,
+    lua::{get_string, next, pop, push_nil, set_global},
     sources::{SourceId, SourceRepository},
 };
 use clap::ValueEnum;
@@ -31,14 +32,19 @@ pub mod lua;
 pub mod runtime;
 pub mod sources;
 
+/// Content of the LKQL prelude.
+const PRELUDE_SOURCE: &str = include_str!("prelude.lkql");
+
 /// This type holds all required data to run LKQL sources using LuaJIT as a
 /// backend. This is what you have to use.
 #[derive(Debug)]
 pub struct ExecutionContext {
     pub config: Config,
     pub source_repo: SourceRepository,
-    pub compilation_cache: HashMap<SourceId, ExtendedBytecodeUnit>,
     pub engine: Engine,
+
+    /// Cache were compilation result are placed, associated to their source.
+    compilation_cache: HashMap<SourceId, ExtendedBytecodeUnit>,
 
     /// This vector stores sources that are currently being executed in their
     /// execution order (oldest first).
@@ -52,125 +58,161 @@ pub struct ExecutionContext {
 impl ExecutionContext {
     /// Create an initialize a new execution context. This is the first entry
     /// point to the LKQL engine.
+    ///
     /// If any error occurs during the execution context initialization, this
     /// function returns [`Err`] with all error messages.
     pub fn new(config: Config) -> Result<Self, DiagnosticCollector> {
-        let engine = Engine::new(&config)?;
-        Ok(Self {
+        // Create the resulting execution context
+        let mut res = Self {
+            engine: Engine::new(&config)?,
             config,
             source_repo: SourceRepository::new(),
             compilation_cache: HashMap::new(),
-            engine,
             execution_stack: Vec::new(),
             timings: BTreeMap::new(),
-        })
-    }
+        };
 
-    /// Just run the provided LKQL file, don't return anything and report all
-    /// diagnostics and messages in the [`Config::std_err`] of the related
-    /// configuration.
-    pub fn just_run_lkql_file(&mut self, file: &Path) {
-        // Execute the file and get the result
-        let exec_res = self.execute_lkql_file(file);
+        // Execute the prelude source
+        let prelude_source_id = res.add_source_buffer("__prelude", PRELUDE_SOURCE);
+        res.execute_source(prelude_source_id)?;
 
-        // If there are errors, display them on STDERR
-        if let Err(diagnostics) = exec_res {
-            for diag in &diagnostics {
-                diag.print(&self.source_repo, &mut self.config.std_err, false);
-            }
+        // Fetch all prelude symbols and add them to the engine
+        let l = res.engine.lua_state;
+        push_nil(l);
+        while next(l, -2) {
+            let name = get_string(l, -2).unwrap();
+            set_global(l, name);
+            res.engine.add_global(name);
         }
+
+        // Finally, return the initialized execution context
+        Ok(res)
     }
 
-    /// Execute the provided LKQL file, returning possible [`Diagnostic`] if
-    /// the execution is not successful.
-    pub fn execute_lkql_file(&mut self, file: &Path) -> Result<(), DiagnosticCollector> {
-        // Add the source file to the source repo updating it if required
-        let (source, updated) = self.source_repo.add_source_file(file)?;
+    /// Get all symbols accessible as globals in this execution context by
+    /// fetching them from the engine.
+    pub fn get_globals(&self) -> &HashSet<String> {
+        &self.engine.registered_globals
+    }
+
+    /// Get all node types registered in this execution context by fetching
+    /// them in the loaded analysis library.
+    pub fn get_node_types(&self) -> &NodeTypeRepo {
+        &self.engine.analysis_lib.node_types
+    }
+
+    /// Execute the provided LKQL file, returning possible
+    /// [`DiagnosticCollector`] if the execution is not successful. This
+    /// method doesn't return the namespace produced by the provided LKQL
+    /// script, it only applies its side effects.
+    pub fn execute_lkql_script(&mut self, file: &Path) -> Result<(), DiagnosticCollector> {
+        // Add the source to this context and execute it
+        let source = self.add_source_file(file)?;
+        self.execute_source(source)?;
+
+        // Pop the result from the Lua stack
+        pop(self.engine.lua_state, 1);
+
+        // Return the success
+        Ok(())
+    }
+
+    /// Add the provided `file` as a source in this execution context and
+    /// return the identifier of it.
+    fn add_source_file(&mut self, file: &Path) -> Result<SourceId, DiagnosticCollector> {
+        let (res, updated) = self.source_repo.add_source_file(file)?;
+
+        // If the file has been changed, remove its entry in the compilation
+        // cache.
         if updated {
-            self.compilation_cache.remove(&source);
+            self.compilation_cache.remove(&res);
+        }
+
+        Ok(res)
+    }
+
+    /// Add a new source described by the provided `name` and `content`
+    /// information, returning its new identifier.
+    fn add_source_buffer(&mut self, name: &str, content: &str) -> SourceId {
+        let res = self.source_repo.add_source_buffer(name, content);
+        self.compilation_cache.remove(&res);
+        res
+    }
+
+    /// Execute the source designated by the provided identifier, leaving its
+    /// execution result in the top of the Lua stack.
+    fn execute_source(&mut self, source: SourceId) -> Result<(), DiagnosticCollector> {
+        // First of all check in the compilation cache whether the source has
+        // already been compiled.
+        if !self.compilation_cache.contains_key(&source) {
+            // Here we know that the source hasn't been compiled before, so we
+            // do the compilation.
+            let mut time_point: Instant;
+
+            // Parse the source file
+            time_point = Instant::now();
+            let unit = self.source_repo.parse_as_lkql(source)?;
+            let root = unit.root().map_err(Diagnostic::from)?.unwrap();
+            self.get_timings_for_source(source).parsing = time_point.elapsed();
+
+            // If required, display the parsing tree
+            if self.config.is_verbose(VerboseElement::ParsingTree) {
+                writeln!(self.config.std_out, "===== Parsing tree =====\n").unwrap();
+                writeln!(self.config.std_out, "{}\n", root.tree_dump(0).map_err(Diagnostic::from)?)
+                    .unwrap();
+            }
+
+            // Lower the parsing tree
+            time_point = Instant::now();
+            let lowering_tree = ExecutionUnit::lower_lkql_node(self, source, &root)?;
+            self.get_timings_for_source(source).lowering = time_point.elapsed();
+
+            // If required, display the lowered tree
+            if self.config.is_verbose(VerboseElement::LoweringTree) {
+                writeln!(self.config.std_out, "===== Lowering tree =====\n").unwrap();
+                writeln!(self.config.std_out, "{}\n", lowering_tree).unwrap();
+            }
+
+            // Compile the lowering tree to the extended bytecode format
+            time_point = Instant::now();
+            let extended_bytecode_unit = lowering_tree.compile(self.get_globals())?;
+            self.get_timings_for_source(source).compilation = time_point.elapsed();
+
+            // Transform the extended bytecode unit into a standard bytecode unit
+            let bytecode_unit = extended_bytecode_unit.to_bytecode_unit();
+
+            // If required, display the compiled bytecode
+            if self.config.is_verbose(VerboseElement::Bytecode) {
+                writeln!(self.config.std_out, "===== Bytecode =====\n").unwrap();
+                writeln!(self.config.std_out, "{}\n", bytecode_unit).unwrap();
+            }
+
+            // If required, display the raw bytecode buffer
+            if self.config.is_verbose(VerboseElement::RawBytecode) {
+                let mut encoded_bytecode_unit = Vec::new();
+                bytecode_unit.encode(&mut encoded_bytecode_unit);
+                writeln!(self.config.std_out, "===== Raw bytecode =====\n").unwrap();
+                writeln!(self.config.std_out, "{:?}\n", encoded_bytecode_unit.hex_dump()).unwrap();
+            }
+
+            // Store the compilation result in the cache
+            self.compilation_cache
+                .insert(source, extended_bytecode_unit);
         }
 
         // Push the source on the execution stack
         self.execution_stack.push(source);
 
-        // Then compile the LKQL source and get the result in the cache
-        self.compile_lkql_source(source)?;
+        // Get the compilation result of the source from the cache
         let bytecode_unit = self.compilation_cache.get(&source).unwrap();
 
-        // Then, run the encoded bytecode with the custom engine
+        // Run the bytecode
         let time_point = Instant::now();
         self.engine.run_bytecode(self, bytecode_unit)?;
         self.get_timings_for_source(source).execution = time_point.elapsed();
 
         // Pop the source from the execution stack
         self.execution_stack.pop();
-
-        // Return the success
-        Ok(())
-    }
-
-    /// Inner function that compile the provided source as an LKQL input and
-    /// place the result of this compilation in the cache.
-    fn compile_lkql_source(&mut self, source: SourceId) -> Result<(), DiagnosticCollector> {
-        // First of all check in the compilation cache whether the source has
-        // already been compiled. In that case, don't perform compilation.
-        if self.compilation_cache.contains_key(&source) {
-            return Ok(());
-        }
-
-        // Here we know that the source hasn't been compiled before, so we
-        // do the compilation.
-        let mut time_point: Instant;
-
-        // Parse the source file
-        time_point = Instant::now();
-        let unit = self.source_repo.parse_as_lkql(source)?;
-        let root = unit.root().map_err(Diagnostic::from)?.unwrap();
-        self.get_timings_for_source(source).parsing = time_point.elapsed();
-
-        // If required, display the parsing tree
-        if self.config.is_verbose(VerboseElement::ParsingTree) {
-            writeln!(self.config.std_out, "===== Parsing tree =====\n").unwrap();
-            writeln!(self.config.std_out, "{}\n", root.tree_dump(0).map_err(Diagnostic::from)?)
-                .unwrap();
-        }
-
-        // Lower the parsing tree
-        time_point = Instant::now();
-        let lowering_tree = ExecutionUnit::lower_lkql_node(self, source, &root)?;
-        self.get_timings_for_source(source).lowering = time_point.elapsed();
-
-        // If required, display the lowered tree
-        if self.config.is_verbose(VerboseElement::LoweringTree) {
-            writeln!(self.config.std_out, "===== Lowering tree =====\n").unwrap();
-            writeln!(self.config.std_out, "{}\n", lowering_tree).unwrap();
-        }
-
-        // Compile the lowering tree to the extended bytecode format
-        time_point = Instant::now();
-        let extended_bytecode_unit = lowering_tree.compile()?;
-        self.get_timings_for_source(source).compilation = time_point.elapsed();
-
-        // Transform the extended bytecode unit into a standard bytecode unit
-        let bytecode_unit = extended_bytecode_unit.to_bytecode_unit();
-
-        // If required, display the compiled bytecode
-        if self.config.is_verbose(VerboseElement::Bytecode) {
-            writeln!(self.config.std_out, "===== Bytecode =====\n").unwrap();
-            writeln!(self.config.std_out, "{}\n", bytecode_unit).unwrap();
-        }
-
-        // If required, display the raw bytecode buffer
-        if self.config.is_verbose(VerboseElement::RawBytecode) {
-            let mut encoded_bytecode_unit = Vec::new();
-            bytecode_unit.encode(&mut encoded_bytecode_unit);
-            writeln!(self.config.std_out, "===== Raw bytecode =====\n").unwrap();
-            writeln!(self.config.std_out, "{:?}\n", encoded_bytecode_unit.hex_dump()).unwrap();
-        }
-
-        // Store the compilation result in the cache
-        self.compilation_cache
-            .insert(source, extended_bytecode_unit);
 
         // Finally, return the success
         Ok(())

@@ -112,9 +112,13 @@ fn main() {
         }
     };
 
-    // Run the provided script if any
-    if let Some(ref script) = args.script {
-        ctx.just_run_lkql_file(script);
+    // Run the provided script if any and display errors if there are some
+    if let Some(ref script) = args.script
+        && let Err(diagnostics) = ctx.execute_lkql_script(script)
+    {
+        for diag in &diagnostics {
+            diag.print(&ctx.source_repo, &mut ctx.config.std_err, false);
+        }
     }
 
     // If required, display timings collected by the execution context

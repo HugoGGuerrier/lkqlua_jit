@@ -1,0 +1,1 @@
+[<Sequence test.foo:1:1-1:27>, <Example test.foo:1:1-1:8>, <Var test.foo:1:9-1:22>, <NullLiteral test.foo:1:23-1:27>, <Sequence test.foo:1:14-1:21>, <Example test.foo:1:14-1:21>]

@@ -1,0 +1,3 @@
+[]
+[<Example test.foo:1:1-1:8>]
+[<Example test.foo:1:22-1:29>, <Example test.foo:1:14-1:21>, <NullLiteral test.foo:1:9-1:13>, <Example test.foo:1:1-1:8>]

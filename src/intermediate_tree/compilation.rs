@@ -5,7 +5,6 @@
 
 use crate::{
     builtins::{
-        get_builtin_bindings,
         traits::{BuiltinTrait, iterable::ITERATOR_FIELD},
         types::{
             TYPE_TAGS_FIELD, TypeImplementation, list, namespace, obj, pattern,
@@ -60,9 +59,12 @@ impl ExecutionUnit {
     /// Compile this execution unit as a LuaJIT bytecode buffer. The result of
     /// this function can be used to execute the semantics described by the
     /// execution unit with the LuaJIT engine.
-    pub fn compile(&self) -> Result<ExtendedBytecodeUnit, DiagnosticCollector> {
+    pub fn compile(
+        &self,
+        globals: &HashSet<String>,
+    ) -> Result<ExtendedBytecodeUnit, DiagnosticCollector> {
         // Open the initial compilation context and create the prototypes vector
-        let mut compile_context = CompilationContext::new(self);
+        let mut compile_context = CompilationContext::new(self, globals);
 
         // Compile the current execution unit
         self.internal_compile(&mut compile_context);
@@ -897,9 +899,9 @@ impl Node {
                             ctx.instructions.label(next_label);
                         }
                     } else {
-                        // Finally, if a built-in is named like the accessed
-                        // symbol, get it in the global table.
-                        if ctx.builtins.contains(identifier.text.as_str()) {
+                        // Finally, if a global is named like the accessed symbol, get it in the
+                        // global table.
+                        if ctx.globals.contains(identifier.text.as_str()) {
                             emit_global_read(
                                 ctx,
                                 Some(&self.origin_location),
@@ -2416,8 +2418,8 @@ impl ValueAccess {
 
 /// This type is the main data holder during the compilation process.
 struct CompilationContext<'a> {
-    /// Built-in symbols that are available during the compilation.
-    builtins: HashSet<&'static str>,
+    /// Symbols that are available as globals during the runtime.
+    globals: &'a HashSet<String>,
 
     /// The frame that is currently being used in the compilation process. This
     /// stores all information about local symbols, up-values and temporary
@@ -2448,12 +2450,12 @@ struct CompilationContext<'a> {
 }
 
 impl<'a> CompilationContext<'a> {
-    fn new<'b>(unit: &'b ExecutionUnit) -> Self
+    fn new<'b>(unit: &'b ExecutionUnit, globals: &'b HashSet<String>) -> Self
     where
         'b: 'a,
     {
         Self {
-            builtins: get_builtin_bindings().keys().copied().collect(),
+            globals,
             frame: Rc::new(RefCell::new(Frame::new(None))),
             let_bindings: HashMap::new(),
             unit,

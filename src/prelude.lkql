@@ -1,0 +1,33 @@
+selector children
+|" Yields all the descendants of the given node
+| not null => rec(*this.children)
+| * => ()
+
+selector sub_tree
+|" Yields the subtree from the provided node
+| not null => rec(*this.children, this)
+| * => ()
+
+selector parent
+|" Yields all the enclosing parents of the given node
+| not null => (
+    match this?.parent
+    | p@(not null) => rec(p)
+    | * => ()
+)
+
+selector next_siblings
+|" Yields all the next siblings of the given node
+| * => (
+    match this?.next_sibling
+    | s@(not null) => rec(s)
+    | * => ()
+)
+
+selector prev_siblings
+|" Yields all the previous siblings of the given node
+| not null => (
+    match this?.previous_sibling
+    | s@(not null) => rec(s)
+    | * => ()
+)

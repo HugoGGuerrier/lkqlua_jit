@@ -20,7 +20,7 @@ use crate::{
     sources::SourceSection,
 };
 use regex::Regex;
-use std::ffi::c_int;
+use std::{collections::HashSet, ffi::c_int};
 
 pub mod analysis_lib;
 
@@ -28,7 +28,12 @@ pub mod analysis_lib;
 /// [`crate::intermediate_tree::compilation`] module.
 #[derive(Debug)]
 pub struct Engine {
-    lua_state: LuaState,
+    pub(crate) lua_state: LuaState,
+
+    /// Global symbols registered in this engine.
+    pub(crate) registered_globals: HashSet<String>,
+
+    /// Analysis library instance associated to this engine.
     pub(crate) analysis_lib: AnalysisLibrary,
 }
 
@@ -44,6 +49,9 @@ impl Engine {
         // Create a new Lua state
         let lua_state = new_lua_state();
 
+        // Create a new set of globals registered in this engine
+        let mut registered_globals = HashSet::new();
+
         // Open Lua libraries
         open_lua_libs(lua_state);
 
@@ -53,26 +61,35 @@ impl Engine {
             builtin_type.place_in_lua_context(lua_state);
         }
 
-        // Bind all built-in values to their names
+        // Populate this engine with built-in bindings
         for (name, value) in get_builtin_bindings() {
             value.push_on_stack(lua_state);
             set_global(lua_state, name);
+            registered_globals.insert(String::from(name));
         }
 
         // Load the analysis library
         let analysis_lib = AnalysisLibrary::new(lua_state, config, &builtin_types)?;
 
         // Finally create the engine type and return it
-        Ok(Self { lua_state, analysis_lib })
+        Ok(Self { lua_state, registered_globals, analysis_lib })
+    }
+
+    /// Register a new global name in this engine.
+    pub(crate) fn add_global(&mut self, name: &str) {
+        self.registered_globals.insert(String::from(name));
     }
 
     /// Run the given bytecode buffer in the engine, returning the potential
     /// diagnostic in case of a runtime error.
+    ///
+    /// This function leaves the execution result on the top of the Lua stack.
     pub fn run_bytecode(
         &self,
         ctx: &ExecutionContext,
         bytecode_unit: &ExtendedBytecodeUnit,
     ) -> Result<(), DiagnosticCollector> {
+        // Create a shortcut to the Lua state
         let l = self.lua_state;
 
         // Encode the bytecode unit
@@ -82,16 +99,16 @@ impl Engine {
             .encode(&mut encoded_bytecode_unit);
 
         // Place the execution context in the global Lua table
-        push_user_data(self.lua_state, ctx);
-        set_global(self.lua_state, G_EXECUTION_CONTEXT);
+        push_user_data(l, ctx);
+        set_global(l, G_EXECUTION_CONTEXT);
 
         // Set the error handler
-        push_c_function(self.lua_state, handle_error);
-        let error_handler = get_top(self.lua_state);
+        push_c_function(l, handle_error);
+        let error_handler = get_top(l);
 
         // Load the bytecode buffer in the Lua state
         if !load_buffer(
-            self.lua_state,
+            l,
             &encoded_bytecode_unit,
             ctx.source_repo
                 .get_name_by_id(bytecode_unit.source)
@@ -99,7 +116,7 @@ impl Engine {
         ) {
             panic!(
                 "Cannot load the provided bytecode buffer, error message: {}",
-                get_string(self.lua_state, -1).unwrap_or("None")
+                get_string(l, -1).unwrap_or("None")
             );
         }
 
@@ -113,7 +130,7 @@ impl Engine {
             call(l, 1, None);
             pop(l, 1);
         }
-        let call_res = safe_call(self.lua_state, 0, None, Some(error_handler));
+        let call_res = safe_call(l, 0, None, Some(error_handler));
         if ctx.config.do_profiling {
             get_global(l, "require");
             push_string(l, "jit.p");
@@ -124,7 +141,7 @@ impl Engine {
         }
 
         // Pop the error handler
-        remove_value(self.lua_state, error_handler);
+        remove_value(l, error_handler);
 
         // If there was an error during the execution, parse diagnostics as
         // JSON and return them.

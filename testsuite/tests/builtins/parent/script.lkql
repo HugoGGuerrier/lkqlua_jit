@@ -1,0 +1,5 @@
+val root = roots()[1]
+val children = children(root)
+val deepest_node = children[children.length]
+
+print(parent(deepest_node).to_list)

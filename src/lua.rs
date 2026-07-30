@@ -272,6 +272,13 @@ pub(crate) fn set_metatable(l: LuaState, index: i32) -> bool {
     unsafe { lua_setmetatable(l, index) != 0 }
 }
 
+/// Pop the value at the top of the stack and get the next key from it in the
+/// table at the provided `index`. Return whether there is a next value, if
+/// true the next key, then its value are pushed on the stack.
+pub(crate) fn next(l: LuaState, index: i32) -> bool {
+    unsafe { lua_next(l, index) != 0 }
+}
+
 /// Get the field of the provided `name` in the table at the provided `index`
 /// and place it on the top of the stack.
 pub(crate) fn get_field(l: LuaState, index: i32, name: &str) {
@@ -606,6 +613,7 @@ unsafe extern "C" {
     fn lua_createtable(l: LuaState, narr: c_int, nrec: c_int);
     fn lua_getmetatable(l: LuaState, index: c_int) -> c_int;
     fn lua_setmetatable(l: LuaState, index: c_int) -> c_int;
+    fn lua_next(l: LuaState, index: c_int) -> c_int;
 
     fn lua_gettop(l: LuaState) -> c_int;
     fn lua_settop(l: LuaState, index: c_int);

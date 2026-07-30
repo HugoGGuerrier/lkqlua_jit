@@ -946,9 +946,7 @@ impl Node {
                 let node_type_name = node_kind_pattern.f_kind_name()?.text()?;
                 let matched_node_type = ctx
                     .execution_context
-                    .engine
-                    .analysis_lib
-                    .node_types
+                    .get_node_types()
                     .get_type_by_name(&node_type_name);
                 if let Some(node_type) = matched_node_type {
                     NodeVariant::InstanceOf {
