@@ -27,6 +27,9 @@ struct LoweringContext<'a, T> {
     /// execution units.
     lazy_comprehension_counter: usize,
 
+    /// Counter of encountered queries, used for naming their execution units.
+    query_counter: usize,
+
     /// Counter of encountered selector sub-pattern, used for naming their
     /// execution units.
     selector_pattern_counter: usize,
@@ -49,6 +52,7 @@ impl<'a, T> LoweringContext<'a, T> {
             child_index_map: HashMap::new(),
             lambda_counter: 0,
             lazy_comprehension_counter: 0,
+            query_counter: 0,
             selector_pattern_counter: 0,
             tmp_counter: 0,
             diagnostics: DiagnosticCollector::new(),
@@ -67,6 +71,14 @@ impl<'a, T> LoweringContext<'a, T> {
     fn next_lazy_comprehension_name(&mut self) -> String {
         let res = format!("#lazy_comprehension_{}", self.lazy_comprehension_counter);
         self.lazy_comprehension_counter += 1;
+        res
+    }
+
+    /// Get the next available query body name, incrementing the associated
+    /// counter.
+    fn next_query_name(&mut self) -> String {
+        let res = format!("#query_{}", self.query_counter);
+        self.query_counter += 1;
         res
     }
 

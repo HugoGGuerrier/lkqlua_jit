@@ -25,6 +25,15 @@ use const_format::formatcp;
 /// Name of the field to access to get an iterator for a value.
 pub const ITERATOR_FIELD: &str = "field@iterator";
 
+/// Name of the "find" method.
+pub const FIND: &str = "find";
+
+/// Name of the "filter" method.
+pub const FILTER: &str = "filter";
+
+/// Name of the "flat_map" method.
+pub const FLAT_MAP: &str = "flat_map";
+
 pub const TRAIT: BuiltinTrait = BuiltinTrait {
     name: "Iterable",
     required_overloads: &[],
@@ -32,11 +41,11 @@ pub const TRAIT: BuiltinTrait = BuiltinTrait {
         RequiredField::Property(ITERATOR_FIELD),
         RequiredField::Value("any"),
         RequiredField::Value("all"),
-        RequiredField::Value("find"),
+        RequiredField::Value(FIND),
         RequiredField::Property("flatten"),
-        RequiredField::Value("filter"),
+        RequiredField::Value(FILTER),
         RequiredField::Value("map"),
-        RequiredField::Value("flat_map"),
+        RequiredField::Value(FLAT_MAP),
         RequiredField::Value("reduce"),
         RequiredField::Property("to_list"),
     ],

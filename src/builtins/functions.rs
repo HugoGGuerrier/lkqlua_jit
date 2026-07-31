@@ -17,6 +17,9 @@ use crate::{
 };
 use std::{ffi::c_int, io::Write, path::Path};
 
+/// Name of the function to get the list of parsed roots.
+pub const ROOTS: &str = "roots";
+
 /// The "print" function.
 #[unsafe(no_mangle)]
 pub extern "C" fn lkql_print(l: LuaState) -> c_int {

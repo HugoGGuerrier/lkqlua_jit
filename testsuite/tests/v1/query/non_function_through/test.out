@@ -1,0 +1,7 @@
+Error: Invalid argument type
+   ╭─[ <working-dir>/script.lkql:1:8 ]
+   │
+ 1 │ print((through "Not a function" select *).to_list)
+   │        ────────────────┬────────────────  
+   │                        ╰────────────────── Expecting a "Function" for the parameter "fn", got a "Str"
+───╯

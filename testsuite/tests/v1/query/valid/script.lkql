@@ -1,0 +1,31 @@
+val first_var = select first Var
+val all_nulls = select NullLiteral
+val first_null = all_nulls[1]
+val last_null = all_nulls[all_nulls.length]
+
+print("=== Simple queries")
+print((select FooNode).to_list)
+print((select Example).to_list)
+print((select NullLiteral).to_list)
+print("")
+
+print("=== Queries with 'first'")
+print(select first FooNode)
+print(select first Example)
+print(select first NullLiteral)
+print("")
+
+print("=== Queries with 'from'")
+print((from first_var select FooNode).to_list)
+print((from first_null select FooNode).to_list)
+print((from *all_nulls select FooNode).to_list)
+print("")
+
+print("=== Queries with 'through'")
+print((from last_null through parent select FooNode).to_list)
+print((through parent select FooNode).to_list)
+print("")
+
+print("=== Queries with complex patterns")
+print((select n@FooNode when n.parent is Var).to_list)
+print((select n@FooNode when n.children.any((c) => c is NullLiteral)).to_list)

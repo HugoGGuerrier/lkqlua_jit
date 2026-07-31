@@ -1,0 +1,7 @@
+Error: Missing required trait
+   ╭─[ <working-dir>/script.lkql:1:14 ]
+   │
+ 1 │ print((from *"Not an iterable" select *))
+   │              ────────┬────────  
+   │                      ╰────────── Trait "Iterable" is required, the type "Str" isn't implementing it
+───╯

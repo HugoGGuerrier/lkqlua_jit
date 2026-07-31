@@ -7,7 +7,11 @@
 use crate::{
     ExecutionContext,
     builtins::{
-        traits::{self, BuiltinTrait},
+        functions::ROOTS,
+        traits::{
+            self, BuiltinTrait,
+            iterable::{FILTER, FIND, FLAT_MAP},
+        },
         types::{
             self, BuiltinType, TYPE_NAME_FIELD,
             stream::selector_list::{
@@ -98,6 +102,7 @@ impl ExecutionUnit {
             }
             LkqlNode::AnonymousFunction(_) => ctx.next_lambda_name(),
             LkqlNode::ListComprehension(_) => ctx.next_lazy_comprehension_name(),
+            LkqlNode::Query(_) => ctx.next_query_name(),
             LkqlNode::NodePatternSelector(_) => ctx.next_selector_pattern_name(),
             _ => unreachable!(),
         };
@@ -111,11 +116,15 @@ impl ExecutionUnit {
                     all_local_execution_units(&guard, &mut local_units)?;
                 }
             }
+            LkqlNode::Query(query) => {
+                all_local_execution_units(&query.f_pattern()?, &mut local_units)?;
+            }
             LkqlNode::NodePatternSelector(pattern_selector) => {
                 all_local_execution_units(&pattern_selector.f_pattern()?, &mut local_units)?;
             }
             _ => all_local_execution_units(node, &mut local_units)?,
         };
+
         // Iterate over all children execution units to lower them and to
         // associate each one to an index in the children units vector.
         // This needs to be done before the lowering of the unit itself.
@@ -263,28 +272,33 @@ impl ExecutionUnit {
                 // Then return the new function execution unit variant
                 ExecutionUnitVariant::RawCallable { params, body }
             }
-            LkqlNode::NodePatternSelector(selector_pattern) => {
-                // Create a name for the "self" parameter, value input in the
+            LkqlNode::Query(_) | LkqlNode::NodePatternSelector(_) => {
+                // Create a name for the "elem" parameter, value input to the
                 // pattern.
-                let self_param_name = id_str(l, "self");
-                let self_param_id = ctx.new_tmp_id();
+                let elem_param_name = id_str(l, "elem");
+                let elem_param_id = ctx.new_tmp_id();
 
-                // Get the pattern source
-                let pattern_source = selector_pattern.f_pattern()?;
+                // Get the pattern source from the lowered node
+                let pattern_source = match node {
+                    LkqlNode::Query(query) => query.f_pattern()?,
+                    LkqlNode::NodePatternSelector(selector_pattern) => {
+                        selector_pattern.f_pattern()?
+                    }
+                    _ => unreachable!(),
+                };
 
-                // Then, lower the selector pattern matching logic as a
-                // function.
+                // Then, lower node as a function
                 ExecutionUnitVariant::Function {
-                    params: vec![(self_param_name.clone(), None)],
+                    params: vec![(elem_param_name.clone(), None)],
                     body: n(
                         loc(ctx, &pattern_source),
                         NodeVariant::InLexicalScope {
                             local_symbols: all_local_symbols(&pattern_source, ctx)?,
                             expr: Box::new(
-                                Node::lower_lkql_pattern(ctx, &pattern_source, self_param_id)?
+                                Node::lower_lkql_pattern(ctx, &pattern_source, elem_param_id)?
                                     .with_let(
-                                        self_param_id,
-                                        n(l, NodeVariant::ReadSymbol(self_param_name)),
+                                        elem_param_id,
+                                        n(l, NodeVariant::ReadSymbol(elem_param_name)),
                                     ),
                             ),
                         },
@@ -701,6 +715,67 @@ impl Node {
                     .collect::<Result<_, Box<Diagnostic>>>()?,
                 body_index: *ctx.child_index_map.get(node).unwrap(),
             },
+
+            // --- Query expression
+            LkqlNode::Query(query) => {
+                // Lower the "from" expression, and if there is none, call the
+                // "roots" built-in
+                let from_source = query.f_from_expr()?;
+                let from_expr = if let Some(ref from_expr_source) = from_source {
+                    Self::lower_lkql_node(ctx, from_expr_source)?
+                } else {
+                    n(
+                        l,
+                        NodeVariant::CallExpr {
+                            callee: bn(l, NodeVariant::ReadSymbol(id_str(l, ROOTS))),
+                            positional_args: vec![],
+                            named_args: vec![],
+                        },
+                    )
+                };
+
+                // Wrap the "from" expression lowering result according to the
+                // unpacking.
+                let wrapped_from_expr = if from_source.is_some() {
+                    if matches!(query.f_unpack_from()?, LkqlNode::UnpackPresent(_)) {
+                        from_expr.with_trait_requirement(ctx, &traits::iterable::TRAIT)
+                    } else {
+                        n(from_expr.origin_location, NodeVariant::ListLiteral(vec![from_expr]))
+                    }
+                } else {
+                    from_expr
+                };
+
+                // Lower the selector expression
+                let through_expr = if let Some(through_expr_source) = query.f_through_expr()? {
+                    Self::lower_lkql_node(ctx, &through_expr_source)?
+                } else {
+                    n(l, NodeVariant::ReadSymbol(id_str(l, "sub_tree")))
+                };
+
+                // Create the node to access the pattern execution unit
+                let pattern_execution_unit = n(
+                    loc(ctx, &query.f_pattern()?),
+                    NodeVariant::ReadChildUnit(*ctx.child_index_map.get(node).unwrap()),
+                );
+
+                // Create the "flat_map" call
+                let flat_map_call =
+                    wrapped_from_expr.with_method_call(ctx, FLAT_MAP, vec![through_expr]);
+
+                // Finally call the filtering method with the pattern unit
+                flat_map_call
+                    .with_method_call(
+                        ctx,
+                        if matches!(query.f_query_kind()?, LkqlNode::QueryKindFirst(_)) {
+                            FIND
+                        } else {
+                            FILTER
+                        },
+                        vec![pattern_execution_unit],
+                    )
+                    .variant
+            }
 
             // --- Binary operation
             LkqlNode::ArithBinOp(arith_bin_op) => NodeVariant::ArithBinOp {
@@ -2015,6 +2090,7 @@ fn has_lexical_scope(node: &LkqlNode) -> bool {
 ///   * [`LkqlNode::AnonymousFunction`]
 ///   * [`LkqlNode::ListComprehension`]
 ///   * [`LkqlNode::BlockExpr`]
+///   * [`LkqlNode::Query`]
 ///   * [`LkqlNode::IsClause`]
 ///   * [`LkqlNode::MatchArm`]
 ///   * [`LkqlNode::NodePatternSelector`]
@@ -2048,6 +2124,7 @@ fn all_local_decls(node: &LkqlNode, output: &mut Vec<LkqlNode>) -> Result<(), Bo
                 | LkqlNode::AnonymousFunction(_)
                 | LkqlNode::ListComprehension(_)
                 | LkqlNode::BlockExpr(_)
+                | LkqlNode::Query(_)
                 | LkqlNode::IsClause(_)
                 | LkqlNode::MatchArm(_)
                 | LkqlNode::NodePatternSelector(_) => (),
@@ -2117,6 +2194,17 @@ fn all_local_execution_units(
                     // For list comprehensions, recurse on generators that
                     // belongs to the current local scope.
                     all_local_execution_units(&list_comp.f_generators()?, output)?;
+                    output.push(child);
+                }
+                LkqlNode::Query(query) => {
+                    // For queries, recurse on the "from" and "through"
+                    // expressions that belongs to the current local scope.
+                    if let Some(from_expr) = query.f_from_expr()? {
+                        all_local_execution_units(&from_expr, output)?;
+                    }
+                    if let Some(through_expr) = query.f_through_expr()? {
+                        all_local_execution_units(&through_expr, output)?;
+                    }
                     output.push(child);
                 }
                 LkqlNode::NodePatternSelector(pattern_selector) => {
