@@ -130,6 +130,8 @@ impl AnalysisLibrary {
         Ok(())
     }
 
+    /// Internal helper to parse all provided sources and place results in the
+    /// associated Lua state.
     fn parse_sources(l: LuaState, sources: &[PathBuf]) -> Result<(), DiagnosticCollector> {
         // Create analysis unit and root tables
         let array_size = min(sources.len(), i32::MAX as usize) as i32;
@@ -334,6 +336,8 @@ impl AnalysisLibrary {
         pop(l, 3);
     }
 
+    /// Internal helper to register the LKQL `null` value in the provided Lua
+    /// state.
     fn register_null_value(l: LuaState) {
         // Get the name of the root node type
         get_global(l, G_ANALYSIS_LIB);

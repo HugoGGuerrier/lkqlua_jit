@@ -23,14 +23,14 @@ struct LoweringContext<'a, T> {
     /// Counter of encountered lambdas, used for naming them.
     lambda_counter: usize,
 
-    /// Counter of encountered list comprehension, used for naming their
+    /// Counter of encountered list comprehensions, used for naming their
     /// execution units.
     lazy_comprehension_counter: usize,
 
     /// Counter of encountered queries, used for naming their execution units.
     query_counter: usize,
 
-    /// Counter of encountered selector sub-pattern, used for naming their
+    /// Counter of encountered selector sub-patterns, used for naming their
     /// execution units.
     selector_pattern_counter: usize,
 
