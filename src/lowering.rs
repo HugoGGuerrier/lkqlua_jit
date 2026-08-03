@@ -9,9 +9,9 @@ use std::collections::HashMap;
 pub mod lkql;
 
 /// Context that holds information during a lowering pass.
-struct LoweringContext<'a, T> {
+struct LoweringContext<'a: 'b, 'b, T> {
     /// Execution context the lowering takes place in.
-    execution_context: &'a ExecutionContext,
+    execution_context: &'a ExecutionContext<'b>,
 
     /// The source that is currently being lowered.
     lowered_source: SourceId,
@@ -41,11 +41,8 @@ struct LoweringContext<'a, T> {
     diagnostics: DiagnosticCollector,
 }
 
-impl<'a, T> LoweringContext<'a, T> {
-    pub fn new<'b>(execution_context: &'b ExecutionContext, lowered_source: SourceId) -> Self
-    where
-        'b: 'a,
-    {
+impl<'a: 'b, 'b, T> LoweringContext<'a, 'b, T> {
+    pub fn new(execution_context: &'a ExecutionContext, lowered_source: SourceId) -> Self {
         Self {
             execution_context,
             lowered_source,

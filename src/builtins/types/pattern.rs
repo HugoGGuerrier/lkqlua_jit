@@ -13,8 +13,8 @@ use crate::{
     },
     errors::{ErrorInstance, ErrorInstanceArg, REGEX_SYNTAX_ERROR, REGEX_TOO_BIG},
     lua::{
-        LuaState, get_field, get_global, get_index, get_integer, get_length, get_top,
-        get_user_data, pop, push_bool, push_integer, push_string, push_table, push_user_data_ptr,
+        LuaState, UserData, get_field, get_global, get_index, get_integer, get_length, get_top,
+        get_user_data, pop, push_bool, push_integer, push_string, push_table, push_user_data,
         raise_error, set_field, set_metatable,
     },
     runtime::{Function, RuntimeValue, register_for_gc},
@@ -83,7 +83,7 @@ pub extern "C" fn pattern_constructor(l: LuaState) -> c_int {
             push_table(l, 0, 1);
 
             // Store a pointer to the Rust compiled regex in it
-            push_user_data_ptr(l, Box::into_raw(Box::new(compiled_regex)));
+            push_user_data(l, Box::into_raw(Box::new(compiled_regex)) as *const UserData);
             set_field(l, -2, NATIVE_HANDLE_FIELD);
 
             // Then set the metatable of the result
@@ -127,13 +127,13 @@ extern "C" fn pattern_native_handle(l: LuaState) -> c_int {
     pop(l, 1);
 
     // Create the pointer from its bytes and store it in the pattern value
-    let mut regex_ptr: *mut Regex = ptr::null_mut();
+    let mut regex_ptr: *mut UserData = ptr::null_mut();
     let mut regex_addr: usize = 0;
     for i in (0..bytes.len()).rev() {
         regex_addr = (regex_addr << 8) | bytes[i] as usize;
     }
     regex_ptr = regex_ptr.with_addr(regex_addr);
-    push_user_data_ptr(l, regex_ptr);
+    push_user_data(l, regex_ptr);
     set_field(l, -2, NATIVE_HANDLE_FIELD);
 
     // Register the pattern Lua value for garbage collection

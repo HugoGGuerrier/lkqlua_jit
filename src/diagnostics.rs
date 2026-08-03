@@ -374,7 +374,7 @@ impl Diagnostic {
 
     /// Print the diagnostic in the format "<kind_name>: <message>". This can
     /// be used at places where you cannot access the source repository.
-    pub fn print_message<W: Write>(&self, output: &mut W) {
+    fn print_message<W: Write>(&self, output: &mut W) {
         let line_prefix = format!("{}:", self.kind.label()).fg(self.kind.color());
         writeln!(output, "{line_prefix} {}", self.message).unwrap();
     }

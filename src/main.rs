@@ -5,7 +5,9 @@ use clap::{
         styling::{AnsiColor, Color, Style},
     },
 };
-use lkqlua_jit::{Config, ExecutionContext, Timings, VerboseElement, Writable};
+use lkqlua_jit::{
+    Config, ExecutionContext, Timings, VerboseElement, Writable, sources::SourceRepository,
+};
 use std::{
     io::{stderr, stdout},
     path::PathBuf,
@@ -100,14 +102,17 @@ fn main() {
         additional_args: args.engine_args,
     };
 
+    // Create the source repository
+    let mut source_repo = SourceRepository::new();
+
     // Create a new execution context
-    let t = ExecutionContext::new(config);
+    let t = ExecutionContext::new(config, &mut source_repo);
     let mut ctx = match t {
         Ok(ctx) => ctx,
         Err(diagnostics) => {
             diagnostics
                 .into_iter()
-                .for_each(|diag| diag.print_message(&mut stderr()));
+                .for_each(|diag| diag.print(&source_repo, &mut stderr(), false));
             return;
         }
     };
@@ -117,7 +122,7 @@ fn main() {
         && let Err(diagnostics) = ctx.execute_lkql_script(script)
     {
         for diag in &diagnostics {
-            diag.print(&ctx.source_repo, &mut ctx.config.std_err, false);
+            diag.print(ctx.source_repo, &mut ctx.config.std_err, false);
         }
     }
 

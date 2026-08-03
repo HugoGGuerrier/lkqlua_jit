@@ -25,7 +25,11 @@ const SHORT_SRC_SIZE: usize = 60;
 
 // ----- Public types -----
 
+/// A Lua execution context.
 pub type LuaState = *mut c_void;
+
+/// Alias to represent an arbitrary user data.
+pub type UserData = c_void;
 
 /// C function that can be called from any Lua code.
 pub type LuaCFunction = unsafe extern "C" fn(LuaState) -> c_int;
@@ -213,13 +217,8 @@ pub(crate) fn push_table(l: LuaState, array_part_size: i32, hash_part_size: i32)
     unsafe { lua_createtable(l, array_part_size, hash_part_size) }
 }
 
-/// Push arbitrary data on the Lua stack as a value.
-pub(crate) fn push_user_data<T: Any>(l: LuaState, data: &T) {
-    unsafe { lua_pushlightuserdata(l, data as *const T as *mut c_void) }
-}
-
 /// Push a pointer to arbitrary data on the Lua stack.
-pub(crate) fn push_user_data_ptr<T: Any>(l: LuaState, data: *mut T) {
+pub(crate) fn push_user_data(l: LuaState, data: *const UserData) {
     unsafe { lua_pushlightuserdata(l, data as *mut c_void) }
 }
 

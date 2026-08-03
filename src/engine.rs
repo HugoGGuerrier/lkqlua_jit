@@ -11,7 +11,7 @@ use crate::{
     engine::analysis_lib::AnalysisLibrary,
     errors::{ERROR_TEMPLATE_REPOSITORY, ErrorInstance, ErrorInstanceArg, LUA_ENGINE_ERROR},
     lua::{
-        LuaState, call, close_lua_state, debug_frame, debug_get_local, debug_get_source,
+        LuaState, UserData, call, close_lua_state, debug_frame, debug_get_local, debug_get_source,
         debug_info, debug_proto_and_pc, get_field, get_global, get_string, get_top, get_user_data,
         load_buffer, new_lua_state, open_lua_libs, pop, push_c_function, push_string,
         push_user_data, remove_value, safe_call, set_global, to_string,
@@ -20,7 +20,7 @@ use crate::{
     sources::SourceSection,
 };
 use regex::Regex;
-use std::{collections::HashSet, ffi::c_int};
+use std::{collections::HashSet, ffi::c_int, ptr};
 
 pub mod analysis_lib;
 
@@ -99,7 +99,7 @@ impl Engine {
             .encode(&mut encoded_bytecode_unit);
 
         // Place the execution context in the global Lua table
-        push_user_data(l, ctx);
+        push_user_data(l, ptr::from_ref(ctx) as *const UserData);
         set_global(l, G_EXECUTION_CONTEXT);
 
         // Set the error handler

@@ -38,13 +38,15 @@ const PRELUDE_SOURCE: &str = include_str!("prelude.lkql");
 /// This type holds all required data to run LKQL sources using LuaJIT as a
 /// backend. This is what you have to use.
 #[derive(Debug)]
-pub struct ExecutionContext {
+pub struct ExecutionContext<'a> {
     pub config: Config,
-    pub source_repo: SourceRepository,
-    pub engine: Engine,
+    pub source_repo: &'a mut SourceRepository,
 
     /// Cache were compilation result are placed, associated to their source.
     compilation_cache: HashMap<SourceId, ExtendedBytecodeUnit>,
+
+    /// Inner execution engine to run LuaJIT bytecode buffers.
+    engine: Engine,
 
     /// This vector stores sources that are currently being executed in their
     /// execution order (oldest first).
@@ -55,18 +57,21 @@ pub struct ExecutionContext {
     pub timings: BTreeMap<SourceId, Timings>,
 }
 
-impl ExecutionContext {
+impl<'a> ExecutionContext<'a> {
     /// Create an initialize a new execution context. This is the first entry
     /// point to the LKQL engine.
     ///
     /// If any error occurs during the execution context initialization, this
     /// function returns [`Err`] with all error messages.
-    pub fn new(config: Config) -> Result<Self, DiagnosticCollector> {
+    pub fn new<'b: 'a>(
+        config: Config,
+        source_repo: &'b mut SourceRepository,
+    ) -> Result<Self, DiagnosticCollector> {
         // Create the resulting execution context
         let mut res = Self {
             engine: Engine::new(&config)?,
             config,
-            source_repo: SourceRepository::new(),
+            source_repo,
             compilation_cache: HashMap::new(),
             execution_stack: Vec::new(),
             timings: BTreeMap::new(),
