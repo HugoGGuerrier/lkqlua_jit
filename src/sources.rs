@@ -5,7 +5,7 @@
 
 use crate::diagnostics::{Diagnostic, DiagnosticCollector};
 use ariadne::Cache;
-use liblkqllang::{AnalysisContext, AnalysisUnit, SourceLocation};
+use liblkqllang::SourceLocation;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -19,8 +19,6 @@ use std::{
 /// This structure holds all loaded sources.
 #[derive(Debug)]
 pub struct SourceRepository {
-    lkql_context: AnalysisContext,
-
     /// A map going to full file paths to their corresponding source
     /// identifier.
     path_to_source_id: HashMap<PathBuf, SourceId>,
@@ -56,11 +54,7 @@ impl SourceRepository {
     /// Create a new empty source repository with default config
     /// (see https://github.com/HugoGGuerrier/lkqlua_jit/issues/2).
     pub fn new() -> Self {
-        Self {
-            lkql_context: AnalysisContext::create_default().unwrap(),
-            path_to_source_id: HashMap::new(),
-            sources: Vec::new(),
-        }
+        Self { path_to_source_id: HashMap::new(), sources: Vec::new() }
     }
 
     /// Read the provided file and store it as a source in this repository,
@@ -136,37 +130,6 @@ impl SourceRepository {
     /// identifier, if any.
     pub fn get_source_by_id(&self, source_id: SourceId) -> Option<&Source> {
         self.sources.get(source_id)
-    }
-
-    /// Parse the source designated by the provided identifier using the LKQL
-    /// parsing library. If the parsing succeeds, this function return the
-    /// resulting analysis unit that contains the parsing tree.
-    /// If the parsing encounter syntax error or an internal exception, an
-    /// [`Err`] instance is returned with all collected diagnostics.
-    /// This method may panic if:
-    ///   * There is no source corresponding to the provided identifier
-    pub fn parse_as_lkql(
-        &mut self,
-        source_id: SourceId,
-    ) -> Result<AnalysisUnit, DiagnosticCollector> {
-        // Parse the source as LKQL
-        let source = self.get_source_by_id(source_id).expect("Invalid source id");
-        let unit = self
-            .lkql_context
-            .get_unit_from_buffer(source.name(), source.content().text(), None, None)
-            .map_err(Diagnostic::from)?;
-
-        // Check parsing diagnostics
-        let lkql_parsing_diags = unit.diagnostics().map_err(Diagnostic::from)?;
-        if !lkql_parsing_diags.is_empty() {
-            let mut diagnostics = DiagnosticCollector::new();
-            for lkql_diag in &lkql_parsing_diags {
-                diagnostics.add(Diagnostic::from_lkql_diagnostic(source_id, lkql_diag));
-            }
-            Err(diagnostics)
-        } else {
-            Ok(unit)
-        }
     }
 }
 

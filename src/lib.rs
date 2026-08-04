@@ -12,6 +12,7 @@ use crate::{
     sources::{SourceId, SourceRepository},
 };
 use clap::ValueEnum;
+use liblkqllang::{AnalysisContext, AnalysisUnit};
 use pretty_hex::PrettyHex;
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
@@ -41,6 +42,12 @@ const PRELUDE_SOURCE: &str = include_str!("prelude.lkql");
 pub struct ExecutionContext<'a> {
     pub config: Config,
     pub source_repo: &'a mut SourceRepository,
+
+    /// Analysis context used to parse LKQL sources.
+    lkql_context: AnalysisContext,
+
+    /// Cache where parsing result are stored, associated to their source.
+    parsing_cache: HashMap<SourceId, AnalysisUnit>,
 
     /// Cache were compilation result are placed, associated to their source.
     compilation_cache: HashMap<SourceId, ExtendedBytecodeUnit>,
@@ -72,6 +79,8 @@ impl<'a> ExecutionContext<'a> {
             engine: Engine::new(&config)?,
             config,
             source_repo,
+            lkql_context: AnalysisContext::create_default().map_err(Diagnostic::from)?,
+            parsing_cache: HashMap::new(),
             compilation_cache: HashMap::new(),
             execution_stack: Vec::new(),
             timings: BTreeMap::new(),
@@ -130,6 +139,7 @@ impl<'a> ExecutionContext<'a> {
         // If the file has been changed, remove its entry in the compilation
         // cache.
         if updated {
+            self.parsing_cache.remove(&res);
             self.compilation_cache.remove(&res);
         }
 
@@ -140,23 +150,65 @@ impl<'a> ExecutionContext<'a> {
     /// information, returning its new identifier.
     fn add_source_buffer(&mut self, name: &str, content: &str) -> SourceId {
         let res = self.source_repo.add_source_buffer(name, content);
+        self.parsing_cache.remove(&res);
         self.compilation_cache.remove(&res);
         res
     }
 
-    /// Execute the source designated by the provided identifier, leaving its
-    /// execution result in the top of the Lua stack.
-    fn execute_source(&mut self, source: SourceId) -> Result<(), DiagnosticCollector> {
-        // First of all check in the compilation cache whether the source has
-        // already been compiled.
+    /// Parse the source designated by the provided identifier using the LKQL
+    /// parsing library. If the parsing succeeds, this function populates the
+    /// [`Self::parsing_cache`] with the resulting analysis unit that contains the
+    /// syntax tree.
+    ///
+    /// If the parsing encounter syntax error or an internal exception, an
+    /// [`Err`] instance is returned with all collected diagnostics.
+    ///
+    /// This method may panic if:
+    ///   * There is no source corresponding to the provided identifier
+    fn parse_source(&mut self, source: SourceId) -> Result<(), DiagnosticCollector> {
+        if !self.parsing_cache.contains_key(&source) {
+            // We know that the source hasn't been parsed before, so do it now
+            let src = self.source_repo.get_source_by_id(source).unwrap();
+            let unit = self
+                .lkql_context
+                .get_unit_from_buffer(src.name(), src.content().text(), None, None)
+                .map_err(Diagnostic::from)?;
+
+            // Check parsing diagnostics
+            let lkql_parsing_diags = unit.diagnostics().map_err(Diagnostic::from)?;
+            if !lkql_parsing_diags.is_empty() {
+                let mut diagnostics = DiagnosticCollector::new();
+                for lkql_diag in &lkql_parsing_diags {
+                    diagnostics.add(Diagnostic::from_lkql_diagnostic(source, lkql_diag));
+                }
+                return Err(diagnostics);
+            }
+
+            // Finally place the parsing result in the cache
+            self.parsing_cache.insert(source, unit);
+        }
+
+        // Finally, if we're here, we know that the parsing has been
+        // successfully made and place in the parsing cache.
+        Ok(())
+    }
+
+    /// Compile the source designated by the provided identifier. If the
+    /// compilation succeeds, this function populates the
+    /// [`Self::compilation_cache`] with the resulting bytecode.
+    ///
+    /// If the compilation encounter an error, an [`Err`] instance is returned
+    /// with all collected diagnostics.
+    fn compile_source(&mut self, source: SourceId) -> Result<(), DiagnosticCollector> {
         if !self.compilation_cache.contains_key(&source) {
             // Here we know that the source hasn't been compiled before, so we
-            // do the compilation.
+            // perform the compilation.
             let mut time_point: Instant;
 
             // Parse the source file
             time_point = Instant::now();
-            let unit = self.source_repo.parse_as_lkql(source)?;
+            self.parse_source(source)?;
+            let unit = self.parsing_cache.get(&source).unwrap();
             let root = unit.root().map_err(Diagnostic::from)?.unwrap();
             self.get_timings_for_source(source).parsing = time_point.elapsed();
 
@@ -205,10 +257,17 @@ impl<'a> ExecutionContext<'a> {
                 .insert(source, extended_bytecode_unit);
         }
 
+        Ok(())
+    }
+
+    /// Execute the source designated by the provided identifier, leaving its
+    /// execution result in the top of the Lua stack.
+    fn execute_source(&mut self, source: SourceId) -> Result<(), DiagnosticCollector> {
         // Push the source on the execution stack
         self.execution_stack.push(source);
 
         // Get the compilation result of the source from the cache
+        self.compile_source(source)?;
         let bytecode_unit = self.compilation_cache.get(&source).unwrap();
 
         // Run the bytecode
