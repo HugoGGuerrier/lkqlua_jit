@@ -6,7 +6,7 @@ use clap::{
     },
 };
 use lkqlua_jit::{
-    Config, ExecutionContext, Timings, VerboseElement, Writable, sources::SourceRepository,
+    Config, DebugElement, ExecutionContext, Timings, Writable, sources::SourceRepository,
 };
 use std::{
     io::{stderr, stdout},
@@ -32,8 +32,8 @@ struct LauncherArgs {
     )]
     lang_name: String,
 
-    #[arg(long, short, help = "Display additional information during the run")]
-    verbose: Vec<VerboseElement>,
+    #[arg(long, short, help = "Display debug information during the run")]
+    debug: Vec<DebugElement>,
 
     #[arg(
         long,
@@ -96,7 +96,7 @@ fn main() {
         std_out: Writable::Stdout(stdout()),
         std_err: Writable::Stderr(stderr()),
         do_profiling: args.profiling,
-        verbose_elements: args.verbose.into_iter().collect(),
+        debug_elements: args.debug.into_iter().collect(),
         analyzed_lang_name: args.lang_name,
         files_to_analyze: args.analyzed_files,
         additional_args: args.engine_args,

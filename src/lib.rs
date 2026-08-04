@@ -213,7 +213,7 @@ impl<'a> ExecutionContext<'a> {
             self.get_timings_for_source(source).parsing = time_point.elapsed();
 
             // If required, display the parsing tree
-            if self.config.is_verbose(VerboseElement::ParsingTree) {
+            if self.config.debug_enabled(DebugElement::ParsingTree) {
                 writeln!(self.config.std_out, "===== Parsing tree =====\n").unwrap();
                 writeln!(self.config.std_out, "{}\n", root.tree_dump(0).map_err(Diagnostic::from)?)
                     .unwrap();
@@ -225,7 +225,7 @@ impl<'a> ExecutionContext<'a> {
             self.get_timings_for_source(source).lowering = time_point.elapsed();
 
             // If required, display the lowered tree
-            if self.config.is_verbose(VerboseElement::LoweringTree) {
+            if self.config.debug_enabled(DebugElement::LoweringTree) {
                 writeln!(self.config.std_out, "===== Lowering tree =====\n").unwrap();
                 writeln!(self.config.std_out, "{}\n", lowering_tree).unwrap();
             }
@@ -239,13 +239,13 @@ impl<'a> ExecutionContext<'a> {
             let bytecode_unit = extended_bytecode_unit.to_bytecode_unit();
 
             // If required, display the compiled bytecode
-            if self.config.is_verbose(VerboseElement::Bytecode) {
+            if self.config.debug_enabled(DebugElement::Bytecode) {
                 writeln!(self.config.std_out, "===== Bytecode =====\n").unwrap();
                 writeln!(self.config.std_out, "{}\n", bytecode_unit).unwrap();
             }
 
             // If required, display the raw bytecode buffer
-            if self.config.is_verbose(VerboseElement::RawBytecode) {
+            if self.config.debug_enabled(DebugElement::RawBytecode) {
                 let mut encoded_bytecode_unit = Vec::new();
                 bytecode_unit.encode(&mut encoded_bytecode_unit);
                 writeln!(self.config.std_out, "===== Raw bytecode =====\n").unwrap();
@@ -300,8 +300,8 @@ pub struct Config {
     /// Whether to perform profiling during the run.
     pub do_profiling: bool,
 
-    /// All elements to display additional information about.
-    pub verbose_elements: HashSet<VerboseElement>,
+    /// All elements to display debug information about.
+    pub debug_elements: HashSet<DebugElement>,
 
     /// Name of the language to analyze.
     pub analyzed_lang_name: String,
@@ -314,9 +314,8 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn is_verbose(&self, element: VerboseElement) -> bool {
-        self.verbose_elements.contains(&element)
-            || self.verbose_elements.contains(&VerboseElement::All)
+    pub fn debug_enabled(&self, element: DebugElement) -> bool {
+        self.debug_elements.contains(&element) || self.debug_elements.contains(&DebugElement::All)
     }
 }
 
@@ -355,7 +354,7 @@ impl Write for Writable {
 /// This enum contains all elements that can be added to a "classic" output
 /// during a run of the engine.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, ValueEnum)]
-pub enum VerboseElement {
+pub enum DebugElement {
     All,
     ParsingTree,
     LoweringTree,
