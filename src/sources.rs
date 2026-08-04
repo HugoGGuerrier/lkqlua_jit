@@ -134,14 +134,6 @@ impl SourceRepository {
         self.sources.get(source_id)
     }
 
-    /// Get the source identifier corresponding to the provided file path, if
-    /// any.
-    pub fn get_id_by_file(&self, file: &Path) -> Option<SourceId> {
-        file.canonicalize()
-            .ok()
-            .and_then(|p| self.path_to_source_id.get(&p).copied())
-    }
-
     /// Parse the source designated by the provided identifier using the LKQL
     /// parsing library. If the parsing succeeds, this function return the
     /// resulting analysis unit that contains the parsing tree.
