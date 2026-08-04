@@ -64,12 +64,14 @@ impl SourceRepository {
     }
 
     /// Read the provided file and store it as a source in this repository,
-    /// then it returns its identifier and whether the file has been loaded.
+    /// then return its identifier and whether the file has been (re)loaded.
+    ///
     /// This function tries to avoid useless file reload, so before reading
     /// the file, it checks if the latter has been modified since the last
     /// load. If not, the source repository isn't modified, and the second
-    /// part of the result is `false`.
-    /// This method may result [`Err`] if:
+    /// element of the result tuple is `false`.
+    ///
+    /// This method may return [`Err`] if:
     ///   * The provided path doesn't designate an existing file
     ///   * The file designated by the provided file is not UTF-8 encoded
     ///     (see https://github.com/HugoGGuerrier/lkqlua_jit/issues/1)
@@ -116,8 +118,10 @@ impl SourceRepository {
     }
 
     /// Register the provided buffer in the source repository, returning the
-    /// identifier of the newly created source. This function store the new
-    /// buffer unconditionally, overwriting the existing one if there is.
+    /// identifier of the newly created source.
+    ///
+    /// This function store the new buffer unconditionally, overwriting the
+    /// existing one with the same name if there is.
     pub fn add_source_buffer(&mut self, name: &str, content: &str) -> SourceId {
         let source = Source::Buffer {
             name: String::from(name),
@@ -179,8 +183,8 @@ pub enum Source {
         /// Content of the file.
         content: ariadne::Source<String>,
 
-        /// Last time the file has been modified when this instance has been
-        /// created.
+        /// Last time the file has been modified when this source instance has
+        /// been created.
         last_modification: Option<SystemTime>,
     },
     Buffer {
@@ -240,6 +244,7 @@ impl SourceSection {
 
     /// Create a new source section start from the `from` start location and
     /// finishing at the `to` end.
+    ///
     /// This method returns an error if:
     ///   * Sections are not about the same source
     ///   * `to`'s end is before `from`'s start
