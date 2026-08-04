@@ -111,8 +111,9 @@ impl Engine {
             l,
             &encoded_bytecode_unit,
             ctx.source_repo
-                .get_name_by_id(bytecode_unit.source)
-                .unwrap(),
+                .get_source_by_id(bytecode_unit.source)
+                .unwrap()
+                .name(),
         ) {
             panic!(
                 "Cannot load the provided bytecode buffer, error message: {}",

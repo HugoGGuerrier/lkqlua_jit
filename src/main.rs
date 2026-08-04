@@ -130,7 +130,7 @@ fn main() {
     if args.timings {
         println!();
         for (source, timings) in ctx.timings {
-            display_timings(ctx.source_repo.get_name_by_id(source).unwrap(), &timings);
+            display_timings(ctx.source_repo.get_source_by_id(source).unwrap().name(), &timings);
         }
     }
 }

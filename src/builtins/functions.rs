@@ -100,10 +100,12 @@ pub extern "C" fn lkql_import(l: LuaState) -> c_int {
             .execution_stack
             .iter()
             .map(|s| {
-                Path::new(ctx.source_repo.get_name_by_id(*s).unwrap())
-                    .file_stem()
-                    .unwrap()
-                    .to_string_lossy()
+                String::from(
+                    Path::new(&ctx.source_repo.get_source_by_id(*s).unwrap().name())
+                        .file_stem()
+                        .unwrap()
+                        .to_string_lossy(),
+                )
             })
             .collect::<Vec<_>>()
             .join(" -> ");

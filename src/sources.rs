@@ -134,12 +134,6 @@ impl SourceRepository {
         self.sources.get(source_id)
     }
 
-    /// Get the name of a source from its identifier. This function assumes
-    /// that the provided identifier is related to an existing source.
-    pub fn get_name_by_id(&self, source_id: SourceId) -> Option<&str> {
-        self.sources.get(source_id).map(Source::name)
-    }
-
     /// Get the source identifier corresponding to the provided file path, if
     /// any.
     pub fn get_id_by_file(&self, file: &Path) -> Option<SourceId> {
