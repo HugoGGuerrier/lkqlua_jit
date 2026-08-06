@@ -62,12 +62,15 @@ pub enum RuntimeValue {
 impl RuntimeValue {
     /// Place the value represented by this object to the top of the provided
     /// Lua state.
-    pub(crate) fn push_on_stack(&self, l: LuaState) {
+    ///
+    /// Name of the value on the stack, if this makes sense. This name is used
+    /// for debugging purposes.
+    pub(crate) fn push_on_stack(&self, l: LuaState, name: &str) {
         match self {
             RuntimeValue::Boolean(b) => push_bool(l, *b),
             RuntimeValue::Integer(i) => push_integer(l, *i),
             RuntimeValue::String(s) => push_string(l, s),
-            RuntimeValue::Callable(f) => f.push_on_stack(l, 0),
+            RuntimeValue::Callable(f) => f.push_on_stack(l, name, 0),
             RuntimeValue::FromBuilder(builder) => builder(l),
         }
     }
@@ -109,7 +112,7 @@ impl Function {
     ///
     /// Pop as many values as `up_value_count` from the stack and provide them
     /// as up-values for the new function value.
-    pub(crate) fn push_on_stack(&self, l: LuaState, up_value_count: u8) {
+    pub(crate) fn push_on_stack(&self, l: LuaState, name: &str, up_value_count: u8) {
         match self {
             Function::CFunction(function) => push_c_closure(l, *function, up_value_count),
             Function::LuaFunction(source) => {
@@ -122,7 +125,7 @@ impl Function {
                 final_source.push_str(source);
 
                 // Parse the Lua function source and execute the parsing result
-                load_lua_code(l, &final_source, "<lua_function>");
+                load_lua_code(l, &final_source, name);
                 move_top_value(l, get_top(l) - up_value_count as i32);
                 call(l, up_value_count as i32, Some(1));
             }
@@ -251,7 +254,7 @@ impl Function {
                 );
 
                 // Parse the Lua function source and execute the parsing result
-                load_lua_code(l, &final_source, "<lkql_function>");
+                load_lua_code(l, &final_source, name);
                 move_top_value(l, get_top(l) - up_value_count as i32);
                 call(l, up_value_count as i32, Some(1));
             }
@@ -321,7 +324,7 @@ pub(crate) fn register_for_gc(l: LuaState, index: i32) {
     // Create a closure to forward the GC call
     copy_value(l, -3);
     Function::LuaFunction("function(_) getmetatable(__uv[1]).__gc(__uv[1]) end")
-        .push_on_stack(l, 1);
+        .push_on_stack(l, "__gc", 1);
 
     // Set the GC forwarder in the proxy metatable
     set_field(l, -2, "__gc");

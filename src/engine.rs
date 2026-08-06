@@ -63,7 +63,7 @@ impl Engine {
 
         // Populate this engine with built-in bindings
         for (name, value) in get_builtin_bindings() {
-            value.push_on_stack(lua_state);
+            value.push_on_stack(lua_state, name);
             set_global(lua_state, name);
             registered_globals.insert(String::from(name));
         }

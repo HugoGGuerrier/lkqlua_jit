@@ -276,13 +276,14 @@ impl AnalysisLibrary {
 
         // Now place all fields and properties in the Lua type
         for (name, field) in implementation.fields {
+            let field_name = &builtin_type.make_field_name(name);
             let index = match field {
                 TypeField::Value(runtime_value) => {
-                    runtime_value.push_on_stack(l);
+                    runtime_value.push_on_stack(l, field_name);
                     -3
                 }
                 TypeField::Property(function_value) => {
-                    function_value.push_on_stack(l, 0);
+                    function_value.push_on_stack(l, field_name, 0);
                     -2
                 }
             };
@@ -292,7 +293,7 @@ impl AnalysisLibrary {
 
         // Finally, set type overloads
         for (target, function) in implementation.overloads {
-            function.push_on_stack(l, 0);
+            function.push_on_stack(l, &builtin_type.make_field_name(target.metamethod_name()), 0);
             set_field(l, -2, target.metamethod_name());
         }
 

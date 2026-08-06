@@ -82,6 +82,12 @@ impl BuiltinType {
         }
     }
 
+    /// Create a full field name for the provided `name` in this type, with
+    /// the format "<type_name>::<name>"
+    pub fn make_field_name(&self, name: &str) -> String {
+        make_type_field_full_name(self.display_name(), name)
+    }
+
     /// Place all Lua values required to support this type at run-time in the
     /// provided Lua execution context.
     pub fn place_in_lua_context(&self, l: LuaState) {
@@ -237,9 +243,16 @@ pub struct TypeImplementation {
 }
 
 impl TypeImplementation {
-    /// Get the
+    /// Get the name of the Lua global variable where this implementation is
+    /// stored.
     pub fn global_field_name(&self) -> String {
         format!("{TYPE_FIELD_PREFIX}{}", self.name)
+    }
+
+    /// Create a full field name for the provided `name` in this type, with
+    /// the format "<type_implementation_name>::<name>"
+    fn make_field_name(&self, name: &str) -> String {
+        make_type_field_full_name(self.name, name)
     }
 
     /// Fill tables containing fields of this type implementation. This
@@ -260,11 +273,11 @@ impl TypeImplementation {
 
         // Then fill tables
         fields.iter().for_each(|(n, v)| {
-            v.push_on_stack(l);
+            v.push_on_stack(l, &self.make_field_name(n));
             set_field(l, -3, n);
         });
         properties.iter().for_each(|(n, v)| {
-            v.push_on_stack(l, 0);
+            v.push_on_stack(l, &self.make_field_name(n), 0);
             set_field(l, -2, n);
         });
     }
@@ -275,14 +288,14 @@ impl TypeImplementation {
         self.index_method
             .as_ref()
             .unwrap_or(&Function::LuaFunction(GENERIC_INDEX))
-            .push_on_stack(l, 2);
+            .push_on_stack(l, &self.make_field_name("__index"), 2);
     }
 
     /// Push all overloads meta-methods of this type implementation in the
     /// table at the top of the Lua stack.
     fn push_overloads(&self, l: LuaState) {
         for (target, function) in self.overloads {
-            function.push_on_stack(l, 0);
+            function.push_on_stack(l, &self.make_field_name(target.metamethod_name()), 0);
             set_field(l, -2, target.metamethod_name());
         }
     }
@@ -412,4 +425,10 @@ pub extern "C" fn img_property(l: LuaState) -> c_int {
 /// name of the implementation otherwise).
 pub fn register_metatable_in_globals(l: LuaState, type_implementation: &TypeImplementation) {
     set_global(l, &type_implementation.global_field_name());
+}
+
+/// Internal helper to create a full field name in the formatting
+/// `<type_name>::<field_name>`.
+fn make_type_field_full_name(type_name: &str, field_name: &str) -> String {
+    format!("{type_name}::{field_name}")
 }
