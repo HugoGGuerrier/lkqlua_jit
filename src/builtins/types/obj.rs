@@ -31,8 +31,8 @@ pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
         (WITHOUT_KEYS_FIELD, TypeField::Value(WITHOUT_KEYS)),
     ],
     overloads: &[
-        (OverloadTarget::ToString, OBJ_TOSTRING),
-        (OverloadTarget::Eq, OBJ_EQ),
+        (OverloadTarget::ToString, TOSTRING),
+        (OverloadTarget::Eq, EQ),
     ],
     index_method: None,
     registering_function: None,
@@ -69,7 +69,7 @@ const WITHOUT_KEYS: RuntimeValue = RuntimeValue::Callable(Function::LkqlFunction
 });
 
 /// Overload of "__tostring" for the "Object" type.
-const OBJ_TOSTRING: Function = Function::LuaFunction(
+const TOSTRING: Function = Function::LuaFunction(
     "function (self)
         -- Get keys and sort them
         local keys = {}
@@ -88,7 +88,7 @@ const OBJ_TOSTRING: Function = Function::LuaFunction(
 );
 
 /// Overload of "__eq" for the "Object" type.
-const OBJ_EQ: Function = Function::LuaFunction(
+const EQ: Function = Function::LuaFunction(
     "function(self, other)
         -- Start by checking types
         if getmetatable(self) ~= getmetatable(other) then

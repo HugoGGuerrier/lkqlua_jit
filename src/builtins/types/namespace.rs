@@ -18,13 +18,13 @@ pub const TYPE: BuiltinType = BuiltinType {
 pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
     name: "Namespace",
     fields: &[IMG_FIELD],
-    overloads: &[(OverloadTarget::ToString, NAMESPACE_TOSTRING)],
+    overloads: &[(OverloadTarget::ToString, TOSTRING)],
     index_method: None,
     registering_function: None,
 };
 
 /// Overload of "__tostring" for the "Namespace" type
-const NAMESPACE_TOSTRING: Function = Function::LuaFunction(
+const TOSTRING: Function = Function::LuaFunction(
     "function (self)
         -- Get keys and sort them
         local keys = {}

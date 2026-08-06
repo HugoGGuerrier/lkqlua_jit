@@ -23,15 +23,15 @@ pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
     name: "Tuple",
     fields: &[IMG_FIELD],
     overloads: &[
-        (OverloadTarget::ToString, TUPLE_TOSTRING),
-        (OverloadTarget::Eq, TUPLE_EQ),
+        (OverloadTarget::ToString, TOSTRING),
+        (OverloadTarget::Eq, EQ),
     ],
     index_method: None,
     registering_function: None,
 };
 
 /// Overload of "__tostring" for the "Tuple" type
-const TUPLE_TOSTRING: Function = Function::LuaFunction(
+const TOSTRING: Function = Function::LuaFunction(
     "function (self)
         local images = {}
         for _, val in ipairs(self) do
@@ -42,7 +42,7 @@ const TUPLE_TOSTRING: Function = Function::LuaFunction(
 );
 
 /// Overload of "__eq" for the "Tuple" type
-const TUPLE_EQ: Function = Function::LuaFunction(
+const EQ: Function = Function::LuaFunction(
     "function (self, other)
         -- Start by checking types
         if getmetatable(self) ~= getmetatable(other) then

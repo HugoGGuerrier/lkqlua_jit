@@ -54,9 +54,9 @@ pub const IMPLEMENTATION: TypeImplementation = TypeImplementation {
         (SUBLIST_FIELD, TypeField::Value(SUBLIST)),
     ],
     overloads: &[
-        (OverloadTarget::ToString, LIST_TOSTRING),
-        (OverloadTarget::Eq, LIST_EQ),
-        (OverloadTarget::Concat, LIST_CONCAT),
+        (OverloadTarget::ToString, TOSTRING),
+        (OverloadTarget::Eq, EQ),
+        (OverloadTarget::Concat, CONCAT),
     ],
     index_method: None,
     registering_function: None,
@@ -133,7 +133,7 @@ const SUBLIST: RuntimeValue = RuntimeValue::Callable(Function::LkqlFunction {
 });
 
 /// Overload of "__tostring" for the "List" type
-const LIST_TOSTRING: Function = Function::LuaFunction(
+const TOSTRING: Function = Function::LuaFunction(
     "function (self)
         local images = {}
         for _, val in ipairs(self) do
@@ -144,7 +144,7 @@ const LIST_TOSTRING: Function = Function::LuaFunction(
 );
 
 /// Overload of "__eq" for the "List" type
-const LIST_EQ: Function = Function::LuaFunction(formatcp!(
+const EQ: Function = Function::LuaFunction(formatcp!(
     "function (self, other)
         -- Start by checking types
         if not other['{TYPE_TAGS_FIELD}'][{TYPE_TAG}] then
@@ -167,7 +167,7 @@ const LIST_EQ: Function = Function::LuaFunction(formatcp!(
 ));
 
 /// Overload of "__concat" for the "List" type
-const LIST_CONCAT: Function = Function::LuaFunction(formatcp!(
+const CONCAT: Function = Function::LuaFunction(formatcp!(
     "function (self, other)
         -- Start by checking types
         if not other['{TYPE_TAGS_FIELD}'][{TYPE_TAG}] then
