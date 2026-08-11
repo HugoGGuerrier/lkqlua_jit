@@ -207,9 +207,12 @@ impl Frame {
     /// provided name. This function assumes that the binding is present in the
     /// current frame.
     fn close_binding(&mut self, name: &str) {
-        let binding = self.bindings.get_mut(name).unwrap();
-        binding.closing_kind =
-            if binding.is_init { ClosingKind::Safe } else { ClosingKind::Unsafe };
+        if let Some(binding) = self.bindings.get_mut(name) {
+            binding.closing_kind =
+                if binding.is_init { ClosingKind::Safe } else { ClosingKind::Unsafe };
+        } else {
+            self.parent_frame_mut().unwrap().close_binding(name);
+        }
     }
 
     // --- Temporary values
