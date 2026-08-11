@@ -39,6 +39,7 @@ use crate::{
 use liblkqllang::{BaseFunction, LkqlNode};
 use regex::Regex;
 use std::{
+    cmp,
     collections::HashSet,
     env,
     path::{Path, PathBuf},
@@ -838,7 +839,9 @@ impl Node {
                 let mut builder = String::new();
                 for maybe_str_part in &block_string.f_docs()? {
                     if let Some(str_part) = maybe_str_part? {
-                        builder.push_str(&unescape_string(&str_part.text()?[3..]));
+                        let raw_text = str_part.text()?;
+                        builder
+                            .push_str(&unescape_string(&raw_text[cmp::min(3, raw_text.len())..]));
                         builder.push('\n');
                     }
                 }
