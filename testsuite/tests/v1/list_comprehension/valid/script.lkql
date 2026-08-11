@@ -15,3 +15,6 @@ val l3 = [{print("Generating " & a); a} for a in ["this", "is", "a", "list"]]
 val l4 = [{print("Computing " & a); a & " world"} for a in l3]
 print(l4[1])
 print(l4[3])
+
+# Ensure it works if the expression is an execution unit
+print([[s for s in l][1] for l in [[1], [2], [3]]].to_list)

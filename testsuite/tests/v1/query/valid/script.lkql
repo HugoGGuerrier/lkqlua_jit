@@ -29,3 +29,7 @@ print("")
 print("=== Queries with complex patterns")
 print((select n@FooNode when n.parent is Var).to_list)
 print((select n@FooNode when n.children.any((c) => c is NullLiteral)).to_list)
+print("")
+
+print("=== More complex queries")
+print((from *(from first_var select FooNode) select NullLiteral).to_list)

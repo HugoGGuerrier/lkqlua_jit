@@ -110,21 +110,7 @@ impl ExecutionUnit {
 
         // Fetch all children units in this execution unit
         let mut local_units = Vec::new();
-        match node {
-            LkqlNode::ListComprehension(list_comp) => {
-                all_local_execution_units(&list_comp.f_expr()?, &mut local_units)?;
-                if let Some(guard) = list_comp.f_guard()? {
-                    all_local_execution_units(&guard, &mut local_units)?;
-                }
-            }
-            LkqlNode::Query(query) => {
-                all_local_execution_units(&query.f_pattern()?, &mut local_units)?;
-            }
-            LkqlNode::NodePatternSelector(pattern_selector) => {
-                all_local_execution_units(&pattern_selector.f_pattern()?, &mut local_units)?;
-            }
-            _ => all_local_execution_units(node, &mut local_units)?,
-        };
+        all_local_execution_units(node, &mut local_units)?;
 
         // Iterate over all children execution units to lower them and to
         // associate each one to an index in the children units vector.
@@ -2190,40 +2176,56 @@ fn all_local_execution_units(
     node: &LkqlNode,
     output: &mut Vec<LkqlNode>,
 ) -> Result<(), Box<Diagnostic>> {
-    for maybe_child in node {
-        if let Some(child) = maybe_child? {
-            match &child {
-                LkqlNode::TopLevelList(_)
-                | LkqlNode::FunDecl(_)
-                | LkqlNode::SelectorDecl(_)
-                | LkqlNode::SelectorArmList(_)
-                | LkqlNode::AnonymousFunction(_) => output.push(child),
-                LkqlNode::ListComprehension(list_comp) => {
-                    // For list comprehensions, recurse on generators that
-                    // belongs to the current local scope.
-                    all_local_execution_units(&list_comp.f_generators()?, output)?;
-                    output.push(child);
+    /// Internal recursing function to explore recursively the parsing tree
+    /// from the provided node.
+    fn internal_recurse(node: LkqlNode, output: &mut Vec<LkqlNode>) -> Result<(), Box<Diagnostic>> {
+        match &node {
+            LkqlNode::TopLevelList(_)
+            | LkqlNode::FunDecl(_)
+            | LkqlNode::SelectorDecl(_)
+            | LkqlNode::SelectorArmList(_)
+            | LkqlNode::AnonymousFunction(_) => output.push(node),
+            LkqlNode::ListComprehension(list_comp) => {
+                internal_recurse(list_comp.f_generators()?, output)?;
+                output.push(node);
+            }
+            LkqlNode::Query(query) => {
+                if let Some(from_expr) = query.f_from_expr()? {
+                    internal_recurse(from_expr, output)?;
                 }
-                LkqlNode::Query(query) => {
-                    // For queries, recurse on the "from" and "through"
-                    // expressions that belongs to the current local scope.
-                    if let Some(from_expr) = query.f_from_expr()? {
-                        all_local_execution_units(&from_expr, output)?;
-                    }
-                    if let Some(through_expr) = query.f_through_expr()? {
-                        all_local_execution_units(&through_expr, output)?;
-                    }
-                    output.push(child);
+                if let Some(through_expr) = query.f_through_expr()? {
+                    internal_recurse(through_expr, output)?;
                 }
-                LkqlNode::NodePatternSelector(pattern_selector) => {
-                    // For node pattern selector, recurse on the call that
-                    // belongs to the current local scope.
-                    all_local_execution_units(&pattern_selector.f_call()?, output)?;
-                    output.push(child);
+                output.push(node);
+            }
+            LkqlNode::NodePatternSelector(pattern_selector) => {
+                internal_recurse(pattern_selector.f_call()?, output)?;
+                output.push(node);
+            }
+            _ => {
+                for child in node.children()?.into_iter().flatten() {
+                    internal_recurse(child, output)?
                 }
-                _ => all_local_execution_units(&child, output)?,
             }
         }
+        Ok(())
+    }
+
+    // Get children to explore from the origin node
+    let children_to_explore = match node {
+        LkqlNode::ListComprehension(list_comp) => {
+            vec![Some(list_comp.f_expr()?), list_comp.f_guard()?]
+        }
+        LkqlNode::Query(query) => vec![Some(query.f_pattern()?)],
+        LkqlNode::NodePatternSelector(pattern_selector) => {
+            vec![Some(pattern_selector.f_pattern()?)]
+        }
+        _ => node.children()?,
+    };
+
+    // Then explore children with the internal recursing function
+    for n in children_to_explore.into_iter().flatten() {
+        internal_recurse(n, output)?
     }
     Ok(())
 }

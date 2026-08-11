@@ -20,3 +20,6 @@
 === Queries with complex patterns
 [<Sequence test.foo:2:6-2:29>, <Sequence test.foo:2:24-2:28>]
 [<Sequence test.foo:1:1-3:5>, <Sequence test.foo:2:6-2:29>, <Sequence test.foo:2:24-2:28>]
+
+=== More complex queries
+[<NullLiteral test.foo:2:14-2:18>, <NullLiteral test.foo:2:24-2:28>, <NullLiteral test.foo:2:14-2:18>, <NullLiteral test.foo:2:24-2:28>, <NullLiteral test.foo:2:14-2:18>, <NullLiteral test.foo:2:24-2:28>, <NullLiteral test.foo:2:24-2:28>, <NullLiteral test.foo:2:24-2:28>]
