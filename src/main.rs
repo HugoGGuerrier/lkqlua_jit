@@ -129,10 +129,69 @@ fn main() {
     // If required, display timings collected by the execution context
     if args.timings {
         println!();
-        for (source, timings) in ctx.timings {
-            display_timings(ctx.source_repo.get_source_by_id(source).unwrap().name(), &timings);
+        header("Timings");
+        let mut sorted_sources = ctx.timings.keys().collect::<Vec<_>>();
+        sorted_sources.sort();
+        for source in sorted_sources {
+            display_timings(
+                ctx.source_repo.get_source_by_id(*source).unwrap().name(),
+                ctx.timings.get(source).unwrap(),
+            );
         }
     }
+
+    // If required display profiling data
+    if args.profiling {
+        // Show the profiling section title
+        println!();
+        header("Profiling result");
+
+        // Create a list of sources with profiling data and sort them by
+        // samples count.
+        let mut profiled_sources = ctx.profiling_data.source_data.iter().collect::<Vec<_>>();
+        profiled_sources.sort_by_key(|(_, d)| d.total_sample_count);
+
+        // For each source display its part of the total time and all functions
+        // in it.
+        for (source_name, source_data) in profiled_sources.into_iter().rev() {
+            println!();
+            println!(
+                "{source_name} ({}%):",
+                percentage(source_data.total_sample_count, ctx.profiling_data.total_sample_count)
+            );
+
+            // Now get all function profiled in the source and sort them by
+            // samples count.
+            let mut profiled_functions = source_data.function_data.iter().collect::<Vec<_>>();
+            profiled_functions.sort_by_key(|(_, d)| d.total_sample_count);
+
+            // For each function, display its time portion and its lines
+            for (function_name, function_data) in profiled_functions.into_iter().rev() {
+                println!(
+                    "  {function_name} ({}%):",
+                    percentage(function_data.total_sample_count, source_data.total_sample_count)
+                );
+
+                // Then, get all lines that have profiling data and sort them
+                // by samples count.
+                let mut profiled_lines = function_data.line_counters.iter().collect::<Vec<_>>();
+                profiled_lines.sort_by_key(|(_, d)| *d);
+
+                // For each line, display it with its portion
+                for (line_num, sample_count) in profiled_lines.into_iter().rev() {
+                    println!(
+                        "    line {line_num} - {}%",
+                        percentage(*sample_count, function_data.total_sample_count)
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// Display a section header
+fn header(section_title: &str) {
+    println!("===== {section_title} =====");
 }
 
 /// Util function to show a timing vector in a pretty way.
@@ -146,11 +205,16 @@ fn display_timings(source_name: &str, timings: &Timings) {
     }
 
     // Show all time measurements for the given source
-    let full_header = format!("===== \"{source_name}\" timings =====");
-    println!("{full_header}");
+    println!();
+    println!("{source_name}:");
     println!("  parsing:     {}", format_duration(&timings.parsing));
     println!("  lowering:    {}", format_duration(&timings.lowering));
     println!("  compilation: {}", format_duration(&timings.compilation));
     println!("  execution:   {}", format_duration(&timings.execution));
-    println!("{}\n", "=".repeat(full_header.len()));
+}
+
+/// Util function to get the percentage that `portion` represents of the
+/// `total` as a rounded integer.
+fn percentage(portion: u128, total: u128) -> u8 {
+    ((portion * 100) as f64 / total as f64).round() as u8
 }

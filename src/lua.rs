@@ -34,6 +34,10 @@ pub type UserData = c_void;
 /// C function that can be called from any Lua code.
 pub type LuaCFunction = unsafe extern "C" fn(LuaState) -> c_int;
 
+/// C function that may be used as a profiler callback.
+pub type LuaJITProfileCallback =
+    unsafe extern "C" fn(data: *mut c_void, l: LuaState, samples: c_int, vm_state: c_int);
+
 /// Type tags for Lua values.
 #[repr(C)]
 #[derive(Debug, PartialEq, Eq)]
@@ -393,6 +397,24 @@ pub(crate) extern "C" fn raise_error(l: LuaState, message: &str) {
     }
 }
 
+/// Start the LuaJIT profiler with the provided configuration.
+pub(crate) fn start_profiler(
+    l: LuaState,
+    mode: &str,
+    cb: LuaJITProfileCallback,
+    data: *mut UserData,
+) {
+    unsafe {
+        let c_mode = CString::from_str(mode).unwrap();
+        luaJIT_profile_start(l, c_mode.as_ptr(), cb, data);
+    }
+}
+
+/// Stop the LuaJIT profiler currently running.
+pub(crate) fn stop_profiler(l: LuaState) {
+    unsafe { luaJIT_profile_stop(l) }
+}
+
 /// Get debug information about the frame at the specified `level`. This
 /// function returns [`None`] if the specified level is higher that the current
 /// stack depth.
@@ -415,11 +437,22 @@ pub(crate) fn debug_info(l: LuaState, frame: &mut LuaDebug, what: &str) -> bool 
 }
 
 /// Get the name of the source from which the provided debug `frame` is coming.
-pub(crate) fn debug_get_source(frame: &LuaDebug) -> Option<String> {
+pub(crate) fn debug_get_source(frame: &LuaDebug) -> Option<&str> {
     unsafe {
         if !frame.source.is_null() {
-            let source = CStr::from_ptr(frame.source);
-            Some(String::from(source.to_str().unwrap()))
+            Some(CStr::from_ptr(frame.source).to_str().unwrap())
+        } else {
+            None
+        }
+    }
+}
+
+/// Get the name of the function or execution unit the provided frame is
+/// located in if possible, otherwise return [`None`].
+pub(crate) fn debug_get_name(frame: &LuaDebug) -> Option<&str> {
+    unsafe {
+        if !frame.name.is_null() {
+            Some(CStr::from_ptr(frame.name).to_str().unwrap())
         } else {
             None
         }
@@ -431,7 +464,7 @@ pub(crate) fn debug_get_source(frame: &LuaDebug) -> Option<String> {
 ///
 /// This function returns [`None`] if such information don't exist for the
 /// provided frame.
-pub(crate) fn debug_proto_and_pc(l: LuaState, frame: &mut LuaDebug) -> Option<(usize, usize)> {
+pub(crate) fn debug_proto_and_pc(l: LuaState, frame: &LuaDebug) -> Option<(usize, usize)> {
     unsafe {
         let mut ext_pc: c_uint = 0;
         let mut ext_protoid: c_uint = 0;
@@ -630,4 +663,12 @@ unsafe extern "C" {
     fn lua_getprotoid(l: LuaState, ar: *const LuaDebug, id: *mut c_uint) -> c_int;
     fn lua_getfuncid(l: LuaState, index: c_int, id: *mut c_uint) -> c_int;
     fn lua_getlocal(l: LuaState, ar: *const LuaDebug, n: c_int) -> *const c_char;
+
+    fn luaJIT_profile_start(
+        l: LuaState,
+        mode: *const c_char,
+        cb: LuaJITProfileCallback,
+        data: *mut c_void,
+    );
+    fn luaJIT_profile_stop(l: LuaState);
 }

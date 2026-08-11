@@ -15,7 +15,7 @@ use clap::ValueEnum;
 use liblkqllang::{AnalysisContext, AnalysisUnit};
 use pretty_hex::PrettyHex;
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{HashMap, HashSet},
     fs::File,
     io::{Stderr, Stdout, Write},
     path::{Path, PathBuf},
@@ -43,6 +43,14 @@ pub struct ExecutionContext<'a> {
     pub config: Config,
     pub source_repo: &'a mut SourceRepository,
 
+    /// Map used to store source time measurements associated to executed
+    /// sources.
+    pub timings: HashMap<SourceId, Timings>,
+
+    /// Map storing profiling data collected by the engine during the
+    /// execution.
+    pub profiling_data: ProfilingData,
+
     /// Analysis context used to parse LKQL sources.
     lkql_context: AnalysisContext,
 
@@ -58,10 +66,6 @@ pub struct ExecutionContext<'a> {
     /// This vector stores sources that are currently being executed in their
     /// execution order (oldest first).
     execution_stack: Vec<SourceId>,
-
-    /// Map used to store source time measurements associated to executed
-    /// sources.
-    pub timings: BTreeMap<SourceId, Timings>,
 }
 
 impl<'a> ExecutionContext<'a> {
@@ -83,7 +87,8 @@ impl<'a> ExecutionContext<'a> {
             parsing_cache: HashMap::new(),
             compilation_cache: HashMap::new(),
             execution_stack: Vec::new(),
-            timings: BTreeMap::new(),
+            timings: HashMap::new(),
+            profiling_data: ProfilingData::new(),
         };
 
         // Execute the prelude source
@@ -297,7 +302,7 @@ pub struct Config {
     /// Writable to use as error output.
     pub std_err: Writable,
 
-    /// Whether to perform profiling during the run.
+    /// Whether to perform profiling when running an LKQL script.
     pub do_profiling: bool,
 
     /// All elements to display debug information about.
@@ -362,7 +367,7 @@ pub enum DebugElement {
     RawBytecode,
 }
 
-/** This structure is used to store timing information about a source. */
+/// This structure is used to store timing information about a source.
 #[derive(Debug)]
 pub struct Timings {
     pub parsing: Duration,
@@ -385,5 +390,98 @@ impl Timings {
             compilation: Duration::ZERO,
             execution: Duration::ZERO,
         }
+    }
+}
+
+/// Top level structure to store profiling information.
+#[derive(Debug)]
+pub struct ProfilingData {
+    /// A map associating each source name to its profiling data object.
+    pub source_data: HashMap<String, SourceProfilingData>,
+
+    /// Counter of all samples that has been collected in this profiling data
+    /// instance.
+    pub total_sample_count: u128,
+}
+
+impl ProfilingData {
+    fn new() -> Self {
+        Self { source_data: HashMap::new(), total_sample_count: 0 }
+    }
+
+    /// Add the provided `sample_count` to the `line_num` counter in the
+    /// `function_name` function located in the `source_name` source.
+    fn add_samples(
+        &mut self,
+        source_name: &str,
+        function_name: &str,
+        line_num: u32,
+        sample_count: u128,
+    ) {
+        self.total_sample_count += sample_count;
+        if let Some(data) = self.source_data.get_mut(source_name) {
+            data.add_samples(function_name, line_num, sample_count);
+        } else {
+            let mut new_data = SourceProfilingData::new();
+            new_data.add_samples(function_name, line_num, sample_count);
+            self.source_data.insert(String::from(source_name), new_data);
+        }
+    }
+}
+
+/// Structure storing profiling data collected in a specific source.
+#[derive(Debug)]
+pub struct SourceProfilingData {
+    /// A map associating each function / execution unit name top its
+    /// collected profiling data.
+    pub function_data: HashMap<String, FunctionProfilingData>,
+
+    /// Counter of all samples that has been collected for the source this
+    /// data represents.
+    pub total_sample_count: u128,
+}
+
+impl SourceProfilingData {
+    pub(crate) fn new() -> Self {
+        Self { function_data: HashMap::new(), total_sample_count: 0 }
+    }
+
+    /// Add the provided `sample_count` to the `line_num` counter in the
+    /// `function_name` function.
+    fn add_samples(&mut self, function_name: &str, line_num: u32, sample_count: u128) {
+        self.total_sample_count += sample_count;
+        if let Some(data) = self.function_data.get_mut(function_name) {
+            data.add_samples(line_num, sample_count);
+        } else {
+            let mut new_data = FunctionProfilingData::new();
+            new_data.add_samples(line_num, sample_count);
+            self.function_data
+                .insert(String::from(function_name), new_data);
+        }
+    }
+}
+
+/// Structure that stores profiling data inside a specific function.
+#[derive(Debug)]
+pub struct FunctionProfilingData {
+    /// Sample counters on lines in the function. Each key is a line number
+    /// (1-based index in the source), associated to a counter of samples
+    /// collected for this line.
+    pub line_counters: HashMap<u32, u128>,
+
+    /// Counter of all samples that has been collected in the function this
+    /// structure represents
+    pub total_sample_count: u128,
+}
+
+impl FunctionProfilingData {
+    fn new() -> Self {
+        Self { line_counters: HashMap::new(), total_sample_count: 0 }
+    }
+
+    /// Add the provided `sample_count` to the `line_num` counter.
+    fn add_samples(&mut self, line_num: u32, sample_count: u128) {
+        self.total_sample_count += sample_count;
+        *self.line_counters.entry(line_num).or_default() += sample_count;
     }
 }

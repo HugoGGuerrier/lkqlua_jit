@@ -11,10 +11,11 @@ use crate::{
     engine::analysis_lib::AnalysisLibrary,
     errors::{ERROR_TEMPLATE_REPOSITORY, ErrorInstance, ErrorInstanceArg, LUA_ENGINE_ERROR},
     lua::{
-        LuaState, UserData, call, close_lua_state, debug_frame, debug_get_local, debug_get_source,
-        debug_info, debug_proto_and_pc, get_field, get_global, get_string, get_top, get_user_data,
-        load_buffer, new_lua_state, open_lua_libs, pop, push_c_function, push_string,
-        push_user_data, remove_value, safe_call, set_global, to_string,
+        LuaState, UserData, close_lua_state, debug_frame, debug_get_local, debug_get_name,
+        debug_get_source, debug_info, debug_proto_and_pc, get_global, get_string, get_top,
+        get_user_data, load_buffer, new_lua_state, open_lua_libs, pop, push_c_function,
+        push_string, push_user_data, remove_value, safe_call, set_global, start_profiler,
+        stop_profiler, to_string,
     },
     runtime::G_EXECUTION_CONTEXT,
     sources::SourceSection,
@@ -92,6 +93,9 @@ impl Engine {
         // Create a shortcut to the Lua state
         let l = self.lua_state;
 
+        // Get the raw address of the execution context
+        let ctx_ptr = ptr::from_ref(ctx) as *mut UserData;
+
         // Encode the bytecode unit
         let mut encoded_bytecode_unit = Vec::new();
         bytecode_unit
@@ -99,7 +103,7 @@ impl Engine {
             .encode(&mut encoded_bytecode_unit);
 
         // Place the execution context in the global Lua table
-        push_user_data(l, ptr::from_ref(ctx) as *const UserData);
+        push_user_data(l, ctx_ptr);
         set_global(l, G_EXECUTION_CONTEXT);
 
         // Set the error handler
@@ -121,24 +125,17 @@ impl Engine {
             );
         }
 
-        // Call the loaded buffer and analyze the result
-        if ctx.config.do_profiling {
-            get_global(l, "require");
-            push_string(l, "jit.p");
-            call(l, 1, None);
-            get_field(l, -1, "start");
-            push_string(l, "Fli5");
-            call(l, 1, None);
-            pop(l, 1);
+        // If required and this is the top level script, start the profiler
+        if ctx.config.do_profiling && ctx.execution_stack.len() <= 1 {
+            start_profiler(l, "li5", profile_callback, ctx_ptr);
         }
+
+        // Call the loaded buffer and analyze the result
         let call_res = safe_call(l, 0, None, Some(error_handler));
-        if ctx.config.do_profiling {
-            get_global(l, "require");
-            push_string(l, "jit.p");
-            call(l, 1, None);
-            get_field(l, -1, "stop");
-            call(l, 0, None);
-            pop(l, 1);
+
+        // Stop the profiler if required
+        if ctx.config.do_profiling && ctx.execution_stack.len() <= 1 {
+            stop_profiler(l);
         }
 
         // Pop the error handler
@@ -174,12 +171,10 @@ extern "C" fn handle_error(l: LuaState) -> c_int {
         /// Get the [`ExtendedPrototype`] instance this trace element is
         /// leading to.
         fn get_prototype<'a>(&'a self, ctx: &'a ExecutionContext) -> &'a ExtendedPrototype {
-            ctx.compilation_cache
+            &ctx.compilation_cache
                 .get(&self.source_id)
                 .unwrap()
-                .prototypes
-                .get(self.prototype_id)
-                .unwrap()
+                .prototypes[self.prototype_id]
         }
 
         /// Get the [`SourceSection`] object this trace element is
@@ -203,7 +198,7 @@ extern "C" fn handle_error(l: LuaState) -> c_int {
         let maybe_frame = debug_frame(l, level);
         if let Some(mut frame) = maybe_frame {
             if debug_info(l, &mut frame, "S")
-                && let Some((prototype_id, pc)) = debug_proto_and_pc(l, &mut frame)
+                && let Some((prototype_id, pc)) = debug_proto_and_pc(l, &frame)
                 && let Ok(source_id) = debug_get_source(&frame).unwrap().parse::<usize>()
             {
                 let trace_element =
@@ -309,4 +304,39 @@ fn parse_lua_error(error_message: &str) -> (usize, Vec<String>) {
     let mut final_message = error_message[..1].to_uppercase();
     final_message.push_str(&error_message[1..]);
     (LUA_ENGINE_ERROR.id, vec![final_message])
+}
+
+// ----- Engine profiling support -----
+
+extern "C" fn profile_callback(data: *mut UserData, l: LuaState, samples: c_int, _: c_int) {
+    // Unwrap the execution context passed as used data
+    let ctx = unsafe { (data as *mut ExecutionContext).as_mut().unwrap() };
+
+    // Try to get the LKQL location of the current frame
+    if let Some(mut current_frame) = debug_frame(l, 0)
+        && debug_info(l, &mut current_frame, "nSl")
+        && let Some(source_name) = debug_get_source(&current_frame)
+    {
+        let (source_name, function_name, line_num) = if let Some(source_id) =
+            source_name.parse::<usize>().ok()
+            && let Some((proto_id, pc)) = debug_proto_and_pc(l, &current_frame)
+        {
+            let source = ctx.source_repo.get_source_by_id(source_id).unwrap();
+            let prototype = &ctx.compilation_cache.get(&source_id).unwrap().prototypes[proto_id];
+            let location = prototype
+                .instructions
+                .get_location_or_default(pc - 1, &prototype.origin_location);
+            (source.name(), prototype.name.as_str(), location.start.line)
+        } else {
+            (
+                source_name,
+                debug_get_name(&current_frame).unwrap_or(""),
+                current_frame.current_line as u32,
+            )
+        };
+
+        // Finally, add the sample count to the profiling data
+        ctx.profiling_data
+            .add_samples(source_name, function_name, line_num, samples as u128);
+    }
 }
