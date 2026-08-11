@@ -174,10 +174,14 @@ impl<'a> ExecutionContext<'a> {
         if !self.parsing_cache.contains_key(&source) {
             // We know that the source hasn't been parsed before, so do it now
             let src = self.source_repo.get_source_by_id(source).unwrap();
+
+            // Parse the source with Liblkqllang
+            let time_point = Instant::now();
             let unit = self
                 .lkql_context
                 .get_unit_from_buffer(src.name(), src.content().text(), None, None)
                 .map_err(Diagnostic::from)?;
+            self.get_timings_for_source(source).parsing = time_point.elapsed();
 
             // Check parsing diagnostics
             let lkql_parsing_diags = unit.diagnostics().map_err(Diagnostic::from)?;
@@ -189,7 +193,22 @@ impl<'a> ExecutionContext<'a> {
                 return Err(diagnostics);
             }
 
-            // Finally place the parsing result in the cache
+            // If required, display the parsing tree
+            if self.config.debug_enabled(DebugElement::ParsingTree) {
+                writeln!(self.config.std_out, "===== Parsing tree =====\n").unwrap();
+                writeln!(
+                    self.config.std_out,
+                    "{}\n",
+                    unit.root()
+                        .map_err(Diagnostic::from)?
+                        .unwrap()
+                        .tree_dump(0)
+                        .map_err(Diagnostic::from)?
+                )
+                .unwrap();
+            }
+
+            // Place the parsing result in the cache
             self.parsing_cache.insert(source, unit);
         }
 
@@ -211,18 +230,9 @@ impl<'a> ExecutionContext<'a> {
             let mut time_point: Instant;
 
             // Parse the source file
-            time_point = Instant::now();
             self.parse_source(source)?;
             let unit = self.parsing_cache.get(&source).unwrap();
             let root = unit.root().map_err(Diagnostic::from)?.unwrap();
-            self.get_timings_for_source(source).parsing = time_point.elapsed();
-
-            // If required, display the parsing tree
-            if self.config.debug_enabled(DebugElement::ParsingTree) {
-                writeln!(self.config.std_out, "===== Parsing tree =====\n").unwrap();
-                writeln!(self.config.std_out, "{}\n", root.tree_dump(0).map_err(Diagnostic::from)?)
-                    .unwrap();
-            }
 
             // Lower the parsing tree
             time_point = Instant::now();
