@@ -11,10 +11,6 @@ fn main() {
     println!("cargo:rustc-link-search=all=./luajit/src");
     println!("cargo:rustc-link-lib=static=luajit");
 
-    // Statically link the Ada runtime
-    println!("cargo:rustc-link-lib=static=gnat");
-    println!("cargo:rustc-link-lib=static=gnarl");
-
     // Statically link libgmp (required by Liblkqllang)
     println!("cargo:rustc-link-lib=static=gmp");
 }
