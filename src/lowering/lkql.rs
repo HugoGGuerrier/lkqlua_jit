@@ -875,6 +875,7 @@ impl Node {
             // For now rewriting features aren't handled, we should add them at
             // some point (https://github.com/HugoGGuerrier/lkqlua_jit/issues/9).
             LkqlNode::ConstructorCall(_) => NodeVariant::NullLiteral,
+            LkqlNode::UpperDotAccess(_) => NodeVariant::NullLiteral,
 
             // --- For now, not all node kinds are handled
             _ => panic!("{} is not handled by the lowering phase", node.image()?),
