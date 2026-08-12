@@ -40,7 +40,7 @@ use liblkqllang::{BaseFunction, LkqlNode};
 use regex::Regex;
 use std::{
     cmp,
-    collections::HashSet,
+    collections::{BTreeSet, HashSet},
     env,
     path::{Path, PathBuf},
 };
@@ -341,17 +341,17 @@ impl Node {
                 // Now look for the LKQL file corresponding to the module
                 let module_name = id(ctx, &import.f_name()?);
                 let module_base_file = PathBuf::from(format!("{}.lkql", &module_name.text));
-                let mut module_files = searching_dirs
+                let module_files = searching_dirs
                     .iter()
                     .filter_map(|d| {
                         let possible_module_file = d.join(&module_base_file);
                         if possible_module_file.exists() && possible_module_file.is_file() {
-                            Some(possible_module_file)
+                            Some(possible_module_file.canonicalize().unwrap())
                         } else {
                             None
                         }
                     })
-                    .collect::<Vec<_>>();
+                    .collect::<BTreeSet<_>>();
 
                 // Create the node that will represents the value to initialize
                 // the module local name.
@@ -361,7 +361,7 @@ impl Node {
                         positional_args: vec![n(
                             module_name.origin_location,
                             NodeVariant::StringLiteral(String::from(
-                                module_files.remove(0).to_string_lossy(),
+                                module_files.first().unwrap().to_string_lossy(),
                             )),
                         )],
                         named_args: vec![],
