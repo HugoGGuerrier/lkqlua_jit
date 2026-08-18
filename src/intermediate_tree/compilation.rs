@@ -867,8 +867,9 @@ impl Node {
             // --- Symbol accesses
             NodeVariant::ReadSymbol(identifier) => {
                 // First try getting the symbol in the local frame
-                let maybe_local_binding = ctx.frame.borrow().get_local(&identifier.text);
-                if let Some(BindingData { slot, is_init: true, .. }) = maybe_local_binding {
+                let maybe_local_binding =
+                    ctx.frame.borrow().get_initialized_local(&identifier.text);
+                if let Some(BindingData { slot, .. }) = maybe_local_binding {
                     ctx.instructions
                         .ad(&self.origin_location, MOV, result_slot, slot as u16);
                 } else {
@@ -1226,8 +1227,9 @@ impl Node {
             }
 
             NodeVariant::ReadSymbol(identifier) => {
-                let maybe_local_binding = ctx.frame.borrow().get_local(&identifier.text);
-                if let Some(BindingData { slot, is_init: true, .. }) = maybe_local_binding {
+                let maybe_local_binding =
+                    ctx.frame.borrow().get_initialized_local(&identifier.text);
+                if let Some(BindingData { slot, .. }) = maybe_local_binding {
                     ValueAccess::BorrowedTmp(slot)
                 } else {
                     fallback(ctx, already_reserved_slot, self)

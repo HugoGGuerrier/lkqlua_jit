@@ -91,6 +91,20 @@ impl Frame {
         }
     }
 
+    /// Get the first local variable corresponding to the provided `name` that
+    /// is already initialized.
+    pub fn get_initialized_local(&self, name: &str) -> Option<BindingData> {
+        match &self.variant {
+            FrameVariant::Semantic { .. } => self.bindings.get(name).filter(|d| d.is_init).cloned(),
+            FrameVariant::Lexical => self
+                .bindings
+                .get(name)
+                .filter(|d| d.is_init)
+                .cloned()
+                .or(self.parent_frame().unwrap().get_local(name)),
+        }
+    }
+
     /// Get whether the provided name is conflicting with a local in the
     /// current frame, returning the associated data if so.
     pub fn is_conflicting(&self, name: &str) -> Option<BindingData> {

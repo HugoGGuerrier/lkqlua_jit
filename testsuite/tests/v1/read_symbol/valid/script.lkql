@@ -21,3 +21,10 @@ test_2()
 fun test_3() = print(late_closed)
 val late_closed = "Le monde"
 test_3()
+
+# Test lexical scopes inside functions
+fun test_4(x) = {
+    val x = x -1;
+    print(x)
+}
+test_4(43)
