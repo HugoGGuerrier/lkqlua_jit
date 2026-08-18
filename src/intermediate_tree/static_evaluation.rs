@@ -514,7 +514,12 @@ impl ConstantValue {
                         .for_each(|(i, b)| le_bytes[i] = *b);
                     Some(NumericConstant::Integer(i32::from_le_bytes(le_bytes)))
                 } else {
-                    None
+                    let max_f64 = BigInt::from(2).pow(1024);
+                    if value <= &max_f64 && value >= &(-max_f64) {
+                        Some(NumericConstant::Float(value.to_string().parse().unwrap()))
+                    } else {
+                        None
+                    }
                 }
             }
             _ => None,

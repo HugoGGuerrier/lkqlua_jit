@@ -224,7 +224,7 @@
 //!     that according to the number of lines in the prototype:
 //!       * <= 255: each line offset is encoded on 1 byte
 //!       * > 255 & <= 65,535: each line offset is encoded on 2 bytes
-//!       * > 65535 & <= 4,294,967,295: each line offset is encoded on 4 bytes
+//!       * > 65,535 & <= 4,294,967,295: each line offset is encoded on 4 bytes
 //!   * Then comes the up-value names section: this is a sequence of C-encoded
 //!     strings representing names of the up-values used in this prototype.
 //!     This sequence is in the same order as up-value constants.
