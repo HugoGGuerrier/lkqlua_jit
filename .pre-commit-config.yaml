@@ -11,9 +11,11 @@ repos:
     rev: 24.10.0
     hooks:
       - id: black
-        name: black-24.10.0
+        name: black-24.10.
+        args: ["-l", "100"]
 
   - repo: https://github.com/pycqa/flake8
     rev: 7.0.0
     hooks:
       - id: flake8
+        args: ["--max-line-length=100"]

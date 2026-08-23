@@ -52,9 +52,7 @@ class InterpreterDriver(DiffTestDriver):
 
     @property
     def output_refiners(self) -> list[OutputRefiner]:
-        return super().output_refiners + [
-            Substitute(self.working_dir(), "<working-dir>")
-        ]
+        return super().output_refiners + [Substitute(self.working_dir(), "<working-dir>")]
 
 
 class LkqlTestsuite(Testsuite):
