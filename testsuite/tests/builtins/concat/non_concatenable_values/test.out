@@ -1,0 +1,17 @@
+Error: Error from the Lua engine
+    ╭─[ __prelude:40:45 ]
+    │
+ 40 │     | [h, t@...] => t.reduce((res, elem) => res & elem, h)
+    │                                             ─────┬────  
+    │                                                  ╰────── Attempt to concatenate local 'res' (a table value)
+────╯
+Advice: Called in "concat"
+    ╭─[ __prelude:40:21 ]
+    │
+ 40 │     | [h, t@...] => t.reduce((res, elem) => res & elem, h)
+────╯
+Advice: Called in "script.lkql"
+   ╭─[ <working-dir>/script.lkql:1:7 ]
+   │
+ 1 │ print(concat([(), ()]))
+───╯

@@ -31,3 +31,10 @@ selector prev_siblings
     | s@(not null) => rec(s)
     | * => ()
 )
+
+fun concat(iterable) =
+    |" Concatenate all elements of the provided `iterable` value.
+    match iterable.to_list
+    | l when l.length == 0 => []
+    | [e] => e
+    | [h, t@...] => t.reduce((res, elem) => res & elem, h)

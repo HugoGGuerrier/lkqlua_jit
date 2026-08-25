@@ -1,0 +1,5 @@
+print(concat([]))
+print(concat(["Hello"]))
+print(concat(["Hello", " world"]))
+print(concat(["Hello", " world", " this", " is", " a", " long", " message"]))
+print(concat([[1], [2], [3]]))
